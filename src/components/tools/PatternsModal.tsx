@@ -2,9 +2,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
+import { dateTime } from '@/lib/format';
 import { detectPatterns } from '@/lib/patterns';
 import { useChartStore } from '@/store/useChartStore';
 import { useViralStore } from '@/store/useViralStore';
@@ -22,6 +23,7 @@ interface PatternsModalProps {
  */
 export function PatternsModal({ candles, open, onClose }: PatternsModalProps) {
   const t = useTranslations('tools');
+  const locale = useLocale();
   const patternsOn = useChartStore((state) => state.patternsOn);
   const togglePatterns = useChartStore((state) => state.togglePatterns);
   const patterns = useMemo(() => (open ? detectPatterns(candles, 12) : []), [open, candles]);
@@ -48,7 +50,7 @@ export function PatternsModal({ candles, open, onClose }: PatternsModalProps) {
                 >
                   {t(`patterns.kinds.${pattern.kind}`)}
                 </span>
-                <span className="text-faint">{new Date(pattern.time).toLocaleString()}</span>
+                <span className="text-faint">{dateTime(pattern.time, locale)}</span>
                 <span className="ml-auto flex items-center gap-2 text-muted">
                   <span className="inline-block h-1 w-16 bg-line">
                     <span

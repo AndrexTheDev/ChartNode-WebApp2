@@ -5,7 +5,7 @@ Arbeitsprotokoll auf dem Weg zur finalen Version: **was geprüft wurde, was gefu
 was bereits behoben ist und was als Nächstes dran ist.**
 
 - Stand: 2026-09-28
-- Geprüfter Commit: `aa809ae` (`main`) + Fixes dieses Durchgangs (Branch `arena/01a0e92c-chartnode-webapp2`)
+- Geprüfter Commit: `aa809ae` (`main`) + Fixes der Durchgänge 1–2 (`2ae6ebf` + Arbeitsstand, Branch `arena/01a0e92c-chartnode-webapp2`)
 - Umfang: 179 Quelldateien · ~29 200 Zeilen · 5 Locales (à 1 160 Keys) · 38 vorgebaute Routen
 
 ---
@@ -18,7 +18,7 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M1 | Darstellung · SEO · Rendering (120 Läufe × 4 Viewports) | ✅ geprüft | 0 Konsolenfehler · 0 Page-Errors · 0 kaputte Bilder · 0 tote Links |
 | M2 | Terminal-Funktionalität (16 Modals, Layouts, Palette, Themes) | ✅ geprüft | alle 16 Modals öffnen/schließen korrekt, Inhalte vollständig lokalisiert |
 | M2b | **Mobile Terminal-Layout (Prio 1)** | ✅ umgebaut | Chartfläche im First-View: **47 px → 625 px** (74 % des Viewports) |
-| M3 | Chart-Engine / Canvas (Indikatoren, Zeichnungen, Export) | ⏳ **als Nächstes** | braucht Live-Feed → Fixture-Modus (siehe O4) |
+| M3 | Chart-Engine / Canvas (Indikatoren, Zeichnungen, Pane-Sync, Replay, Export) | ✅ geprüft | Fixture-Feed: 300 Candles, 36 Indikatoren, Zeichnungen, Pane-Sync, Bar-Replay, Backtest-Marker, PNG **mit** Wasserzeichen – 0 Page-Errors |
 | M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings) | ⏳ offen | – |
 | M5 | A11y vertieft (Tastatur, Fokus, Screenreader, Kontrast) | ⏳ offen | – |
 | M6 | Werbung/Monetarisierung im echten Fill-Fall | ⏳ offen | – |
@@ -29,7 +29,9 @@ was bereits behoben ist und was als Nächstes dran ist.**
 > **Wichtig zur Reproduzierbarkeit:** Die Sandbox hat keinen Zugang zu Börsen-, DEX- und
 > Fontservern (nur npm/GitHub). Alles, was Live-Daten braucht (Canvas-Chart, Heatmap,
 > Whale-Ticker, Rate-Limit-Overlay), zeigt deshalb legale Leerzustände. Das ist **kein**
-> Defekt, sondern Umgebung — die Prüfungen dafür folgen in M3 auf einem Rechner mit Netz.
+> Defekt, sondern Umgebung. Für M3 wurde deshalb ein Fixture-Layer gebaut (`.audit/fixtures.mjs`),
+> der die Kline-Antworten aller 12 Venues im Original-Wire-Format beantwortet — der Chart läuft
+> damit über den echten Adapter-/Parser-/Render-Pfad.
 
 ---
 
@@ -168,12 +170,65 @@ unlesbar). Jetzt Aktionszeile unter dem Text: Textbreite **306 px**, Bannerhöhe
 > (`unscrolled: []`) bestätigt: **kein** Element außerhalb einer bewussten
 > Scroll-/Animationszone ragt hinaus.
 
-## 5. Vorschlag für die nächsten Schritte
+## 5. ✅ Modul M3 — Chart-Engine (mit Fixture-Feed geprüft)
+
+Weil die Sandbox keine Börsenverbindung hat, läuft der Chart über einen Fixture-Layer
+(`.audit/fixtures.mjs`, nur Sandbox): alle Kline-Requests der 12 unterstützten Venues werden
+im Browser abgefangen und im **exakten** Wire-Format (inkl. CORS-Header) beantwortet;
+Nicht-Kline-Aufrufe antworten bewusst `503`, damit der Region-Ranker durchfällt – das erklärt
+die 9 `503`-Konsolenmeldungen (kein Defekt). Geprüft wird damit der echte Pfad:
+Adapter → Parser → Store → Renderer.
+
+| Prüfpunkt | Ergebnis |
+|---|---|
+| Seed & Canvas | 7 Canvasse (Haupt 1508×634, Preisachse 74×634, Zeitachse 1508×28), Chip `300 Candles`, Live-Legende `O 62830.36 H 63026.99 L 62507.94 C 62620.96` |
+| Indikatoren | EMA, RSI, Bollinger, MACD zugefügt → Label `Indikatoren (4)`, Serien gezeichnet |
+| Zeichnungen | Trendlinie, horizontale Preislinie, Fibonacci setzen `aria-pressed=true`, Drag/Click erzeugen Tinte, `Alle Zeichnungen löschen (2)` |
+| Layouts | 1x1 / 2x1 / 2x2 → 15 / 22 / 36 Canvas-Elemente (4 Panes) |
+| **Pane-Sync (Zoom)** | Wheel in Pane 1 ändert **alle vier** Pane-Bitmaps identisch (309 → 324); Sync-Toggle aus → keine Weitergabe mehr |
+| **Pane-Sync (Crosshair)** | Hover in Pane 1 zeichnet das Remote-Fadenkreuz in Pane 2–4 (Canvas-Checksummen 39 590 → 41 285); Toggle aus → Pane 2–4 zurück auf 39 590 |
+| **Bar-Replay** | `Replay` aktiv → Legende springt vom Live-Candle (`62830.36…`) auf den Replay-Cursor (`61390.67…`); `10 Bars zurück`, `1 Bar zurück`, `Abspielen` (Button wird zu `Pause`), `Live` → exakt wieder der Live-Schlusskurs |
+| **Backtest-Marker** | `Trades auf den Chart` → Toast `7 Round-Trips auf dem Chart`, Canvas ändert sich; `Marker entfernen` stellt den vorherigen Canvas **exakt** wieder her |
+| **PNG-Export** | Button lokalisiert: „PNG exportieren (inkl. Wasserzeichen)"; das PNG (1582×662, 69 KB) wurde visuell geprüft: Candles, Volumen, Achsen, Preislinie – und das Wasserzeichen `www.NodeChart.cc` mittig im Chart. `takeScreenshot(true, true)` schließt Primitives laut Bibliotheks-Typdefinition ausdrücklich ein |
+| CSV-Export | 22 722 B, `text/csv;charset=utf-8` |
+
+### 🔧 Gefunden und behoben: `RangeError: Invalid language tag: en-US@posix`
+
+Symptom: 60+ Page-Errors pro Terminal-Lauf. Ursache war **nicht** die eigene Locale-Erkennung
+(`LocaleDetectBanner` prüft sauber per `isLocale`), sondern `lightweight-charts`: die Bibliothek
+formatiert Achsen-Ticks intern mit `Date.toLocaleString()` **ohne Locale-Argument**, also im
+Runtime-Default. Läuft Container/Browser mit einem POSIX-Tag (`en-US@posix`), wirft jeder
+Tick einen `RangeError`.
+
+Behoben:
+
+- `src/lib/format.ts`: `safeLocale()` (POSIX-Modifier/Underscore bereinigen, per
+  `Intl.getCanonicalLocales` validieren, sonst `en`) und `dateTime(ms, locale)`
+  (datumslokalisiert, wirft nie).
+- `PriceChart.tsx`: `localization: { locale: safeLocale(locale) }` in der Chart-Konfiguration
+  plus Live-Update im Locale-Effekt – die Zeitachse folgt damit der **App**-Sprache statt der
+  Browsersprache.
+- `MagnifierModal`, `PatternsModal`, `AlertsPanelModal`: `toLocaleString()/toLocaleTimeString()`
+  → `dateTime(ms, locale)` (de `28.09.26, 19:00`, ru `28.09.2026, 19:00`).
+
+Nachweis: Terminal mit erzwungenem `navigator.language = 'en-US@posix'` → **0 Page-Errors**,
+Datumsangaben korrekt lokalisiert, Canvas unverändert 1508×634.
+
+### Aufgeklärt, kein Defekt
+
+- Der Chip **„Verbinde neu · Versuch n/5"** hängt allein am Feed-Status (`status === 'reconnecting'`),
+  nicht am Datenbestand – in der Sandbox gibt es keine WebSocket-Verbindung, deshalb bleibt er
+  stehen. Mit erreichbarem Feed verschwindet er.
+- Die 9 `503`-Meldungen stammen aus dem Fixture-Layer (Nicht-Kline-Aufrufe) und sind gewollt.
+
+---
+
+## 6. Vorschlag für die nächsten Schritte
 
 | Reihenfolge | Modul | Inhalt | Warum jetzt |
 |---|---|---|---|
 | 1 | ~~**M3a**~~ | ~~mobiler Terminal-Umbau~~ | ✅ **erledigt** (Abschnitt 4) |
-| 2 | **M3b** | Chart-Engine-Prüfung: Candles, 36 Indikatoren, Zeichnungen, Pane-Sync, PNG-Wasserzeichen, Bar-Replay, Backtest-Marker | Kernversprechen der App. Braucht Netzzugang zu den Börsen — auf einem normalen Rechner prüfbar; für CI zuerst den Fixture-Modus aus O4 bauen |
+| 2 | ~~**M3b**~~ | ~~Chart-Engine-Prüfung~~ | ✅ **erledigt** (Abschnitt 5, inkl. Fixture-Feed statt Netzzwang) |
 | 3 | **M4** | i18n-Layout-Stresstest RU/ZH + alle Modals auf 360/390/768/1024 | i18n ist Verkaufsargument, Layout-Brüche fallen dort zuerst auf |
 | 4 | **M5** | A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons | Barrierefreiheit + SEO-Nebenwirkung |
 | 5 | **M6** | Werbung/Monetarisierung im Fill-Fall (CLS, „kollabiert ohne Fill", Social Bar, Ad-Block-Wall) | Einnahmen, ohne die UX zu beschädigen |
@@ -183,7 +238,7 @@ unlesbar). Jetzt Aktionszeile unter dem Text: Textbreite **306 px**, Bannerhöhe
 
 ---
 
-## 6. Arbeitsumgebung / Reproduktion
+## 7. Arbeitsumgebung / Reproduktion
 
 Die Prüfungen liefen in einer Sandbox ohne Zugang zu Börsen/DEX/Fonts (nur npm + GitHub).
 Damit der Produktionsbuild trotzdem echt geprüft werden kann:
@@ -205,7 +260,7 @@ installiertes Chrome for Testing.
 
 ---
 
-## 7. Fixes dieses Durchgangs (Diff-Übersicht)
+## 8. Fixes dieses Durchgangs (Diff-Übersicht)
 
 | Datei | Änderung |
 |---|---|
@@ -219,5 +274,15 @@ installiertes Chrome for Testing.
 | `src/components/chart/ChartGrid.tsx` | `min-h-0` am Grid-Wrapper (Panes schrumpfen statt zu wachsen) |
 | `src/components/chart/DrawingToolbar.tsx` | Touchscreen-Hinweis: Aktionszeile unter den Text (Text war auf 55 px gepresst) |
 | `messages/{en,de,es,ru,zh}.json` | +2 Keys `showcase.toolbar{Collapse,Expand}` |
+
+**Nachtrag Durchgang 2 (M3):**
+
+| Datei | Änderung |
+|---|---|
+| `src/lib/format.ts` | neu: `safeLocale()` (Intl-feste Locale-Tags) und `dateTime(ms, locale)` |
+| `src/components/chart/PriceChart.tsx` | `localization.locale` (validiert, live aktualisiert) – behebt die `RangeError`-Flut der Zeitachse |
+| `src/components/tools/MagnifierModal.tsx` | Zeitstempel über `dateTime(ms, locale)` statt `toLocaleString()` |
+| `src/components/tools/PatternsModal.tsx` | dito für die Muster-Zeitstempel |
+| `src/components/tools/AlertsPanelModal.tsx` | dito für den Alarm-Zeitstempel |
 
 Alle Änderungen sind typgeprüft (`tsc`), lint-frei, gebaut und im Browser nachgemessen.

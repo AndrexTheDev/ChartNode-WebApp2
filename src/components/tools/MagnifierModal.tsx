@@ -2,11 +2,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
-import { usd } from '@/lib/format';
+import { dateTime, usd } from '@/lib/format';
 import { useViralStore } from '@/store/useViralStore';
 import type { Candle } from '@/websockets/types';
 
@@ -44,6 +44,7 @@ interface TapeStats {
  */
 export function MagnifierModal({ symbol, barMs, candles, open, onClose }: MagnifierModalProps) {
   const t = useTranslations('tools');
+  const locale = useLocale();
   const closed = useMemo(() => candles.slice(0, -1), [candles]);
   const [offset, setOffset] = useState(1);
   const [stats, setStats] = useState<TapeStats | null>(null);
@@ -151,7 +152,7 @@ export function MagnifierModal({ symbol, barMs, candles, open, onClose }: Magnif
             <ChevronLeft size={12} />
           </button>
           <span className="border border-line bg-surface/40 px-2 py-1 text-fg">
-            {bar ? new Date(bar.t).toLocaleString() : '—'}
+            {bar ? dateTime(bar.t, locale) : '—'}
           </span>
           <button
             type="button"

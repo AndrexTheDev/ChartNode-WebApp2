@@ -44,12 +44,13 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { useLocale } from 'next-intl';
 import { RSI as RsiCalc } from 'technicalindicators';
 import { readChartTheme, withAlpha, type ChartTheme } from '@/lib/chart-theme';
 import { crosshairBus, rangeBus, rangesEqual } from '@/lib/chart-sync';
 import { hitTestDrawings, type XY } from '@/lib/drawings';
 import { cn } from '@/lib/cn';
-import { minMoveFor, pricePrecision } from '@/lib/format';
+import { minMoveFor, pricePrecision, safeLocale } from '@/lib/format';
 import {
   INDICATOR_LIBRARY,
   SERIES_COLORS,
@@ -252,6 +253,15 @@ export function PriceChart({
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  /*
+   * lightweight-charts formatiert Achsen-Ticks intern mit
+   * `Date.toLocaleString()` **ohne** Locale-Argument – also im Runtime-Default.
+   * Ist der kaputt (POSIX-Tags wie `en-US@posix`), wirft jede Tick-Beschriftung
+   * einen `RangeError`. Wir geben dem Chart deshalb explizit eine validierte
+   * Locale: robust und zugleich korrekt lokalisiert.
+   */
+  const locale = safeLocale(useLocale());
+  const localeRef = useRef(locale);
   const mainRef = useRef<AnySeries | null>(null);
   const volumeRef = useRef<AnySeries | null>(null);
   const indicatorSeriesRef = useRef<Map<string, AnySeries>>(new Map());
@@ -449,6 +459,7 @@ export function PriceChart({
       rightPriceScale: { borderColor: chartTheme.border, scaleMargins: { top: 0.08, bottom: 0.24 } },
       timeScale: { borderColor: chartTheme.border, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       handleScale: { axisPressedMouseMove: { time: true, price: false } },
+      localization: { locale: safeLocale(localeRef.current) },
     });
 
     chartRef.current = chart;
@@ -580,6 +591,13 @@ export function PriceChart({
     // incrementally below, so candle ticks never recreate the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType, chartId]);
+
+  /* ---------------------- Achsen-Locale im Theme-Update -------------------- */
+
+  useEffect(() => {
+    localeRef.current = locale;
+    chartRef.current?.applyOptions({ localization: { locale } });
+  }, [locale]);
 
   /* --------------------------------- data ---------------------------------- */
 

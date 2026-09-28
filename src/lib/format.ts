@@ -66,3 +66,63 @@ export function pricePrecision(price: number | null | undefined): number {
 export function minMoveFor(precision: number): number {
   return 1 / 10 ** precision;
 }
+
+/**
+ * Datum/Uhrzeit im **App**-Locale, nicht im Browser-Locale.
+ *
+ * Zwei Gründe:
+ *  1. i18n: Ohne explizites Tag formatiert `toLocaleString()` in der
+ *     Browsersprache. Wer die russische UI liest, bekam bisher deutsche Daten.
+ *  2. Robustheit: Ein exotisches/ungültiges Runtime-Locale (z. B. POSIX-Strings
+ *     wie `en-US@posix` in Containern oder manchen Webviews) lässt `Intl` mit
+ *     einer RangeError abbrechen – hier fällt es auf `en-US` zurück statt die
+ *     Komponente zu werfen.
+ */
+const dateTimeCache = new Map<string, Intl.DateTimeFormat>();
+
+function dateTimeFormatter(tag: string): Intl.DateTimeFormat {
+  const cached = dateTimeCache.get(tag);
+  if (cached) return cached;
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat(tag, { dateStyle: 'short', timeStyle: 'short' });
+  } catch {
+    formatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' });
+  }
+  dateTimeCache.set(tag, formatter);
+  return formatter;
+}
+
+/** `23.03.26, 14:05` – datumslokalisierter Zeitstempel für Tool-Panels. */
+export function dateTime(ms: number | null | undefined, locale = 'en'): string {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  try {
+    return dateTimeFormatter(locale).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+  }
+}
+
+/**
+ * BCP-47-Tag, der garantiert von `Intl` akzeptiert wird.
+ *
+ * Runtime-Locales sind nicht immer sauber: Container setzen `LANG=en_US.UTF-8`,
+ * POSIX-Modifier (`en-US@posix`) oder Windows-Notation (`de-DE-u-co-phonebk` ist
+ * ok, `German_Germany` nicht). Ein ungültiges Tag lässt `Intl` mit `RangeError`
+ * werfen – hier wird es auf den Sprach-Subtag reduziert und validiert.
+ */
+export function safeLocale(raw?: string | null): string {
+  if (!raw) return 'en';
+  const tag = (raw.split('@')[0] ?? '').replace(/_/g, '-').trim();
+  try {
+    return Intl.getCanonicalLocales(tag)[0] ?? 'en';
+  } catch {
+    /* fall through */
+  }
+  const base = tag.split('-')[0] ?? tag;
+  try {
+    return Intl.getCanonicalLocales(base)[0] ?? 'en';
+  } catch {
+    return 'en';
+  }
+}
