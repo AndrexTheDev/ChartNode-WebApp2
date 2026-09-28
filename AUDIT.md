@@ -26,6 +26,11 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher) | ⏳ offen | – |
 | M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
 
+**Konsistenz der Versprechen (geprüft):** Die Meta-Description nennt „34 Indikatoren" — das
+Indikator-Modal bietet genau **34** Einträge (33 Rechen-Indikatoren + Script-Lab-Einstieg).
+Die Feature-Karte zum Bar-Replay nennt „33 Indikatoren" und meint damit korrekt die 33
+Rechen-Indikatoren. Kein Widerspruch.
+
 > **Wichtig zur Reproduzierbarkeit:** Die Sandbox hat keinen Zugang zu Börsen-, DEX- und
 > Fontservern (nur npm/GitHub). Alles, was Live-Daten braucht (Canvas-Chart, Heatmap,
 > Whale-Ticker, Rate-Limit-Overlay), zeigt deshalb legale Leerzustände. Das ist **kein**
@@ -182,7 +187,8 @@ Adapter → Parser → Store → Renderer.
 | Prüfpunkt | Ergebnis |
 |---|---|
 | Seed & Canvas | 7 Canvasse (Haupt 1508×634, Preisachse 74×634, Zeitachse 1508×28), Chip `300 Candles`, Live-Legende `O 62830.36 H 63026.99 L 62507.94 C 62620.96` |
-| Indikatoren | EMA, RSI, Bollinger, MACD zugefügt → Label `Indikatoren (4)`, Serien gezeichnet |
+| Indikatoren (Stichprobe) | EMA, RSI, Bollinger, MACD zugefügt → Chip `+ 4`, Serien gezeichnet |
+| **Indikatoren (vollständig)** | **alle 34 Modal-Einträge** hinzugefügt (33 Rechen-Indikatoren + „Eigenes Skript"): Canvas-Elemente 7 → 87, Legende zeigt für **jeden** Indikator Werte (EMA 21 62345.95 · … · UO 46.56), **0 Page-Errors, 0 App-Errors**; `Alle entfernen` stellt exakt den Ausgangszustand wieder her (7 Canvasse) |
 | Zeichnungen | Trendlinie, horizontale Preislinie, Fibonacci setzen `aria-pressed=true`, Drag/Click erzeugen Tinte, `Alle Zeichnungen löschen (2)` |
 | Layouts | 1x1 / 2x1 / 2x2 → 15 / 22 / 36 Canvas-Elemente (4 Panes) |
 | **Pane-Sync (Zoom)** | Wheel in Pane 1 ändert **alle vier** Pane-Bitmaps identisch (309 → 324); Sync-Toggle aus → keine Weitergabe mehr |
