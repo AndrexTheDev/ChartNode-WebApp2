@@ -1,0 +1,223 @@
+# AUDIT — NodeChart (nodechart.cc)
+
+Systematisches Qualitäts-/Vollständigkeitsaudit in Modulen. Dieses Dokument ist das
+Arbeitsprotokoll auf dem Weg zur finalen Version: **was geprüft wurde, was gefunden wurde,
+was bereits behoben ist und was als Nächstes dran ist.**
+
+- Stand: 2026-09-28
+- Geprüfter Commit: `aa809ae` (`main`) + Fixes dieses Durchgangs (Branch `arena/01a0e92c-chartnode-webapp2`)
+- Umfang: 179 Quelldateien · ~29 200 Zeilen · 5 Locales (à 1 160 Keys) · 38 vorgebaute Routen
+
+---
+
+## 0. Status-Dashboard
+
+| Modul | Bereich | Status | Ergebnis |
+|---|---|---|---|
+| M0 | Statische Gates (Types, Lint, Build, i18n) | ✅ bestanden | 0 TS-Fehler · 0 Lint-Fehler · Build 38/38 Routen · i18n-Parität 5×1 160 |
+| M1 | Darstellung · SEO · Rendering (120 Läufe × 4 Viewports) | ✅ geprüft | 0 Konsolenfehler · 0 Page-Errors · 0 kaputte Bilder · 0 tote Links |
+| M2 | Terminal-Funktionalität (16 Modals, Layouts, Palette, Themes) | ✅ geprüft | alle 16 Modals öffnen/schließen korrekt, Inhalte vollständig lokalisiert |
+| M2b | **Mobile Terminal-Layout (Prio 1)** | ✅ umgebaut | Chartfläche im First-View: **47 px → 625 px** (74 % des Viewports) |
+| M3 | Chart-Engine / Canvas (Indikatoren, Zeichnungen, Export) | ⏳ **als Nächstes** | braucht Live-Feed → Fixture-Modus (siehe O4) |
+| M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings) | ⏳ offen | – |
+| M5 | A11y vertieft (Tastatur, Fokus, Screenreader, Kontrast) | ⏳ offen | – |
+| M6 | Werbung/Monetarisierung im echten Fill-Fall | ⏳ offen | – |
+| M7 | Performance / Core Web Vitals | ⏳ offen | – |
+| M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher) | ⏳ offen | – |
+| M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
+
+> **Wichtig zur Reproduzierbarkeit:** Die Sandbox hat keinen Zugang zu Börsen-, DEX- und
+> Fontservern (nur npm/GitHub). Alles, was Live-Daten braucht (Canvas-Chart, Heatmap,
+> Whale-Ticker, Rate-Limit-Overlay), zeigt deshalb legale Leerzustände. Das ist **kein**
+> Defekt, sondern Umgebung — die Prüfungen dafür folgen in M3 auf einem Rechner mit Netz.
+
+---
+
+## 1. Module M0 — statische Gates
+
+| Prüfung | Befehl | Ergebnis |
+|---|---|---|
+| Typen | `npx tsc --noEmit` | 0 Fehler |
+| Lint | `npx eslint .` | 0 Fehler, 2 Warnungen (`scripts/release-audit/m10-resilienz.mjs:8`, `m8-ads-deep.mjs:16` — ungenutzte Variablen in QA-Skripten) |
+| Build | `next build` | 38/38 Routen, alle Locales statisch (SSG) |
+| i18n-Parität | `npm run check:i18n` | 5 × 1 160 Keys, Platzhalter konsistent |
+
+---
+
+## 2. Modul M1 — Darstellung, SEO, Rendering
+
+**Testmatrix:** 5 Locales × 6 Seiten × 4 Viewports (390 / 834 / 1440 / 1920) = **120 Läufe**,
+jeweils mit Protokollierung von Konsolenfehlern, Page-Errors, fehlgeschlagenen Requests,
+HTTP-Status, Layout-Überlauf, A11y-Basics und Screenshot.
+
+### ✅ Sauber
+
+- **0** JavaScript-Fehler, **0** unbehandelte Page-Errors, **0** 4xx/5xx, **0** fehlgeschlagene
+  App-Ressourcen, **0** defekte Bilder, **0** fehlende `alt`-Attribute, **0** Links ins Leere.
+- **Metadaten pro Locale korrekt:** `<html lang>` (de-DE / es-ES / ru-RU / zh-Hans …),
+  Canonical `https://nodechart.cc/<locale>`, `hreflang` inkl. `x-default`, genau **eine** H1,
+  lückenlose Heading-Reihenfolge, JSON-LD (SoftwareApplication + Organization/WebSite).
+- **Social/SEO vollständig:** `og:title/description/url/site_name/locale` + 4× `og:locale:alternate`,
+  `og:image` **mit** `width`/`height`/`alt`, `twitter:card=summary_large_image` + `twitter:image`.
+- **Routen:** `/` → 307 auf `/en`; `/en /de /es /ru /zh`, `/help`, 15 Rechtsseiten, `/terminal`,
+  `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest`, `/llms.txt`, `/icon.svg`, `/api/og` → alle 200.
+- **A11y-Basics:** keine unbenannten Buttons/Links, Touch-Targets in Ordnung (einzige
+  „kleine" Fläche ist der absichtliche Skip-Link, der bei Fokus groß wird).
+- **Light-Theme vollständig:** Landing, Terminal und Hilfe sind auch in „Daylight" korrekt
+  gefärbt (Farbpunkte-Messung: 0 dunkle Flächen).
+
+### 🔧 Befunden und behoben
+
+| # | Befund | Schwere | Status |
+|---|---|---|---|
+| B1 | **Mobiler Überlauf auf Rechtsseiten:** `/de/legal/terms` (407 px), `/de/legal/privacy` (398 px), `/ru/legal/privacy` (401 px) bei 390 px Viewport. Ursache: ein unteilbares Komposit-Wort in der H1 („Allgemeine Geschäftsbedingungen") sprengte die Zeile → horizontales Scrollen + aufgeblähtes Layout-Viewport. | mittel | ✅ **behoben** (`[overflow-wrap:anywhere]` auf der Legal-H1 + `html { overflow-x: clip }` als globales Sicherheitsnetz). Nachgemessen: alle vier Seiten **390/390/390**, kein H-Scroll. |
+| B2 | **Sponsor-Leiste war in allen 5 Locales englisch** („Bonus Offer / Partner Deal / Trading Contest") — Kit-Strings statt Content. | mittel | ✅ **behoben** (Kit liest `ITEMS` aus `data-config`; 3 neue Keys `ads.offer{Bonus,Partner,Contest}` in allen 5 Locales). Verifiziert: de „Bonus-Angebot/Partner-Deal/Trading-Wettbewerb", es/ru/zh ebenfalls lokalisiert. |
+| B3 | **Interner Entwickler-Platzhalter im UI:** „Wartet auf die Chart-Engine (Teil 2)" stand im Terminal-Chip (alle 5 Locales) — verrät den Bauzustand. | mittel | ✅ **behoben** → „Warte auf Kursdaten …" (bzw. lokalisiert). |
+
+### 📋 Offen (bewusst nicht angefasst)
+
+| # | Beobachtung | Schwere | Einordnung |
+|---|---|---|---|
+| O1 | `npm run audit:css` meldet 1 „fehlende" Utility: `border-0`. | kosmetisch | **Werkzeug-Fehler, kein Produktfehler** — `border-0` ist eine Tailwind-Core-Utility und wird nur als `last:border-0` / in `@apply` benutzt. |
+| O2 | Sponsor-Leiste ist auf Phones ein **unsichtbarer Quer-Scroller** (`overflow-x: auto`, `scrollbar-width: none`); die 3. Kachel ist nur durch Wischen erreichbar — seit der Lokalisierung noch breiter (580 px bei 374 px Sichtfeld). | niedrig | Bewusste, im Code dokumentierte Design-Entscheidung („darf nicht dreizeilig ins First-View ragen"). Empfehlung: auf Phones nur 2 Angebote zeigen oder eine Wisch-Andeutung ergänzen. |
+| O3 | Einmalig beobachtete unbehandelte Promise-Rejection („Failed to fetch") im 120-Läufe-Sweep; in je 15-Sekunden-Messungen auf Landing und Terminal **nicht** reproduzierbar. Latentes Muster gefunden: in `HeatmapModal`/`MagnifierModal` bleibt die Sekundär-Quelle (`fromOkx`/`okx`) unbeobachtet, wenn die Primär-Quelle gewinnt → könnte eine unbehandelte Rejection erzeugen. | niedrig | Härtungskandidat für M8 (ein `void secondary.catch(() => null)` pro Stelle). |
+
+---
+
+## 3. Modul M2 — Terminal-Funktionalität
+
+**Methode:** echtes Headless-Chrome gegen den Produktionsbuild, jede Funktion über die
+echten UI-Elemente ausgelöst (`data-menu-trigger` → Menüeintrag), inkl. Esc-Schließen-Prüfung.
+
+### ✅ Alles gefunden und funktionsfähig
+
+| Bereich | Ergebnis |
+|---|---|
+| **16 Modals** | Teilen · Hilfe · Liq Radar · Lag Oracle · Regime Compass · Clock Edge · Chartmuster · Ratings · Heatmap · Backtest · Screener · Risiko · Journal · Bar-Lupe · Script Lab · Alerts — **alle** öffnen mit echtem, lokalisiertem Inhalt, keinerlei Clipping (512×235 bis 1024×133 px), alle schließen mit **Esc**. |
+| **Layouts** | Tasten `1` / `2` / `3` bzw. Buttons schalten 1x1 / 2x1 / 2x2 (aria-pressed korrekt). |
+| **Themes** | Acid Green, Electric Purple, Daylight schalten live **und** persistieren über den Reload; Premium-Skins (Matrix/Miami) öffnen korrekt das „Premium-Skins freischalten"-Gate. |
+| **Command-Palette** | ⌘K/Ctrl+K öffnet, **46 Einträge**, Suche filtert live (inkl. Tool-, Theme- und Layout-Aktionen). |
+| **Watchlist** | Stern-Toggle wechselt `aria-pressed` true→false. |
+| **Indikatoren** | Modal öffnet mit **36** wählbaren Indikatoren (EMA, SMA, Bollinger, Supertrend, Ichimoku, VWAP, Hull MA, TD Sequential …). |
+| **Zeichenwerkzeuge** | Cursor, Trendlinie, Strahl, horizontale Linie, Fibonacci, Support/Resistance-Zone, Radierer, „alle löschen (n)". |
+| **Export** | „PNG exportieren (inkl. Wasserzeichen)" + „OHLCV als CSV exportieren" vorhanden. |
+| **Persistenz** | `nodechart:store:v1` (inkl. Theme), `nc-chart-v1`, `nc-viral-v1`, `nodechart.exchanges.v1`, `nc-visits`. |
+| **Feed-Layer** | Alle 12 CEX-Adapter starten ihre Sockets und REST-Seeds korrekt (im Sandbox netzbedingt `ERR_CONNECTION_CLOSED`), Status-Chip läuft korrekt durch `Verbinde neu · Versuch n`. |
+| **Leerzustände** | Ehrlich und lokalisiert: Heatmap „nicht erreichbar – Binance-API blockt?", Regime/Clock „Noch zu wenig Kerzen", Lag Oracle „Leader-Feed lädt – mindestens 60 Kerzen nötig". |
+
+### 📋 Offen
+
+| # | Beobachtung | Schwere |
+|---|---|---|
+| O4 | **Die Projekt-eigenen GUI-QA-Skripte können ohne Live-Daten nicht laufen:** `npm run qa:features` wartet auf ein `canvas`-Element, das erst mit echten Kerzen entsteht → Timeout. `qa:modules`, `browser-check`, `gui-audit` haben dieselbe Abhängigkeit. Für CI/Release wäre ein **Fixture-Modus** (eingespielte Candle-Seeds) deutlich wertvoller als echte Netze. | niedrig (Testinfrastruktur) |
+
+---
+
+## 4. ✅ Prio 1 gelöst — mobiles Terminal umgebaut
+
+**Befund (vorher):** Auf einem 390×844-Telefon war beim Öffnen des Terminals praktisch
+keine Chartfläche zu sehen — die vollständige Toolbar brach auf 7 Zeilen / 426 px um.
+
+| Block | vorher | nachher |
+|---|---:|---:|
+| Header | 114 px | 114 px |
+| Sponsor-Leiste | 44 px | ~86 px (2 sichtbare Kacheln) |
+| Terminal-Toolbar | **426 px** (7 Zeilen) | **57 px** (1 schmale Leiste) |
+| Chart-Pane beginnt bei | 823 px | **219 px** |
+| **Chartfläche im First-View** | **47 px (5 %)** | **625 px (74 %)** |
+
+**Was gebaut wurde**
+
+1. **Viewport-füllendes Terminal auf Phones** — kein Seiten-Scroll mehr innerhalb des
+   Terminals (`max-lg:h-[calc(100dvh-var(--nc-header-h))] max-lg:overflow-hidden`);
+   `min-h-0` am Chart-Grid, damit die Panes korrekt schrumpfen statt zu wachsen.
+   Desktop bleibt unverändert (freies Wachstum, Pane-Sync, Dock-Ticker, Footer).
+2. **Einklappbare Toolbar statt Werkzeugwand** — die schmale Leiste
+   (Symbol · Preis · Intervall · Werkzeuge-Button) erscheint auf Phones, die volle
+   Leiste kommt per Tipp zurück und per Chevron wieder weg.
+3. **CSS-first, nicht React-Konditional.** Server und Client rendern denselben Zustand
+   (`data-nc-toolbar="closed"`), das Umschalten ist ein reines Datenattribut. Damit:
+   kein Hydration-Mismatch, kein Layout-Sprung beim ersten Paint (CLS 0) und die
+   schmale Leiste funktioniert **auch ohne JavaScript**.
+4. **Bewusst ohne Scroll-Trigger.** Ein Scroll-basiertes Ein-/Ausklappen erzeugt eine
+   Rückkopplung (Höhenänderung ⇒ Scrollpositionsänderung ⇒ umgekehrtes Event) und
+   flackerte in den Messungen reproduzierbar. Der Zustand hängt jetzt nur an der
+   Viewport-Breite und an expliziten Tipps.
+
+**Zusätzlich gefunden und behoben (B4):** Der Touchscreen-Hinweis im Chart-Werkzeugkasten
+war eine Zeile im Werkzeug-Streifen. Seine beiden Aktionsbuttons reservierten sich
+243 px, wodurch der Fließtext auf **55 px Breite** gepresst wurde (322 px hoch,
+unlesbar). Jetzt Aktionszeile unter dem Text: Textbreite **306 px**, Bannerhöhe
+**374 px → 188 px**.
+
+**Regression nach dem Umbau** (30 Seiten-Läufe, 5 Locales × 3 Seiten × 2 Viewports):
+
+| Prüfung | Ergebnis |
+|---|---|
+| Routen | alle 200 |
+| Konsolenfehler | **0** |
+| Page-Errors | **0** |
+| defekte interne Requests | **0** |
+| horizontaler Seiten-Scroll | **0** (vorher 3 Seiten) |
+| 15 Tool-Modals | alle öffnen, keins geclippt, alle schließen mit Esc |
+| Themes (inkl. Premium-Gate) | alle korrekt |
+| Toolbar Desktop unverändert | 110 px, 1 Zeile, Chart 693 px |
+
+> Hinweis zur Messung: Elemente innerhalb der Landing-Marquee (`animate-marquee`) ragen
+> konstruktionsbedingt über den Viewport hinaus. Eine Nachprüfung aller Treffer
+> (`unscrolled: []`) bestätigt: **kein** Element außerhalb einer bewussten
+> Scroll-/Animationszone ragt hinaus.
+
+## 5. Vorschlag für die nächsten Schritte
+
+| Reihenfolge | Modul | Inhalt | Warum jetzt |
+|---|---|---|---|
+| 1 | ~~**M3a**~~ | ~~mobiler Terminal-Umbau~~ | ✅ **erledigt** (Abschnitt 4) |
+| 2 | **M3b** | Chart-Engine-Prüfung: Candles, 36 Indikatoren, Zeichnungen, Pane-Sync, PNG-Wasserzeichen, Bar-Replay, Backtest-Marker | Kernversprechen der App. Braucht Netzzugang zu den Börsen — auf einem normalen Rechner prüfbar; für CI zuerst den Fixture-Modus aus O4 bauen |
+| 3 | **M4** | i18n-Layout-Stresstest RU/ZH + alle Modals auf 360/390/768/1024 | i18n ist Verkaufsargument, Layout-Brüche fallen dort zuerst auf |
+| 4 | **M5** | A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons | Barrierefreiheit + SEO-Nebenwirkung |
+| 5 | **M6** | Werbung/Monetarisierung im Fill-Fall (CLS, „kollabiert ohne Fill", Social Bar, Ad-Block-Wall) | Einnahmen, ohne die UX zu beschädigen |
+| 6 | **M7** | Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets | Ranking + subjektive Geschwindigkeit |
+| 7 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten |
+| 8 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss |
+
+---
+
+## 6. Arbeitsumgebung / Reproduktion
+
+Die Prüfungen liefen in einer Sandbox ohne Zugang zu Börsen/DEX/Fonts (nur npm + GitHub).
+Damit der Produktionsbuild trotzdem echt geprüft werden kann:
+
+```bash
+# Build (offline-fähig: echte Fonts über fontsource gemockt)
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES=<mock.cjs> \
+NEXT_PUBLIC_SITE_URL=https://nodechart.cc npx next build --webpack
+
+# Server + Headless-Chrome
+npx next start -H 0.0.0.0 -p 3000
+LD_LIBRARY_PATH=<nss-libs> PUPPETEER_EXECUTABLE_PATH=<chromium> node <harness.mjs>
+```
+
+Auf einem Rechner mit normalem Internetzugang entfällt der Font-Mock; `npm run build`
+funktioniert dort unverändert. Die Projekt-Skripte `qa:features`, `qa:modules`,
+`browser-check` und `gui-audit` brauchen `PUPPETEER_EXECUTABLE_PATH` bzw. ein
+installiertes Chrome for Testing.
+
+---
+
+## 7. Fixes dieses Durchgangs (Diff-Übersicht)
+
+| Datei | Änderung |
+|---|---|
+| `ads-kit/app-smartlinks.js` | neues `CONFIG.ITEMS` (+ Doku), `mountSponsorBar()` nutzt `ITEMS` vor `DEFAULT_ITEMS` |
+| `public/ads/app-smartlinks.js` | via `npm run ads:sync` gespiegelt (Single Source of Truth bleibt `ads-kit/`) |
+| `src/components/ads/SmartlinkKit.tsx` | übergibt die 3 Leisten-Labels lokalisiert per `data-config` |
+| `messages/{en,de,es,ru,zh}.json` | +3 Keys `ads.offerBonus/offerPartner/offerContest`; `showcase.waiting` von Entwickler-Platzhalter auf Nutzer-Text |
+| `src/components/legal/LegalDocument.tsx` | H1 um `[overflow-wrap:anywhere]` ergänzt |
+| `src/styles/globals.css` | `html { overflow-x: clip }` als globales Überlauf-Sicherheitsnetz; `.nc-toolbar-*`-Regeln für die einklappbare Mobile-Toolbar |
+| `src/components/terminal/TerminalShell.tsx` | viewport-füllendes Mobile-Layout, schmale Leiste + `data-nc-toolbar`, volle Leiste per Tipp/Chevron, Desktop unverändert |
+| `src/components/chart/ChartGrid.tsx` | `min-h-0` am Grid-Wrapper (Panes schrumpfen statt zu wachsen) |
+| `src/components/chart/DrawingToolbar.tsx` | Touchscreen-Hinweis: Aktionszeile unter den Text (Text war auf 55 px gepresst) |
+| `messages/{en,de,es,ru,zh}.json` | +2 Keys `showcase.toolbar{Collapse,Expand}` |
+
+Alle Änderungen sind typgeprüft (`tsc`), lint-frei, gebaut und im Browser nachgemessen.

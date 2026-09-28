@@ -45,7 +45,10 @@
     /** Verzögerung nach Feature-Klick, bevor der Offer-Toast erscheint (ms). */
     OFFER_DELAY_MS: 800,
     /* Default-Items der Sponsored-Leiste – erkennbar als Angebote, keine
-       Funktions-Tarnung. Eigene Items via SmartlinksApp.mount(...) möglich. */
+       Funktions-Tarnung. Eigene Items via SmartlinksApp.mount(...) möglich.
+       ITEMS überschreibt sie (Host liefert lokalisierte Labels via data-config),
+       DEFAULT_ITEMS bleibt der Fallback für den Standalone-Betrieb. */
+    ITEMS: null,
     DEFAULT_ITEMS: [
       { icon: '🎁', label: 'Bonus Offer' },
       { icon: '⚡', label: 'Partner Deal' },
@@ -230,7 +233,10 @@
   }
 
   /* -------------------- 1) Sponsored-Leiste (Native Optic) ------------------ */
-  function mountSponsorBar(containerOrSelector = CONFIG.MOUNT_SELECTOR, items = CONFIG.DEFAULT_ITEMS) {
+  function mountSponsorBar(
+    containerOrSelector = CONFIG.MOUNT_SELECTOR,
+    items = (Array.isArray(CONFIG.ITEMS) && CONFIG.ITEMS.length ? CONFIG.ITEMS : CONFIG.DEFAULT_ITEMS),
+  ) {
     const host =
       typeof containerOrSelector === 'string'
         ? document.querySelector(containerOrSelector)

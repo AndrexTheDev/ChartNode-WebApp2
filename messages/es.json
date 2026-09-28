@@ -197,7 +197,7 @@
     "venue": "Origen",
     "timeframe": "Temporalidad",
     "stateReadout": "Estado del store",
-    "waiting": "Esperando al motor de gráficos (Parte 2)",
+    "waiting": "Esperando datos de mercado …",
     "vp": "VP",
     "avwap": "aVWAP",
     "sr": "S/R Auto",
@@ -250,6 +250,8 @@
       "help": "Centro de ayuda",
       "edge": "Edge"
     },
+    "toolbarCollapse": "Ocultar herramientas",
+    "toolbarExpand": "Herramientas",
     "compareNone": "Sin comparación"
   },
   "cta": {
@@ -1140,6 +1142,9 @@
   },
   "ads": {
     "sponsored": "Patrocinado",
+    "offerBonus": "Bono disponible",
+    "offerPartner": "Oferta de socio",
+    "offerContest": "Concurso de trading",
     "claimBonus": "Reclamar bono",
     "partnerDeals": "Ofertas de socios",
     "partnerNote": "Las ofertas patrocinadas ayudan a financiar NodeChart.",

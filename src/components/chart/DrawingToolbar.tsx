@@ -149,22 +149,27 @@ export function DrawingToolbar({ paneId, drawingCount, onClearDrawings, classNam
       {isTouch && !dismissed && (
         <div
           role="status"
-          className="nc-clip flex w-full items-start gap-2 border border-warning/45 bg-warning/10 px-3 py-2"
+          className="nc-clip flex w-full flex-col gap-2 border border-warning/45 bg-warning/10 px-3 py-2"
         >
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-2xs font-bold uppercase tracking-cyber text-warning">
-              {t('mobile.title')}
-            </p>
-            <p className="mt-0.5 font-mono text-2xs leading-relaxed text-muted">{t('mobile.body')}</p>
+          <div className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-2xs font-bold uppercase tracking-cyber text-warning">
+                {t('mobile.title')}
+              </p>
+              <p className="mt-0.5 font-mono text-2xs leading-relaxed text-muted">{t('mobile.body')}</p>
+            </div>
           </div>
-          <div className="flex shrink-0 flex-col gap-1">
+          {/* Aktionen unter dem Text: nebeneinander gesetzt brauchten die beiden
+              Labels auf einem 390-px-Gerät 243 px und pressten den Fließtext
+              auf 55 px Breite (322 px hoch, unlesbar). */}
+          <div className="flex flex-wrap gap-1.5 pl-6">
             <button
               type="button"
               onClick={() => setForced(!forced)}
               aria-pressed={forced}
               className={cn(
-                'nc-clip-sm inline-flex h-7 items-center gap-1.5 border px-2 font-mono text-micro-10 uppercase tracking-cyber transition-colors',
+                'nc-clip-sm inline-flex min-h-8 items-center gap-1.5 border px-2.5 py-1 font-mono text-micro-10 uppercase tracking-cyber transition-colors',
                 forced
                   ? 'border-primary/70 bg-primary/14 text-primary hover:bg-primary/22'
                   : 'border-line bg-surface/60 text-muted hover:border-primary/40 hover:text-fg',
@@ -175,7 +180,7 @@ export function DrawingToolbar({ paneId, drawingCount, onClearDrawings, classNam
             <button
               type="button"
               onClick={dismiss}
-              className="nc-clip-sm inline-flex h-7 items-center border border-line bg-surface/40 px-2 font-mono text-micro-10 uppercase tracking-cyber text-faint transition-colors hover:text-fg"
+              className="nc-clip-sm inline-flex min-h-8 items-center border border-line bg-surface/40 px-2.5 py-1 font-mono text-micro-10 uppercase tracking-cyber text-faint transition-colors hover:text-fg"
             >
               {t('mobile.dismiss')}
             </button>

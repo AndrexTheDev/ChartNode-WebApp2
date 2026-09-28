@@ -84,7 +84,7 @@ export function ChartGrid() {
   const visible = useMemo(() => panes.slice(0, preset.panes), [panes, preset.panes]);
 
   return (
-    <div className="relative flex-1">
+    <div className="relative min-h-0 flex-1">
       <div
         className={cn('grid h-full gap-2 p-2', preset.gridClass)}
         style={{ minHeight: preset.rows * preset.rowMinHeight }}

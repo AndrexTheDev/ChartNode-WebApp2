@@ -161,6 +161,11 @@
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
     scrollbar-color: hsl(var(--nc-primary) / 0.4) transparent;
+    /* Sicherheitsnetz: ein einzelnes überbreites Token (langer deutscher
+       Komposit-Begriff, URL, Hash) darf das Layout-Viewport nicht aufblähen.
+       `clip` statt `hidden`, damit kein Scroll-Container entsteht und
+       `position: sticky` (Header/Toolbar) unangetastet bleibt. */
+    overflow-x: clip;
   }
 
   body {
@@ -502,6 +507,41 @@ select[aria-invalid='true'] {
    ein Dialog offen ist ausgeblendet (Modal setzt body.nc-modal-open). */
 body.nc-modal-open [data-nc-socialbar="1"] {
   visibility: hidden;
+}
+
+/* ── Terminal-Toolbar: auf Phones einklappbar ──────────────────────────────
+   Die volle Toolbar braucht auf einem 390-px-Gerät 7 Zeilen (426 px) und ließ
+   vom Chart nur 47 px im First-View. Deshalb: schmale Leiste als Default,
+   volle Leiste nur auf Wunsch (`data-nc-toolbar="open"`).
+
+   CSS-first statt React-Konditional: Server und Client rendern denselben
+   Zustand (`closed`) ⇒ kein Hydration-Mismatch, kein Layout-Sprung beim ersten
+   Paint, und die schmale Leiste funktioniert selbst ohne JavaScript. Desktop
+   (≥ 1024px) bleibt unverändert bei der vollen Leiste. */
+.nc-toolbar-slim,
+.nc-toolbar-toggle {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  /* Standard auf Phones: schmale Leiste sichtbar, volle Leiste aus */
+  .nc-toolbar-full {
+    display: none;
+  }
+  .nc-toolbar-slim,
+  .nc-toolbar-toggle {
+    display: flex;
+  }
+  /* Ausgeklappt: volle Leiste + Chevron, schmale Leiste weicht */
+  [data-nc-toolbar='open'] .nc-toolbar-full {
+    display: flex;
+  }
+  [data-nc-toolbar='open'] .nc-toolbar-slim {
+    display: none;
+  }
+  [data-nc-toolbar='closed'] .nc-toolbar-toggle {
+    display: none;
+  }
 }
 
 /* ── Sponsored-Strip: auf Mobile einzeiliger Scroller ──────────────────────

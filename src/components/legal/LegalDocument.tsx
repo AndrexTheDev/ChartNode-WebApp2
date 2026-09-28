@@ -51,7 +51,7 @@ export function LegalDocument({
           {icon}
           {eyebrow}
         </span>
-        <h1 className="text-4xl font-black leading-tight sm:text-5xl">{title}</h1>
+        <h1 className="text-4xl font-black leading-tight [overflow-wrap:anywhere] sm:text-5xl">{title}</h1>
         <p className="max-w-2xl text-base leading-relaxed text-muted">{intro}</p>
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <span className="nc-chip">

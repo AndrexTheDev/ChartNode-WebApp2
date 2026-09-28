@@ -35,6 +35,7 @@ import {
   Magnet,
   Compass,
   Clock3,
+  ChevronUp,
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
@@ -137,6 +138,28 @@ export function TerminalShell() {
   const toggleOnChain = useOnChainStore((s) => s.toggle);
   const proOpen = useProStore(selectProOpen);
   const togglePro = useProStore((s) => s.toggle);
+
+  /**
+   * Mobile-Toolbar einklappen.
+   *
+   * Auf Phones belegte die vollständige Toolbar (7 umgebrochene Zeilen) 426 px
+   * und ließ vom Chart nur 47 px im First-View übrig. Deshalb ist das Terminal
+   * mobil jetzt viewport-füllend (kein Seiten-Scroll mehr – wie in einem echten
+   * Terminal) und die Toolbar startet auf einer schmalen Leiste
+   * (Symbol · Preis · Intervall · Werkzeuge). Ein Tipp holt die volle Leiste
+   * zurück, der Chevron legt sie wieder weg.
+   *
+   * Umgesetzt wird das **CSS-first** (siehe `.nc-toolbar-*` in globals.css):
+   * Server und Client rendern denselben Zustand (`closed`), das Umschalten ist
+   * ein reines `data`-Attribut. Damit gibt es keinen Hydration-Mismatch, keinen
+   * Layout-Sprung beim ersten Paint (CLS 0) und die schmale Leiste funktioniert
+   * sogar ohne JavaScript.
+   *
+   * Bewusst KEIN Scroll-Trigger: Ein-/Ausklappen ändert die Höhe und damit die
+   * Scrollposition – das erzeugt Rückkopplung und Flackern. Der Zustand hängt
+   * nur an der Viewport-Breite und an expliziten Tipps.
+   */
+  const [toolbarOpen, setToolbarOpen] = useState(false);
 
   // Shared links carry `?ticker=SOL` – open exactly the chart that was posted.
   // Read from `location.search` at mount (no useSearchParams → no Suspense
@@ -275,7 +298,7 @@ export function TerminalShell() {
   const connected = status === 'open';
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)))] xl:flex-row">
+    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)))] max-lg:h-[calc(100dvh-var(--nc-header-h))] max-lg:overflow-hidden xl:flex-row">
       {/* linke Sidebar: Banner 160×600, Desktop only (xl-Row-Layout) */}
       <SidebarBanner />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -286,10 +309,15 @@ export function TerminalShell() {
       ) : null}
 
       {/* ------------------------------- toolbar ---------------------------- */}
-      <div className="sticky top-header z-40 border-b border-line/80 bg-bg/85 backdrop-blur-xl">
+      <div
+        className="sticky top-header z-40 border-b border-line/80 bg-bg/85 backdrop-blur-xl"
+        data-nc-toolbar={toolbarOpen ? 'open' : 'closed'}
+      >
         {/* Wrap-stable: font-swap reflow must never change the row count on
           desktop (CLS), so ≥sm keeps one scrollable line; phones still wrap. */}
-        <div className="flex max-lg:flex-wrap lg:flex-nowrap items-center gap-2 px-3 py-2.5 lg:overflow-x-auto [&>*]:lg:shrink-0">
+        <div
+          className="nc-toolbar-full flex max-lg:flex-wrap lg:flex-nowrap items-center gap-2 px-3 py-2.5 lg:overflow-x-auto [&>*]:lg:shrink-0"
+        >
           {/* live symbol + price */}
           <div className="flex min-w-0 items-baseline gap-2">
             <span className="truncate font-display text-base font-extrabold tracking-tight">
@@ -486,7 +514,7 @@ export function TerminalShell() {
         </div>
 
         {/* chart types */}
-        <div className="flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1 border-t border-line/60 px-3 py-2 lg:overflow-x-auto [&>*]:lg:shrink-0">
+        <div className="nc-toolbar-full flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1 border-t border-line/60 px-3 py-2 lg:overflow-x-auto [&>*]:lg:shrink-0">
           <Terminal className="mr-1 size-3.5 text-primary" aria-hidden />
           <Dropdown
             triggerLabel={t(`types.${chartType}`)}
@@ -742,6 +770,44 @@ export function TerminalShell() {
               : t('waiting')}
           </span>
         </div>
+        {/* Schmale Leiste (nur Phones, siehe .nc-toolbar-slim): Kern-Status
+            bleibt sichtbar, die volle Leiste holt der Button zurück. */}
+        <div className="nc-toolbar-slim items-center gap-2 px-3 py-1.5">
+            <span className="min-w-0 truncate font-display text-sm font-extrabold tracking-tight">
+              {activeToken.symbol}
+            </span>
+            <span className={cn('min-w-0 truncate font-mono text-xs tabular-nums', livePrice != null ? 'text-primary' : 'text-faint')}>
+              {usd(livePrice)}
+            </span>
+            {liveChange != null && (
+              <span className={cn('font-mono text-2xs tabular-nums', liveChange >= 0 ? 'text-bull' : 'text-bear')}>
+                {pct(liveChange)}
+              </span>
+            )}
+            <span className="nc-chip shrink-0">{timeframe}</span>
+            <button
+              type="button"
+              onClick={() => setToolbarOpen(true)}
+              aria-expanded={false}
+              aria-label={t('toolbarExpand')}
+              title={t('toolbarExpand')}
+              className="nc-clip-sm ml-auto inline-flex size-8 shrink-0 items-center justify-center border border-line bg-surface/70 text-muted transition-colors hover:border-primary/50 hover:text-fg"
+            >
+              <Wrench className="size-3.5" aria-hidden />
+            </button>
+        </div>
+
+        {/* Chevron schließt die volle Leiste (nur Phones, nur wenn offen). */}
+        <button
+          type="button"
+          onClick={() => setToolbarOpen(false)}
+          aria-label={t('toolbarCollapse')}
+          title={t('toolbarCollapse')}
+          className="nc-toolbar-toggle w-full items-center justify-center gap-1.5 border-t border-line/60 py-1 font-mono text-2xs uppercase tracking-cyber text-faint transition-colors hover:text-fg"
+        >
+          <ChevronUp className="size-3" aria-hidden />
+          {t('toolbarCollapse')}
+        </button>
       </div>
 
       {/* mobile ad container (Adsterra native strip) – null without config */}
