@@ -940,8 +940,13 @@ einreichen** (Google Search Console + Bing Webmaster Tools, Rich-Results-Test).
 * `npm run cf:build` + `wrangler deploy --dry-run` → Exitcode 0 (Bundle und
   Bindings siehe Tabelle).
 * `seo-audit.mjs` (zweite, fetch-basierte Sicht) → **90/90**.
-* Einzelsuiten auf demselben Build: `qa:i18n`, `qa:a11y`, `qa:ads`,
-  `qa:monetization`, `qa:smartlinks`, `qa:release`, `qa:perf` – alle 0 FAIL.
+* Einzelsuiten auf **demselben** Build: `qa:i18n` **110/110** ·
+  `qa:a11y` **175/0** (257 s) · `qa:ads` **57/0** · `qa:perf` **41/0** ·
+  `qa:monetization` **78/0** · `qa:smartlinks` **14/0** · `qa:release` **44/44**.
+* Performance dieses Builds (2-Kern-Sandbox, 4× CPU-Drossel + Slow 4G):
+  Landing TTFB 14 · LCP 1 360 ms · CLS 0 · TBT 337 ms, Schriften 128,6 kB (9–12
+  Dateien je Sprache, 150,8 kB de inkl. Nachladen); Terminal TTFB 29 · LCP
+  1 156 ms · CLS 0,0004 · TBT 574 ms, Schriften 129,3 kB; INP 15,7 ms.
 
 ### 📋 Grenzen dieser Runde
 

@@ -143,7 +143,7 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
    | --- | --- | --- |
    | www → apex | **Rules → Redirect Rules**: `http.host eq "www.nodechart.cc"` → 301 auf `https://nodechart.cc/…` | verhindert Canonical-Split |
    | HTTPS erzwingen | **SSL/TLS → Edge Certificates → Always Use HTTPS** | an |
-   | Early Hints | **Speed → Optimization → Early Hints** | an (nutzt unsere Preload-Header) |
+   | Early Hints | **Speed → Optimization → Early Hints** | optional – unsere Font-Preloads stehen als `<link rel="preload">` im HTML (nicht als `Link:`-Header), Cloudflare hat also nichts vorab zu schicken; schadet nicht, hilft hier aber nicht |
    | Brotli | **Speed → Optimization → Content Optimization → Brotli** | an |
    | Hotlink-Protection | **Scrapes/Hotlinks** | für `/og.png` AUS (Social-Cards!) |
 4. Danach gilt: `https://nodechart.cc` = deine App. Jeder neue `git push`
