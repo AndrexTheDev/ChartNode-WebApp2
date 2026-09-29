@@ -1,6 +1,6 @@
 # RELEASE-AUDIT (modular)
 
-Stand: 2026-09-29T19:47:42.383Z · **463 PASS / 0 FAIL**
+Stand: 2026-09-29T20:35:47.554Z · **463 PASS / 0 FAIL**
 
 | Modul | Bereich | PASS | FAIL |
 |---|---|---:|---:|

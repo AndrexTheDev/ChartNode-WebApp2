@@ -96,11 +96,53 @@ function timeframeHint(url) {
 }
 
 /**
- * Fixtures installieren. Rückgabe zählt die Antworten.
- * @param {import('puppeteer').Page} page
+ * Wendet eine von der Suite injizierte Antwort an (M8-Fault-Injection).
+ *
+ * Unterstützte Formen:
+ *   { abort: true }                       – Request hart abbrechen (Netzabbruch)
+ *   { hang: true }                        – nie antworten (hängende Verbindung)
+ *   { delayMs, status, body, headers }    – verzögert/abweichend antworten
+ * `body` darf Objekt (wird serialisiert) oder String (roh, z. B. kaputtes JSON)
+ * sein. Die CORS-Header sind immer dabei, sonst blockt der Browser die Antwort.
  */
-export async function installFixtures(page) {
-  const counters = { served: 0, rejected: 0, passthrough: 0, byVenue: {} };
+function respondInjected(req, verdict, counters) {
+  counters.injected = (counters.injected ?? 0) + 1;
+  if (verdict.abort) {
+    req.abort('failed').catch(() => {});
+    return;
+  }
+  if (verdict.hang) return; // bewusst keine Antwort
+  const send = () => {
+    const body =
+      typeof verdict.body === 'string'
+        ? verdict.body
+        : verdict.body === undefined
+          ? '{}'
+          : JSON.stringify(verdict.body);
+    req
+      .respond({
+        status: verdict.status ?? 200,
+        headers: { ...CORS, ...(verdict.headers ?? {}) },
+        body,
+      })
+      .catch(() => {});
+  };
+  if (verdict.delayMs) setTimeout(send, verdict.delayMs);
+  else send();
+}
+
+/**
+ * Fixtures installieren. Rückgabe zählt die Antworten.
+ *
+ * @param {import('puppeteer').Page} page
+ * @param {{ route?: (ctx: { url: string, venue: string | null, counters: object, req: object }) => (object | null | undefined) }} [opts]
+ *   `route` läuft VOR dem Standardverhalten und darf für einzelne Venue-Aufrufe
+ *   eine eigene Antwort liefern (Fault-Injection: 429, Hang, Riesen-Body …).
+ *   Ohne Rückgabe greift der normale Fixture-Feed.
+ */
+export async function installFixtures(page, opts = {}) {
+  const { route } = opts;
+  const counters = { served: 0, rejected: 0, passthrough: 0, byVenue: {}, injected: 0 };
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     const url = req.url();
@@ -110,6 +152,18 @@ export async function installFixtures(page) {
       return;
     }
     const hit = PATTERNS.find(([re]) => re.test(url));
+    /*
+     * `venue` ist bewusst NICHT auf die Kline-Muster beschränkt: die
+     * Fault-Injection der M8-Suite muss auch Tape-/Ticker-Aufrufe erwischen
+     * (aggTrades, ticker/24hr, market/trades). Vorher blieb `venue` dort null,
+     * die Route feuerte nie und die Prüfung war still immer grün.
+     */
+    const venue = hit ? hit[1] : ((url.match(VENUE_HOST)?.[1] ?? '').toLowerCase() || null);
+    const routed = route?.({ url, venue, counters, req });
+    if (routed) {
+      respondInjected(req, routed, counters);
+      return;
+    }
     if (!hit) {
       counters.rejected += 1;
       req
@@ -117,7 +171,6 @@ export async function installFixtures(page) {
         .catch(() => {});
       return;
     }
-    const [, venue] = hit;
     const stepMs = timeframeHint(url);
     const candles = makeCandles({ count: 300, stepMs, seed: venue.length * 13 + 5 });
     counters.served += 1;

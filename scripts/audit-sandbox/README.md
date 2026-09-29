@@ -17,6 +17,7 @@ wäre.
 | `run-m6-ads.mjs` | **M6-Suite**: S0 CLS-Grundrauschen · S1 QA-Guard · S2 Social Bar (Reservierung, Überdeckung, Dialog-Pause) · S4 Sidebar-Rail · S5 Header-Banner · S6 Terminal-Slots · S7 Ad-Block-Wall · S8 Spender-Grace · S9 Popunder-Cap · S10 Smartlinks · S11 Fehler-Sweep. |
 | `run-m7-perf.mjs` | **M7-Suite (Performance)**: S1 Ladeleistung (TTFB/FCP/LCP/CLS/TBT bei 4× CPU + Slow 4G), S2 Bundle (kritisch vs. nachgeladen je Seite), S3 Fonts je Sprache inkl. Cyrillic-Nachweis über `unicode-range`, S4 Interaktion (INP via Event-Timing, Menü→Dialog-Latenz), S5 Auslieferung (Cache/Kompression). Schalter: `--quick` (kurze Idle-Fenster), `--compare <report.json>` (zwei Läufe nebeneinander). |
 | `run-m7-smoke.mjs` | **M7-Smoke**: Funktionstest der Pfade, die der Lazy-Umbau berührt (Kopfzeilen-Suche inkl. Lazy-Engine, Teilen-Dialog, Support-Dialog). 6 Checks. |
+| `run-m8-robustness.mjs` | **M8-Suite (Robustheit)**: S1 Speicher (Quote voll, gesperrter Speicher, L2-Verdrängung) · S2 Rate-Limit (429-Overlay, Cooldown, Retry, kein Overlay bei 403) · S3 Netzabbruch (offline/online, Hänger mit Timeout, Abbruch beim Tippen, Dialog-Leichen) · S4 Sekundär-Quellen (Befund O3, hängende Quellen mit 12-s-Deckel) · S5 Payload-Härtung (4-MiB-Deckel, kaputtes JSON, leere/giftige Kerzen, Cache-Vergiftung). Fault-Injection über die `route`-Option der Fixtures. |
 | `run-m5-a11y.mjs` | **M5-A11y-Suite**: S1 Fokus-Sichtbarkeit (dunkel + hell), S2 Tab-Ordnung/Fokus in 19 Overlays inkl. Fehlerachse, S2b Menü-Tastatur (4 ToolMenüs), S3 Light-Kontrast, S3b Token-Matrix über alle 5 Skins, S4 Icon-Namen (inkl. Lokalisierungs-Detektor), S5 Semantik. Schalter: `--locale de`, `--quick`. |
 
 ## Ablauf
@@ -44,6 +45,13 @@ M6 (Werbung im Fill-Fall): **64 ok / 0 Befunde** in 158 s (Full-Fill-Build mit
 diese Variablen **57 ok / 0** (die Slot-Stufen überspringen dann bewusst).
 Report `/tmp/nc-shots/m6-report.json`.
 
+M8 (Robustheit): **54 ok / 0 Befunde** in 167 s (Durchgang 6b). Geprüft werden
+volle Quote beim Speichern (vorher: unbehandeltes `QuotaExceededError` im
+Klickpfad), 429-Overlay mit Cooldown und automatischem Retry, Offline/Online,
+hängende Verbindungen (12-s-Deckel), Abbrüche beim Tippen, tote/hängende
+Sekundärquellen in Lupe und Heatmap sowie der 4-MiB-Antwortdeckel. Aufruf:
+`npm run qa:robustness`.
+
 M7 (Performance): **41 ok / 0 Befunde** (Durchgang 6). Gemessen wird gegen
 `next start` (Produktionsbuild): Landing/`de` **LCP 1088 ms · CLS 0,000 · TBT 168 ms**,
 Terminal **LCP 1116 ms · CLS 0,000 · TBT 305 ms**, kritisches JS **188,3 kB** (Landing)
@@ -58,6 +66,13 @@ Fehlerachse pro Fläche läuft trotzdem mit.
 
 ## Wichtig
 
+- **`unhandledrejection` als DOM-Event feuert in diesem Headless-Chromium nie.**
+  Wer unbehandelte Promise-Fehler prüfen will, braucht den CDP-Kanal:
+  `Runtime.exceptionThrown` liefert `exceptionDetails.text` = „Uncaught (in
+  promise) …“. Puppeteers `pageerror` reicht die Meldung zwar durch, aber ohne
+  dieses Merkmal – eine Prüfung auf den Text `in promise` läuft dort ins Leere.
+  Die M8-Suite klassifiziert deshalb über CDP und wurde mit einer
+  Negativ-Kontrolle (Fix temporär entfernt) verifiziert.
 - **Fixtures sind Sandbox-only.** Sie ersetzen keine echten Börsendaten; sie
   prüfen den Code-Pfad. Alle Zahlen in `AUDIT.md` sind als Fixture-Läufe
   gekennzeichnet.

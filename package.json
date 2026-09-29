@@ -40,6 +40,7 @@
     "qa:i18n": "node scripts/qa-i18n-layout.mjs",
     "qa:perf": "node scripts/audit-sandbox/run-m7-perf.mjs",
     "qa:perf:smoke": "node scripts/audit-sandbox/run-m7-smoke.mjs",
+    "qa:robustness": "node scripts/audit-sandbox/run-m8-robustness.mjs",
     "qa:a11y": "node scripts/audit-sandbox/run-m5-a11y.mjs",
     "qa:ads": "node scripts/audit-sandbox/run-m6-ads.mjs",
     "qa:monetization": "node scripts/monetization-audit.mjs",

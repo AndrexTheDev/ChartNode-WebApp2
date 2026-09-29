@@ -23,7 +23,7 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M5 | A11y-Deep-Dive (Fokusringe, Tab-Ordnung in 19 Overlays, Light-Kontrast, Icon-Namen) | ✅ geprüft | **175/175 Checks · 0 Befunde** · 11 echte Fixes (u. a. bull/bear folgten dem Theme nicht) |
 | M6 | Werbung/Monetarisierung im Fill-Fall (CLS, Kollaps, Social Bar, Ad-Block-Wall, Spender) | ✅ geprüft | **64/64 Checks · 0 Befunde** · 9 echte Fixes (u. a. Doppel-Id auf dem Terminal, unsichtbare Social Bar) |
 | M7 | Performance / Core Web Vitals (Mid-Range-Mobile: 4× CPU + Slow 4G) | ✅ geprüft | **41/41 Checks · 0 Befunde** · 6 echte Fixes (u. a. Terminal-CLS 0,110 → 0,000 · Landing-JS 220,9 → 188,3 kB) |
-| M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher) | ⏳ offen | – |
+| M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher, Payloads) | ✅ geprüft | **54/54 Checks · 0 Befunde** · 4 Fixes (u. a. unbehandeltes `QuotaExceededError` bei voller Quote, Befund O3 bestätigt und behoben) |
 | M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
 
 **Konsistenz der Versprechen (geprüft):** Die Meta-Description nennt „34 Indikatoren" — das
@@ -513,7 +513,7 @@ bestehende Prüfung gebrochen. `tsc --noEmit` 0 Fehler, ESLint ohne Befund.
 | 5 | ~~**M6**~~ | ~~Werbung/Monetarisierung im Fill-Fall~~ | ✅ **erledigt** (Abschnitt 8, 64/64 Checks, 9 Fixes) |
 | 6 | ~~**M7**~~ | ~~Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets~~ | ✅ **erledigt** (Abschnitt 9, 41/41 Checks, 6 Fixes) |
 | 7 | ~~**Vollverifikation**~~ | ~~alle Suiten am Stück auf dem Auslieferungs-Build~~ | ✅ **erledigt** (Abschnitt 13: 846 Checks grün, 0 rot) |
-| 8 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten — **nächster Schritt** |
+| 8 | ~~**M8**~~ | ~~Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3)~~ | ✅ **erledigt** (Abschnitt 14, 54/54 Checks, 4 Fixes) |
 | 9 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss (Modul M7 im Audit ist bereits grün) |
 
 ---
@@ -746,3 +746,80 @@ weiter. Fonts je Sprache: de 12/150,8 kB · ru 11/133,6 kB · zh 10/125,6 kB.
 Einzelsuiten **ohne offenen Befund** — 463 + 110 + 175 + 57 + 41 = **846 Checks grün,
 0 rot**. Damit ist M8 (Sekundär-Fetch-Härtung, 429-Overlay, Speicherdruck) der
 nächste echte Ausbauschritt, kein Reparaturfall.
+
+---
+
+## 14. ✅ Modul M8 — Robustheit (Netzabbruch, Rate-Limit, Speicher, Payloads)
+
+Geprüft wird die Frage „läuft es auch dann noch, wenn die Umgebung schlecht
+wird?" — nicht der Normalfall, sondern die Ausnahmen: **volle Speicherquote**,
+**429-Drosselung**, **Abbruch mitten im Betrieb**, **tote oder hängende
+Zweitquellen**, **giftige Antworten**. Suite: `scripts/audit-sandbox/run-m8-robustness.mjs`
+(`npm run qa:robustness`), Fault-Injection über die neue `route`-Option der
+Fixture-Schicht — dieselbe Antwort-Pipeline wie der echte Feed, nur mit
+429 / Hang / Riesen-Body / kaputtem JSON an genau den Stellen.
+
+| Stufe | Was gemessen wird | Umfang |
+|---|---|---|
+| **S1** Speicher | Speicher von Anfang an gesperrt (Safari privat / „Cookies blockieren"), Quote füllt sich **nach** dem Boot, Quote durch den eigenen L2-Cache belegt (Verdrängungs-Rangfolge) | 10 Checks |
+| **S2** Rate-Limit | 429 → Glitch-Overlay mit laufendem Countdown, Cooldown endet von selbst, automatischer Retry liefert echte Kerzen, kein Overlay-Stacking, 403 löst **keinen** Cooldown aus, Drossel-Antwort landet nicht im L2-Cache | 12 |
+| **S3** Netzabbruch | Offline mitten im Betrieb → Status + Bedienbarkeit → Erholung nach dem Online-Gehen, hängende Verbindung (Timeout + Retry), Abbruch beim Tippen, Dialog bei hängender Zweitquelle schließen (keine Anfrage-Leichen) | 9 |
+| **S4** Sekundär-Quellen | Befund **O3**: Primärquelle gewinnt / Zweitquelle tot (Lupe + Heatmap), beide tot, beide **hängend** (12-s-Deckel) | 12 |
+| **S5** Payload-Härtung | Antwort über dem 4-MiB-Deckel, ungültiges JSON, leere Historie, `null`-Werte in Kerzen, Selbstheilung danach, keine Cache-Vergiftung, Heap | 7 |
+
+**Ergebnis: 54 ok / 0 Befunde** (167 s, Produktionsbuild + Fixture-Feed).
+
+### 🔧 Vier echte Befunde gefunden und behoben
+
+| # | Stelle | Befund (gemessen) | Fix |
+|---|---|---|---|
+| 1 | `store/storage.ts` (+ `api/persistCache.ts`) | **Volle Speicherquote riss einen unbehandelten Fehler bis in den Klick-Handler:** zustand persistiert synchron, `localStorage.setItem` wirft `QuotaExceededError`, und der Fehler landete als `Uncaught QuotaExceededError` in der Konsole — **zweimal pro Interaktion** (Theme-Wechsel, Zeitrahmen-Wechsel). Nebenwirkung: alles, was im selben Handler nach dem Store-Aufruf stand, wurde übersprungen. | `guardedStorage()` legt einen Schutzmantel um `localStorage` (Lesen/Schreiben/Löschen einzeln abgesichert). Bei voller Quote wird zuerst der **eigene L2-Cache** verdrängt (`nc-l2-v1:*`, Namespace jetzt als `L2_NAMESPACE` exportiert) und einmal erneut geschrieben — dieselbe Rangfolge, die `persistCache.ts` dokumentiert: Einstellungen sind wichtiger als Zwischenspeicher. Der In-Memory-Zustand bleibt in jedem Fall gültig. |
+| 2 | `tools/MagnifierModal.tsx` | **Befund O3 bestätigt (Befund #4 aus §1):** gewinnt Binance, blieb der OKX-Promise unbeobachtet → `Uncaught (in promise) · TypeError: Failed to fetch` bei jedem Öffnen der Lupe, sobald OKX gesperrt/blockiert ist. Der 429-lose Normalfall (beide tot) war unauffällig, weil dann der Fallback-Pfad den Promise beobachtet — deshalb war der Fehler im 120-Läufe-Sweep nur sporadisch zu sehen. | `void okx.catch(() => null)` — der Zweitmarkt-Promise ist jetzt auch im Gewinn-Fall der Primärquelle beobachtet; der Fallback nutzt denselben Promise weiter. |
+| 3 | `tools/MagnifierModal.tsx`, `tools/HeatmapModal.tsx`, `lib/scripts.ts` | **Rohe Sekundär-`fetch`-Aufrufe hatten kein Zeitlimit:** bei einer hängenden Verbindung blieb die Lupe dauerhaft im Ladezustand (kein Fehler, kein Ende) — der zentrale Fetch-Layer hat einen 12-s-Deckel, diese vier Aufrufe umgingen ihn. Ebenso konnte der Script-Lab-Import einer Nutzer-URL unbegrenzt laden. | `AbortSignal.timeout(12_000)` an allen vier Stellen; der Abbruch endet im regulären Fehlerpfad („Tape nicht erreichbar"). Nachweis S4c: Dialog endet nach **12,5 s** im Fehlerzustand statt zu hängen. |
+| 4 | `scripts/audit-sandbox/fixtures.mjs` (**Harness**) | Die Fixture-Route feuerte für Tape-/Ticker-Aufrufe (`aggTrades`, `ticker/24hr`, `market/trades`) **nie**, weil `venue` nur aus den Kline-Mustern kam → die O3-Prüfung hätte still immer grün gemeldet. | `venue` wird jetzt auch für ungemusterte Venue-Hosts bestimmt; der Standard-Feed bleibt unverändert (503 für nicht abgedeckte Aufrufe). |
+
+### 🔎 Zwei stille Messfehler im Harness (wichtiger als die Befunde)
+
+1. **`unhandledrejection` als DOM-Event feuert in diesem Headless-Chromium nie.**
+   Eine Prüfung darauf wäre immer grün gewesen. Verlässlich ist der CDP-Kanal:
+   `Runtime.exceptionThrown` liefert `exceptionDetails.text` = „Uncaught (in
+   promise) …"; Puppeteers `pageerror` reicht die Meldung zwar durch, aber **ohne
+   dieses Merkmal** (`Failed to fetch` allein wäre auch ein normaler Fehler).
+   Die Suite klassifiziert deshalb über CDP.
+2. **Negativ-Kontrollen für jeden Fix.** Beide App-Fixes wurden mit *entferntem*
+   Fix nachgemessen: Befund 1 erzeugte vorher zwei `Uncaught QuotaExceededError`
+   (Kontrolle: 0), Befund 2 genau eine `Uncaught (in promise) · TypeError: Failed
+   to fetch` im Lupe-Chunk (mit Fix: 0). Erst damit ist belegt, dass die Prüfung
+   den Defekt wirklich sieht.
+
+> **Fallstrick beim Verifizieren von Fixes:** `next build --webpack` hat den
+> Chunk aus dem Webpack-Cache wiederverwendet, wenn nach dem Zurückrollen nur die
+> Datei-Zeitstempel wechselten — die Negativ-Kontrolle lief dadurch zweimal gegen
+> denselben Bundle-Stand (gleicher Chunk-Hash `5117.93d95feb…`). Seitdem gilt:
+> vor Verifikations-Builds `rm -rf .next/cache`.
+
+### ✅ Was ausdrücklich **gut** war (nicht angefasst)
+
+- **429-Behandlung:** Overlay + Cooldown + automatischer Retry funktionieren
+  end-to-end (Overlay erscheint, Countdown läuft 5→4→3…, Cooldown endet von
+  selbst ≤ 8 s, Retry holt echte Kerzen, Drossel-Antwort wird **nicht** gecacht).
+- **403/401/451** lösen korrekt keinen Cooldown aus (Retry wäre sinnlos) und
+  degradieren in den Platzhalter.
+- **4-MiB-Antwortdeckel** greift: eine 4 MiB große „Kline"-Antwort kostet 14 MB
+  Heap und keinen Fehler.
+- **Giftige Kerzen** (`null`, Strings, leere Liste) führen weder zu `NaN` im UI
+  noch zu Cache-Vergiftung; der Chart heilt sich mit der nächsten guten Antwort.
+- **Offline/Online** mitten im Betrieb: Status „Verbinde neu", Toolbar vollständig,
+  0 Page-Errors, Erholung ohne Reload.
+- **Dialog-Hygiene:** Schließen während laufender Anfrage hinterlässt keine
+  weiteren Requests (n=0 in 3 s) und keine Rejections.
+
+### 📋 Grenzen dieser Runde
+
+- Gemessen wird mit dem Fixture-Feed (keine echten Börsenverbindungen); die
+  Fehlerfälle sind dagegen **echte** HTTP-Antworten im Original-Wire-Format.
+- Der 429-Pfad wurde auf einem Kline-Request ausgelöst; die Overlay-Logik ist
+  global, ein zweiter gleichzeitiger 429 wird deshalb über die Zählung (`×N`)
+  geprüft, nicht über zwei getrennte Quellen.
+- Speicherdruck ist als **Quota**- und Heap-Druck geprüft (14 MB bei 4 MiB
+  Antwort); ein echter OOM-Test bräuchte ein Speicherlimit des Browsers.

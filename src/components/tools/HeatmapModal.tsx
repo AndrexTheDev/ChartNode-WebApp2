@@ -78,10 +78,12 @@ export function HeatmapModal({ open, onClose, onPick }: HeatmapModalProps) {
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    const fromBinance = fetch('https://api.binance.com/api/v3/ticker/24hr').then((response) =>
-      response.ok ? response.json() : Promise.reject(new Error('http')),
+    /* M8-Härtung: 12-s-Deckel wie im zentralen Fetch-Layer – sonst bleibt der
+       Dialog bei einer hängenden Verbindung dauerhaft im Ladezustand. */
+    const fromBinance = fetch('https://api.binance.com/api/v3/ticker/24hr', { signal: AbortSignal.timeout(12_000) }).then(
+      (response) => (response.ok ? response.json() : Promise.reject(new Error('http'))),
     );
-    const fromOkx = fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT')
+    const fromOkx = fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT', { signal: AbortSignal.timeout(12_000) })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))))
       /* M5-Fix: Der Fallback-Promise wird erst im catch() von Binance angehängt.
          Scheitern beide Börsen, meldete der Browser bis dahin eine unbehandelte

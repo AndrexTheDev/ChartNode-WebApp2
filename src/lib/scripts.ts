@@ -309,7 +309,9 @@ export function toRawUrl(url: string): string {
 export async function importScriptSource(url: string): Promise<string> {
   const target = toRawUrl(url.trim());
   if (!/^https:\/\//i.test(target)) throw new Error('https-only');
-  const response = await fetch(target);
+  /* M8-Härtung: der Import einer Nutzer-URL darf nie hängen bleiben (vorher
+     gab es weder Timeout noch Abbruch – der Dialog lud unbegrenzt weiter). */
+  const response = await fetch(target, { signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw new Error(`http-${response.status}`);
   const text = await response.text();
   if (text.length > 20_000) throw new Error('too-large');
