@@ -446,6 +446,7 @@ function PaneButton({
 
 function PanePlaceholder({
   symbol,
+  status,
   label,
   price,
   change,
@@ -460,7 +461,11 @@ function PanePlaceholder({
 }) {
   const t = useTranslations('chart');
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+    <div
+      data-nc-pane-placeholder=""
+      data-nc-placeholder-reason={status}
+      className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-4 text-center"
+    >
       <Scan className="size-5 animate-pulse text-primary/50" aria-hidden />
       <p className="font-display text-sm font-bold text-fg">{symbol}</p>
       <p className="font-mono text-2xs uppercase tracking-cyber text-faint">{label}</p>

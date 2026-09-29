@@ -1,6 +1,6 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 // Gemeinsame Helfer für den modularen Release-Audit (scripts/release-audit/).
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
@@ -17,7 +17,19 @@ export const ENV_NOISE = /SwiftShader|software WebGL|GroupMarkerNotSet|Fallback 
 export const CORS_BLIND = /api\.bybit\.com|api\.kucoin\.com|api-pub\.bitfinex\.com|api\.coinex\.com|geckoterminal\.com/i;
 /** Chrome-interner Root-Request (tritt nur in Incognito-Kontexten auf, nie app-initiiert). */
 export const CHROME_INTERNAL = /^https?:\/\/(www\.)?google\.com\/?$/;
-export const isNoise = (text) => ENV_NOISE.test(text) || CORS_BLIND.test(text) || CHROME_INTERNAL.test(text);
+/**
+ * Vom Sandbox-Netz blockierte Drittanbieter (Börsen-REST/WS) erscheinen als
+ * generische Chrome-Meldungen OHNE Host im Text – „Failed to load resource:
+ * net::ERR_CONNECTION_CLOSED" bzw. „WebSocket connection to 'wss://…' failed".
+ * Das ist Umgebungsrauschen, kein App-Fehler: dieselben Requests laufen auf
+ * einem Rechner mit Internetzugang durch (M3/M10 beweisen den Code-Pfad mit dem
+ * Fixture-Feed). Die M5/M6/M7-Suiten filtern identisch.
+ */
+export const NET_BLOCKED =
+  /Failed to load resource: net::ERR_(CONNECTION_CLOSED|CONNECTION_REFUSED|CONNECTION_RESET|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|TIMED_OUT|ADDRESS_UNREACHABLE|EMPTY_RESPONSE|SSL|FAILED|ABORTED)/i;
+export const WS_BLOCKED = /WebSocket connection to 'wss?:\/\/[^']+' failed/i;
+export const isNoise = (text) =>
+  ENV_NOISE.test(text) || CORS_BLIND.test(text) || CHROME_INTERNAL.test(text) || NET_BLOCKED.test(text) || WS_BLOCKED.test(text);
 
 /** Reporter pro Modul: check(name, ok, info) sammelt + loggt sofort. */
 export function makeReporter(modId, modName) {
@@ -34,7 +46,22 @@ export function makeReporter(modId, modName) {
 }
 
 export async function launchBrowser() {
-  return puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], protocolTimeout: 120000 });
+  /*
+   * Wie im Sandbox-Harness (`audit-sandbox/lib.mjs`): In Umgebungen ohne
+   * Chrome-for-Testing-Download liefert `bootstrap.mjs` ein Chromium nach
+   * /tmp/chromium; `CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` überschreiben das.
+   * Ohne diese Auflösung bricht das Release-Audit auf so einem Rechner mit
+   * „Could not find Chrome" ab, obwohl ein Binary bereitliegt.
+   */
+  const explicit = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH;
+  const fallback = existsSync('/tmp/chromium') ? '/tmp/chromium' : undefined;
+  return puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'],
+    executablePath: explicit || fallback,
+    env: { ...process.env, LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH || '/tmp/al2023/lib', FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || '/tmp/fonts' },
+    protocolTimeout: 120000,
+  });
 }
 
 export async function newPage(browser, { width = 1440, height = 900, mobile = false } = {}) {
@@ -46,15 +73,16 @@ export async function newPage(browser, { width = 1440, height = 900, mobile = fa
 }
 
 /** Console-/Pageerror-Sammler mit Noise-Filter. */
-export function attachConsole(page, bucket) {
+export function attachConsole(page, bucket, { allow } = {}) {
+  const allowed = (s) => (typeof allow === 'function' ? allow(s) : false);
   page.on('pageerror', (e) => {
     const s = String(e && e.message ? e.message : e);
-    if (!isNoise(s)) bucket.push('pageerror: ' + s);
+    if (!isNoise(s) && !allowed(s)) bucket.push('pageerror: ' + s);
   });
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
     const s = m.text();
-    if (!isNoise(s)) bucket.push(m.type() + ': ' + s);
+    if (!isNoise(s) && !allowed(s)) bucket.push(m.type() + ': ' + s);
   });
   page.on('requestfailed', (r) => {
     const u = r.url();
@@ -64,6 +92,22 @@ export function attachConsole(page, bucket) {
     if (!u.startsWith(BASE)) return;
     bucket.push('requestfailed: ' + u.slice(0, 120));
   });
+}
+
+/**
+ * Fixture-Feed optional zuschalten.
+ *
+ * Die Module M3 (Terminal-Batterie) und M10 (Resilienz) brauchen Kurse. In einer
+ * Sandbox ohne Börsenzugang bleibt der Chart im korrekten Platzhalter-Zustand
+ * („Warte auf Kursdaten …") stehen – die Suiten würden dann die Umgebung messen
+ * statt die App. Mit `fixtures: true` antwortet der Harness im Original-Wire-Format
+ * aller 12 Venues (siehe `audit-sandbox/fixtures.mjs`), sodass der echte
+ * Adapter-/Parser-/Render-Pfad läuft.
+ */
+export async function withFixtures(page) {
+  const { installFixtures } = await import('../audit-sandbox/fixtures.mjs');
+  await installFixtures(page);
+  return page;
 }
 
 export const gotoSafe = (page, url, timeout = 90000) =>

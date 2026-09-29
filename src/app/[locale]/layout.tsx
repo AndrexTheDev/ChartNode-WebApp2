@@ -214,8 +214,12 @@ export default async function LocaleLayout({
           {/* Native Banner (4:1) in der Header-Zone – Terminal skippt (Strip) */}
           <HeaderNativeBanner />
 
-          {/* Sprach-Hinweis in der Header-Zone – aus dem Fluss (kein CLS), scrollt mit */}
-          <LocaleDetectBanner />
+          {/* Sprach-Hinweis in der Header-Zone: Platz wird pre-paint reserviert
+              (Boot-Skript ⇒ 0 CLS), der Hinweis selbst steht im Fluss und
+              verdeckt damit keine Bedienelemente mehr. */}
+          <div className="nc-langhint-slot">
+            <LocaleDetectBanner />
+          </div>
 
           <main id="nc-content" className="flex-1">
             {children}

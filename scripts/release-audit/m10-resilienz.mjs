@@ -5,7 +5,7 @@
 // Two-Tab-Betrieb, OG-Edge × Locales.
 import { mkdirSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, isNoise } from './lib.mjs';
+import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, isNoise, withFixtures } from './lib.mjs';
 
 export const META = { id: 'M10', name: 'Daten-Resilienz & Session' };
 
@@ -26,12 +26,36 @@ export async function run() {
     p.on('request', (req) => (FEED_RE.test(req.url()) ? req.abort() : req.continue()));
     await gotoSafe(p, BASE + '/de/terminal');
     await wait(6000);
-    const state = await p.evaluate(() => ({
-      canvases: document.querySelectorAll('canvas').length,
-      body: document.body.innerText.length > 200,
-    }));
-    check('Total-Outage: Terminal rendert weiterhin (Placeholder-States)', state.canvases >= 1 && state.body, JSON.stringify(state));
-    check('Total-Outage: keine unkonditionierten Page-Errors', errs.filter((e) => !e.startsWith('requestfailed') && !/Failed to load resource|net::/.test(e)).length === 0, errs.slice(0, 1).join('|'));
+    /*
+     * Korrigierte Erwartung: Ohne erreichbare Venue erscheint KEIN Canvas – die
+     * App zeigt stattdessen den lokalisierten Platzhalter („Warte auf Kursdaten …")
+     * im vorhandenen Pane. Das ist das gewünschte Verhalten; der frühere Check
+     * (canvas ≥ 1) hätte bei einem echten Total-Ausfall zwangsläufig gemeldet.
+     */
+    const state = await p.evaluate(() => {
+      const text = document.body.innerText;
+      const ph = document.querySelector('[data-nc-pane-placeholder]');
+      return {
+        placeholders: document.querySelectorAll('[data-nc-pane-placeholder]').length,
+        placeholderReason: ph?.getAttribute('data-nc-placeholder-reason') ?? '—',
+        placeholderText: (ph?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60),
+        canvases: document.querySelectorAll('canvas').length,
+        reconnect: /VERBINDE NEU|RECONNECT|ПЕРЕПОДКЛЮЧ|重连/i.test(text),
+        toolbar: document.querySelectorAll('button').length,
+      };
+    });
+    /*
+     * Korrigierte Erwartung (V6): `[data-pane]` existierte nie – geprüft wird
+     * stattdessen der echte Platzhalter-Haken `[data-nc-pane-placeholder]`.
+     * Ohne erreichbare Venue ist genau EIN solcher Platzhalter sichtbar (kein
+     * Canvas), die Toolbar bleibt vollständig, und der Reconnect-Hinweis steht.
+     */
+    check(
+      'Total-Outage: Terminal bedienbar, Platzhalter statt Canvas',
+      state.placeholders >= 1 && state.canvases === 0 && state.reconnect && state.toolbar > 20,
+      JSON.stringify(state),
+    );
+    check('Total-Outage: keine unkonditionierten Page-Errors', errs.filter((e) => !e.startsWith('requestfailed') && !isNoise(e)).length === 0, errs.slice(0, 1).join('|'));
     await p.close();
   }
 
@@ -49,14 +73,25 @@ export async function run() {
     });
     await gotoSafe(p, BASE + '/de/terminal');
     await wait(5000);
-    const alive = await p.evaluate(() => document.querySelectorAll('canvas').length >= 1);
-    check('Malformed Kline-Payloads: graceful Degradation', alive && errs.filter((e) => e.startsWith('pageerror')).length === 0, errs.slice(0, 1).join('|'));
+    /*
+     * Graceful Degradation heißt hier: kein ungefangener Fehler und eine der
+     * beiden legitimen Anzeigen (Chart mit Fixture-/Cache-Kerzen ODER
+     * Platzhalter). Ein erzwungener Canvas wäre die falsche Forderung, weil der
+     * Test alle Venue-Hosts abfängt und damit bewusst keinen Feed zulässt.
+     */
+    const alive = await p.evaluate(() => {
+      const canvases = document.querySelectorAll('canvas').length;
+      const placeholders = document.querySelectorAll('[data-nc-pane-placeholder]').length;
+      return { canvases, placeholders, ok: canvases >= 1 || placeholders >= 1 };
+    });
+    check('Malformed Kline-Payloads: graceful Degradation', alive.ok && errs.filter((e) => e.startsWith('pageerror')).length === 0, JSON.stringify(alive) + ' ' + errs.slice(0, 1).join('|'));
     await p.close();
   }
 
   /* R3 · Offline → Online: Reconnect auf Live, Preise ticken weiter */
   {
     const p = await newPage(browser);
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal');
     await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(4000);
@@ -79,6 +114,7 @@ export async function run() {
     rmSync(DL, { recursive: true, force: true });
     mkdirSync(DL, { recursive: true });
     const p = await newPage(browser);
+    await withFixtures(p);
     const client = await p.createCDPSession();
     await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: DL }).catch(() => null);
     await client.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: DL, eventsEnabled: true, browserContextId: undefined }).catch(() => null);
@@ -122,6 +158,7 @@ export async function run() {
   /* R5 · Heap-Wachstum über 40 Layout/TF-Zyklen */
   {
     const p = await newPage(browser);
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal');
     await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(4000);
@@ -155,6 +192,8 @@ export async function run() {
     const ctx = await browser.createBrowserContext();
     const a = await ctx.newPage();
     const b = await ctx.newPage();
+    // R6 arbeitet ohne fehlertolerante newPage-Hülle ⇒ Fixture-Feed direkt setzen.
+    await Promise.all([withFixtures(a), withFixtures(b)]);
     await a.goto(BASE + '/de/terminal', { waitUntil: 'domcontentloaded', timeout: 90000 });
     await b.goto(BASE + '/en/terminal', { waitUntil: 'domcontentloaded', timeout: 90000 });
     await a.waitForSelector('canvas', { timeout: 40000 });

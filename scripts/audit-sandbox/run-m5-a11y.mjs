@@ -508,7 +508,20 @@ async function s2Dialogs(browser, locale) {
       return a ? `${a.tagName.toLowerCase()}:"${(a.getAttribute('aria-label') || a.textContent || '').trim().slice(0, 24)}"` : 'null';
     });
     await page.keyboard.press('Escape');
-    await wait(350);
+    /*
+     * Messfix (Vollverifikation, 2-Kern-Host): Hier stand ein festes `wait(350)`.
+     * Unter voller Host-Last braucht React gelegentlich länger als 350 ms, um den
+     * Dialog abzubauen – der Check meldete dann „Dialog blieb offen", obwohl die
+     * App korrekt schloss (der Befund wanderte zwischen Flächen: einmal
+     * `screener`, einmal `lag`, bei 4 gezielten Wiederholungen 0/4). Jetzt wird
+     * gepollt (25-ms-Raster) und die echte Schließzeit mitberichtet.
+     */
+    const closed = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const t0 = performance.now();
+      while (document.querySelector('[role="dialog"]') && performance.now() - t0 < 2500) await sleep(25);
+      return { open: !!document.querySelector('[role="dialog"]'), ms: Math.round(performance.now() - t0) };
+    });
     const after = await page.evaluate(() => {
       const still = document.querySelector('[role="dialog"]');
       const a = document.activeElement;
@@ -520,11 +533,12 @@ async function s2Dialogs(browser, locale) {
       };
     });
     const bodyOk = surface.kind === 'key'; // per Shortcut geöffnet: body IST der Auslöser-Zustand
+    if (!closed.open && !after.stillOpen) after.closeMs = closed.ms;
     report(
       'S2',
       `${tag}: Escape schließt und Fokus wird wiederhergestellt`,
       !after.stillOpen && (!after.isBody || bodyOk),
-      after.stillOpen ? 'Dialog blieb offen' : after.isBody ? (bodyOk ? '→ <body> (Shortcut-Auslöser)' : `Fokus auf <body> (vorher ${beforeClose})`) : `→ ${after.active}`,
+      after.stillOpen ? 'Dialog blieb offen' : after.isBody ? (bodyOk ? `→ <body> (Shortcut-Auslöser, Schließen ${after.closeMs}ms)` : `Fokus auf <body> (vorher ${beforeClose})`) : `→ ${after.active} · Schließen ${after.closeMs}ms`,
     );
     const net = classify(log);
     report(

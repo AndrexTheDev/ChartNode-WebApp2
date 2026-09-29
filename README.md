@@ -162,7 +162,7 @@ npm run dev            # http://localhost:3000  (Turbopack)
 
 > **Node version:** local `dev`/`build` run on Node ≥ 20.9 (Next's floor). The Cloudflare CI and
 > all `cf:*` scripts need **Node 22** (wrangler/miniflare) — the committed `.nvmrc` pins that.
-| `npm run build` | plain `next build` (static export of all locales) |
+| `npm run build` | `next build --webpack` (prerenders all 5 locales; same build path the audit and `cf:build` use) |
 | `npm start` | serve the production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint flat config (`next lint` was removed in Next 16) |
@@ -193,7 +193,8 @@ npm run dev            # http://localhost:3000  (Turbopack)
    | Env var | `NEXT_PUBLIC_SITE_URL=https://nodechart.cc` |
 
    Cloudflare runs the build in its own CI, executes `opennextjs-cloudflare build`
-   (which runs `next build` + converts `.next/` → `.open-next/worker.js` + static assets) and
+   (which runs `next build --webpack` + converts `.next/` → `.open-next/worker.js` + static
+   assets) and
    publishes a Worker with static assets on `workers.dev`.
 
 4. Point `nodechart.cc` at the Worker (dashboard → custom domain). SSL is automatic.

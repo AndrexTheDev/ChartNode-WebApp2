@@ -4,7 +4,7 @@
 // korrupte localStorage-Seeds, invalid Locales/Token, Git-Historien-Secret-Scan,
 // Privacy-Faktencheck (NEXT_LOCALE + Ad-Partner disclosures).
 import { execSync } from 'node:child_process';
-import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait } from './lib.mjs';
+import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, withFixtures } from './lib.mjs';
 
 export const META = { id: 'M9', name: 'Security & Input-Hardening' };
 
@@ -89,6 +89,7 @@ export async function run() {
       localStorage.setItem('nc-viral-v1', 'null');
       localStorage.setItem('nc_sl_fire_log', '[[');
     });
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal');
     await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(3000);
@@ -104,6 +105,7 @@ export async function run() {
     const p = await newPage(browser);
     const errs = [];
     attachConsole(p, errs);
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal?ticker=ZZZZZZZZ');
     await wait(3500);
     const ok = await p.evaluate(() => document.querySelectorAll('canvas').length >= 1);

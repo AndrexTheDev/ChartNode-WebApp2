@@ -598,3 +598,38 @@ body.nc-modal-open [data-nc-socialbar="1"] {
     overflow-x: visible;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Sprachhinweis-Slot (M6-Nachtrag / Vollverifikation)
+ *
+ * Der Hinweis wurde in M6 aus dem Fluss genommen, um den CLS beim ersten
+ * Besuch zu killen – als schwebende Karte lag er danach aber VOR der ersten
+ * Inhaltszeile und blockierte auf Mobil die Klickpunkte der Sponsor-Leiste
+ * (gemessen: elementFromPoint am Chip-Zentrum lieferte den Banner-Absatz).
+ *
+ * Jetzt umgekehrt: Der Hinweis steht wieder im Fluss, sein Platz wird aber
+ * VOR dem ersten Paint reserviert (Boot-Skript setzt `data-nc-langhint`)
+ * ⇒ 0 CLS UND keine Überdeckung. Beim Wegklicken entfernt die Komponente das
+ * Attribut; der Slot kollabiert dann als direkte Folge der Nutzeraktion.
+ * ------------------------------------------------------------------------- */
+.nc-langhint-slot { display: none; }
+/*
+ * Feste Höhe statt `min-height`: Der Hinweis ist in fünf Sprachen
+ * unterschiedlich hoch (gemessen 105–261 px). Mit einer Untergrenze wuchs der
+ * Slot beim Hydrieren nach und schob die Seite (0,19 CLS). Mit einer festen
+ * Höhe füllt die Karte den reservierten Platz exakt – kein Nachwachsen, keine
+ * Lücke. Der Text ist begrenzt (`line-clamp`), damit er in jede Sprache passt.
+ */
+html[data-nc-langhint='1'] .nc-langhint-slot {
+  display: block;
+  height: 13.5rem;
+}
+@media (min-width: 640px) {
+  /* Spalten-Layout bleibt bis 1024px: in der Zeile daneben war die Textspalte
+     zu schmal (russisch brauchte dort 8 Zeilen und wurde beschnitten). */
+  html[data-nc-langhint='1'] .nc-langhint-slot { height: 11rem; }
+}
+@media (min-width: 1024px) {
+  html[data-nc-langhint='1'] .nc-langhint-slot { height: 9rem; }
+}
+

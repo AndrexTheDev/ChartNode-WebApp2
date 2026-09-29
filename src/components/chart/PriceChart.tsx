@@ -1291,11 +1291,11 @@ export function PriceChart({
       />
 
       {/* legend – DOM on purpose: selectable, translatable, screen-reader friendly */}
-      <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-micro-10 leading-tight">
+      <div data-nc-legend="" className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-micro-10 leading-tight">
         <span className="text-fg">{symbol}</span>
         <span className="text-faint">{intervalLabel ?? timeframe}</span>
         {shown && (
-          <span className="text-muted">
+          <span data-nc-legend-ohlc="" className="text-muted">
             O <span className="text-fg">{shown.o.toFixed(digits)}</span> H{' '}
             <span className="text-fg">{shown.h.toFixed(digits)}</span> L{' '}
             <span className="text-fg">{shown.l.toFixed(digits)}</span> C{' '}

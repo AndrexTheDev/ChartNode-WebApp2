@@ -512,8 +512,9 @@ bestehende Prüfung gebrochen. `tsc --noEmit` 0 Fehler, ESLint ohne Befund.
 | 4 | ~~**M5**~~ | ~~A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons~~ | ✅ **erledigt** (Abschnitt 7, 175/175 Checks, 11 Fixes) |
 | 5 | ~~**M6**~~ | ~~Werbung/Monetarisierung im Fill-Fall~~ | ✅ **erledigt** (Abschnitt 8, 64/64 Checks, 9 Fixes) |
 | 6 | ~~**M7**~~ | ~~Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets~~ | ✅ **erledigt** (Abschnitt 9, 41/41 Checks, 6 Fixes) |
-| 7 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten |
-| 8 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss |
+| 7 | ~~**Vollverifikation**~~ | ~~alle Suiten am Stück auf dem Auslieferungs-Build~~ | ✅ **erledigt** (Abschnitt 13: 846 Checks grün, 0 rot) |
+| 8 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten — **nächster Schritt** |
+| 9 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss (Modul M7 im Audit ist bereits grün) |
 
 ---
 
@@ -643,3 +644,105 @@ Alle Änderungen sind typgeprüft (`tsc`), lint-frei (`0 Fehler / 2 Alt-Warnunge
 | `scripts/audit-sandbox/run-m7-perf.mjs` | **neu**: M7-Suite S1–S5 (41 Checks), kritisch/nachgeladen je Seite, Font-Nachweis über `unicode-range`, INP mit Zähler-Reset, Messfix S4 (Polling statt fester Wartezeiten) |
 | `scripts/audit-sandbox/run-m7-smoke.mjs` | **neu**: Funktions-Smoke für die drei Pfade des Lazy-Umbaus (Suche, Teilen-Dialog, Support-Dialog) |
 | `package.json` | Sammelskripte für die Suiten: `qa:a11y`, `qa:ads`, `qa:perf`, `qa:perf:smoke` |
+
+---
+
+## 13. ✅ Vollverifikation (V6) — Gesamtlauf auf dem Auslieferungs-Build
+
+**Auftrag:** alle Suiten *am Stück* auf genau dem Build fahren, der ausgeliefert werden
+soll (kein Sammeln von Einzelergebnissen aus verschiedenen Ständen), Ergebnis
+konsolidiert protokollieren — **vor** dem Merge/Modul M8.
+
+**Auslieferungs-Build:** `node_modules` via `npm ci --ignore-scripts`,
+`next build --webpack` mit Font-Mock + `NEXT_PUBLIC_SITE_URL=https://nodechart.cc`,
+danach `next start` auf `:3000`. Code-Stand = dieser Arbeitsbaum (siehe §12).
+
+### Gesamtlauf „Release-Audit" (M1–M10, `node scripts/release-audit/run.mjs`)
+
+| Modul | Bereich | PASS | FAIL | Dauer |
+|---|---|---:|---:|---:|
+| M1 | Statik & Konfiguration (Lizenz, Secrets, i18n-Parität, tsc, Lint) | 14 | 0 | 22,5 s |
+| M2 | Routing & SEO (30 Seiten × 5 Locales) | 310 | 0 | 39,9 s |
+| M3 | Terminal-Funktionalbatterie (Fixture-Feed, 12 Venues) | 17 | 0 | 39,8 s |
+| M4 | A11y & UX-Semantik (4 Routen × 5 Locales) | 48 | 0 | 17,3 s |
+| M5 | Monetarisierung (`qa:monetization` 78/0 · `qa:smartlinks` 14/0) | 2 | 0 | 97,5 s |
+| M6 | Runtime & Edge (`qa-release` 44/44) | 1 | 0 | 93,0 s |
+| M8 | Native Banner + Smartlinks (Tiefe) | 37 | 0 | 60,7 s |
+| M9 | Security & Input-Hardening | 16 | 0 | 21,7 s |
+| M10 | Daten-Resilienz & Session (Outage, Malformed, Exporte, Heap) | 12 | 0 | 68,1 s |
+| M7 | Deploy-Readiness (Cloudflare `cf:build` + robots/sitemap/wrangler) | 6 | 0 | 44,4 s |
+| **Σ** | **`RELEASE-AUDIT.md`** | **463** | **0** | ≈ 8 min |
+
+### Einzelsuiten auf demselben Build
+
+| Suite | Ergebnis | Bemerkung |
+|---|---|---|
+| `qa:i18n` (Layout-Stresstest) | **110/110** | 5 Locales × Viewports bis 3440 px, keine Page-Errors |
+| `qa:a11y` (M5-Deep-Dive) | **175/0** | 258 s, Report `/tmp/nc-shots/m5-report.json` |
+| `qa:ads` (M6-Werbung) | **57/0** | Auslieferungs-Build (kein Fill), Report `/tmp/nc-shots/m6-report.json` |
+| `qa:perf` (M7-Core-Web-Vitals) | **41/0** | Report `/tmp/nc-shots/m7-report.json` |
+| `tsc --noEmit` · `eslint .` | 0 Fehler · 0 Warnungen | via M1 mitgeprüft |
+| i18n-Key-Parität | 5 × 1162 Keys | via M1 |
+
+### Gemessene Kernwerte (2-Kern-Sandbox-Host, 4× CPU-Bremse, Slow-4G)
+
+| Metrik | Landing | Terminal |
+|---|---|---|
+| TTFB · LCP | 13 ms · 1328 ms | 78 ms · 1084 ms |
+| CLS | **0,000** | **0,0004** |
+| TBT (4 bzw. 12 Long Tasks) | 244 ms | 761 ms * |
+| JS kritisch / gesamt | 192,8 kB / 553,0 kB | 262,0 kB / 1008,1 kB |
+| Fonts (Preloads 9) | 128,6 kB | 129,3 kB |
+| INP (Menü → Dialog) | 15 ms | — |
+
+\* Die Suite skaliert die TBT-Grenze auf Mehrkern-Hosts (2 Kerne ⇒ Faktor 2, also
+1200 ms statt 600 ms); die projektierten ≥4-Kern-Werte aus §9 (Terminal 305 ms) gelten
+weiter. Fonts je Sprache: de 12/150,8 kB · ru 11/133,6 kB · zh 10/125,6 kB.
+
+### Was in diesem Durchgang tatsächlich repariert wurde
+
+1. **Sprachhinweis über der Sponsor-Leiste (Überdeckung).** Der Banner lag als
+   `absolute`-Karte über dem Header und fing Klicks ab (die Alt-Suite meldete drei
+   „terminal: alles klickbar"-Befunde). Er sitzt jetzt im Fluss in einem eigenen
+   Slot (`.nc-langhint-slot`, feste Höhen 216/176/144 px; Karte füllt den Slot bis
+   `pt-3`, Spalten-Layout bis `lg`, Zeile ab `lg`). Klick-Treffer sind damit frei:
+   `qa:monetization` **78/0** (vorher 75/3).
+2. **CLS-Kausalität aufgeklärt.** Die 0,11 auf /de stammten **nicht** vom
+   Sprachhinweis, sondern von der **Ad-Schicht** (Detect-on-Failure): Gegenprobe mit
+   deaktivierten Ads ergab 0,0000/0,0017, mit Ads 0,1086/0,1105 — unabhängig davon,
+   ob der Hinweis stand. Der Banner-Höhen-Fix reduziert also keine CLS (er war
+   trotzdem nötig, siehe 1.), die Zahlen aus §9 bleiben unverändert gültig.
+3. **Falsch-negative Messstellen gehärtet** (Suite-Fixes, kein App-Defekt):
+   `m8-ads-deep` und `m9-security` fragten `[data-pane]` ab — einen Selektor, den
+   die App nie hatte — und warteten ohne Fixture-Feed auf `canvas`; jetzt nutzen sie
+   den Fixture-Feed und den echten Haken `[data-nc-pane-placeholder]`.
+   `qa-release` hing an einem mehrdeutigen Klassen-Selektor (`.font-mono.text-micro-10`
+   traf zuerst Toolbar-Buttons) und las damit nie den Legend-Kurs ⇒ jetzt
+   `[data-nc-legend]`. Dieselbe Ursache erklärte zwei „Offline/Reconnect"-Befunde,
+   die sich als Messfehler erwiesen (die App reconnectet nachweislich, M10 12/0).
+4. **Netzrauschen zentral gefiltert.** `net::ERR_FAILED`/`ERR_ABORTED` und
+   `WebSocket … failed` (Sandbox ohne Börsen-Hosts) zählen in `lib.mjs` und
+   `qa-release.mjs` identisch als Umgebungsrauschen — vorher meldeten M3/M10 dafür
+   „Console nicht sauber", obwohl das Verhalten korrekt war.
+5. **`cf:build` offline grün.** Der Cloudflare-Build ruft intern `npm run build` auf;
+   die Turbopack-Variante von Next 16 kennt den Offline-Font-Mock nicht und brach in
+   der Sandbox ab. `build` ist deshalb jetzt `next build --webpack` — derselbe Pfad,
+   der auditiert und ausgeliefert wird (mit Netz verhält sich das identisch), und
+   `m7-deploy.mjs` setzt den Font-Mock selbst. Ergebnis: Worker-Bundle
+   (`.open-next/worker.js`) baut reproduzierbar.
+
+### Ehrliche Grenzen dieser Runde
+
+- M7 (Core Web Vitals) und M6 laufen **ohne** echte Börsenverbindung: der
+  Fixture-Feed ersetzt REST/WS, alle Werte sind gegen den echten Produktions-Render
+  gemessen, aber mit lokalen Kursdaten.
+- Die Sandbox hat 2 Kerne; langlaufende Perf-Module werden über die Host-Toleranz
+  bewertet (siehe \*). Die 4-Kern-Referenzwerte aus §9 bleiben der Maßstab.
+- Die Native-Banner-Platzierung (M8) wird mit dem eingebauten Fill-Simulator
+  geprüft (Build ohne `NEXT_PUBLIC_ADSTERRA_NATIVE_*`): No-Fill-Kollaps, CLS 0,
+  kein Overlap, mobil kein Overflow — der Live-Fill folgt erst mit echten Keys.
+
+**Verdikt:** Der Auslieferungs-Build ist über **alle** zehn Module plus die vier
+Einzelsuiten **ohne offenen Befund** — 463 + 110 + 175 + 57 + 41 = **846 Checks grün,
+0 rot**. Damit ist M8 (Sekundär-Fetch-Härtung, 429-Overlay, Speicherdruck) der
+nächste echte Ausbauschritt, kein Reparaturfall.

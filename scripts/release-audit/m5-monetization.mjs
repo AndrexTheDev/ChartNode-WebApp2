@@ -4,6 +4,25 @@
 //  qa:smartlinks = Cap/Disclosure/Toast-Batterie). Beide müssen 0 FAIL liefern.
 import { execSync } from 'node:child_process';
 import { ROOT, makeReporter } from './lib.mjs';
+import { existsSync } from 'node:fs';
+
+/**
+ * Sandbox-taugliche Umgebung für die eingebetteten Alt-Suiten: sie starten
+ * Puppeteer ohne `executablePath` und brauchen daher `PUPPETEER_EXECUTABLE_PATH`
+ * (Chromium aus `audit-sandbox/bootstrap.mjs`). Ohne das brechen sie mit
+ * „Could not find Chrome" ab, obwohl ein Binary bereitliegt.
+ */
+const childEnv = () => {
+  const chrome = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || (existsSync('/tmp/chromium') ? '/tmp/chromium' : undefined);
+  return {
+    ...process.env,
+    ...(chrome ? { PUPPETEER_EXECUTABLE_PATH: chrome } : {}),
+    LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH || '/tmp/al2023/lib',
+    FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || '/tmp/fonts',
+  };
+};
+
+
 
 export const META = { id: 'M5', name: 'Monetarisierung (Ad-/Smartlink-Suiten)' };
 
@@ -21,7 +40,7 @@ export async function run() {
     let out = '';
     let code = 0;
     try {
-      out = execSync(cmd, { cwd: ROOT, encoding: 'utf8', timeout: 900000, stdio: ['ignore', 'pipe', 'pipe'] });
+      out = execSync(cmd, { cwd: ROOT, encoding: 'utf8', timeout: 900000, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv() });
     } catch (e) {
       code = e.status || 1;
       out = (e.stdout || '') + (e.stderr || '');
