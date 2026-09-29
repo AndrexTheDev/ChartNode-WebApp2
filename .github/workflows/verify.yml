@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Build (Produktionsbuild wie beim Deploy)
-        run: npm run build
+        run: bash scripts/ci-build.sh
 
       - name: Guard-Suite (SEO/CWV/Fit/QA) – Deploy nur grün
         run: bash scripts/ci-gate.sh
@@ -50,5 +50,6 @@ jobs:
           path: |
             verify.log
             server.log
+            build.log
           retention-days: 14
           if-no-files-found: ignore
