@@ -59,7 +59,7 @@ async function clickMenuItem(page, text) {
 
 const legendPrice = (page) =>
   page.evaluate(() => {
-    const m = (document.querySelector('.font-mono.text-micro-10')?.textContent ?? '').match(/C\s*([\d.]+)/);
+    const m = (document.querySelector('[data-nc-legend]')?.textContent ?? '').match(/C\s*([\d.]+)/);
     return m ? Number(m[1]) : null;
   });
 
@@ -305,7 +305,7 @@ console.log('\n— S7: Chart-Sync live (TF-Sync über 2x2-Panes) —');
   const errors = await openTerminal(page);
   await page.keyboard.press('3'); // Layout 2x2
   await wait(2500);
-  const panesBefore = await page.evaluate(() => document.querySelectorAll('.font-mono.text-micro-10').length);
+  const panesBefore = await page.evaluate(() => document.querySelectorAll('[data-nc-legend]').length);
   check('S7a Layout 2x2 rendert 4 Panes', panesBefore >= 4, String(panesBefore));
   // TF im ersten Pane umstellen → Sync zieht alle mit
   await page.evaluate(() => {
@@ -314,7 +314,7 @@ console.log('\n— S7: Chart-Sync live (TF-Sync über 2x2-Panes) —');
   });
   await wait(2500);
   const legends = await page.evaluate(() =>
-    [...document.querySelectorAll('.font-mono.text-micro-10')].map((el) => el.textContent ?? ''),
+    [...document.querySelectorAll('[data-nc-legend]')].map((el) => el.textContent ?? ''),
   );
   const with5m = legends.filter((t) => t.includes('5m')).length;
   check('S7b TF-Sync: alle Panes übernehmen 5m', with5m >= 4, `${with5m}/${legends.length} Legenden mit 5m`);
@@ -329,11 +329,11 @@ console.log('\n— S8: Keyboard-Map (README §10 live) —');
   const errors = await openTerminal(page);
   await page.keyboard.press('2');
   await wait(1500);
-  const panes2 = await page.evaluate(() => document.querySelectorAll('.font-mono.text-micro-10').length);
+  const panes2 = await page.evaluate(() => document.querySelectorAll('[data-nc-legend]').length);
   check('S8a Taste „2" → Layout 2x1 (2 Panes)', panes2 === 2, String(panes2));
   await page.keyboard.press('1');
   await wait(1200);
-  const panes1 = await page.evaluate(() => document.querySelectorAll('.font-mono.text-micro-10').length);
+  const panes1 = await page.evaluate(() => document.querySelectorAll('[data-nc-legend]').length);
   check('S8b Taste „1" → zurück auf 1x1', panes1 === 1, String(panes1));
   await page.keyboard.down('Control');
   await page.keyboard.press('KeyK');

@@ -17,7 +17,8 @@ kostenlos ($0) auf deinem Cloudflare-Account unter `nodechart.cc`.
 | Cloudflare-Konto | dash.cloudflare.com (kostenlos) | ☐ |
 | Git installiert | Terminal: `git --version` → sonst git-scm.com | ☐ |
 | Lokaler Grün-Lauf | Terminal im Projekt: `npm ci && npm run build && npm start` (2. Terminal) → `npm run verify` → alles ✔ | ☐ |
-| Release-Audit grün | Im Projektordner: `npm run qa:full` → **398 PASS / 0 FAIL** (7 Module, Report: `RELEASE-AUDIT.md`) | ☐ |
+| Gate ohne Internet prüfbar | `node scripts/audit-sandbox/run-with-fixtures.mjs scripts/browser-check.mjs` (fixt Börsendaten; Live-Provider-Prüfungen erscheinen als `SKIP`, nie als FAIL) | ☐ |
+| Release-Audit grün | Im Projektordner: `npm run qa:full` → **463 PASS / 0 FAIL** (10 Module, Report: `RELEASE-AUDIT.md`) | ☐ |
 | Dieser Ordner (`nodechart/`) auf deinem Rechner | z. B. als Download/Workspace-Kopie | ☐ |
 
 Ein Terminal öffnen und **in den Projektordner wechseln** (alle Befehle unten
@@ -158,10 +159,32 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
 | `https://nodechart.cc/sitemap.xml` | 30 URLs (6 Routen × 5 Sprachen), `Cache-Control` mit `s-maxage=3600` |
 | Desktop-Browser (≥1280 px) auf `/de/terminal` | linke Sidebar-Rail mit `GESPONSERT`-Label (füllt sich im echten Netz mit dem 160×600-Banner) |
 | `https://nodechart.cc/de/terminal?ticker=SOL` | Social-Card-Vorschau (Telegram/Web) zeigt `$SOL`-Karte in Link-Sprache |
-| `https://nodechart.cc/xx` und `/de/legal/nope` | 404 (keine Soft-404s) |
+| `https://nodechart.cc/de/legal/nope` | 404 (keine Soft-404s); `/xx` wird erst auf `/en/xx` geleitet und endet dann ebenfalls 404 |
 | Browser-Konsole (F12) | 0 Fehler, 0 Warnungen |
 
-## 6. Troubleshooting (falls etwas zickt)
+## 6. Sitemap einreichen (Google & Bing, 4 Minuten)
+
+Die Sitemap liegt fertig unter `https://nodechart.cc/sitemap.xml` (30 URLs, je
+Route × 5 Sprachen mit `hreflang` + `x-default`). Einmal einreichen – danach
+findet sie sich über `robots.txt` selbst:
+
+1. **Google Search Console** (search.google.com/search-console) → Property
+   **URL-Präfix** `https://nodechart.cc` → Bestätigung über **HTML-Tag**: den
+   Token in Cloudflare nicht nötig – einfacher ist **DNS-Verifikation**, weil
+   `nodechart.cc` schon in Cloudflare liegt (TXT-Record wird automatisch
+   gesetzt).
+2. Links **Sitemaps** → `sitemap.xml` eintragen → **Senden**. Status muss
+   „Erfolgreich“ werden (1–2 Tage bis zur Indexierung).
+3. **Bing Webmaster Tools** (bing.com/webmasters) → „Add site“ → **Import from
+   Google Search Console** (übernimmt Verifikation + Sitemap in einem Schritt).
+4. **Rich-Results-Test** (search.google.com/test/rich-results) mit
+   `https://nodechart.cc/de` prüfen: `SoftwareApplication` + `Organization`
+   müssen erkannt werden – ein guter Endbeweis für die strukturierten Daten.
+
+> 💡 Kein Zwang, aber der schnellste Weg in den Index. Ohne Einreichung dauert
+> es deutlich länger, bis Google die 30 URLs von selbst findet.
+
+## 7. Troubleshooting (falls etwas zickt)
 
 | Symptom | Lösung |
 | --- | --- |
@@ -173,7 +196,7 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
 | Lokales Ausprobieren vor dem Push | `npm ci && npm run build && npm start` → http://localhost:3000 |
 | `npm run qa:full` meldet FAILs | **Nicht pushen.** `RELEASE-AUDIT.md` öffnet die Fail-Liste pro Modul; Modul einzeln erneut: `node scripts/release-audit/run.mjs M3` |
 
-## 7. Kosten & Recht
+## 8. Kosten & Recht
 
 * **Kosten: 0,00 €** — Cloudflare Workers Free Tier (100 000 Requests/Tag,
   statische Assets unbegrenzt frei); GitHub Public Repo kostenlos.
@@ -186,6 +209,7 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
 ---
 
 **Reihenfolge merken:** ① Repo leer anlegen → ② `git push` → ③ Cloudflare
-connect + Build-Settings (oder Secrets für §3b) → ④ Domain → ⑤ Checkliste.
-Mehr ist es nicht. Release-Stand: Tag `v1.0.0` = auditierter Zustand
-(398/0 Release-Audit, verify grün). Viel Erfolg, Andrex. 🖤💚
+connect + Build-Settings (oder Secrets für §3b) → ④ Domain → ⑤ Checkliste
+→ ⑥ Sitemap. Mehr ist es nicht. Release-Stand: auditierter Zustand
+(Release-Audit 463/0 plus Einzelsuiten – zusammen > 900 Checks grün, 0 rot;
+`npm run verify` grün). Viel Erfolg, Andrex. 🖤💚

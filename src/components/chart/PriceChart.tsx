@@ -746,6 +746,12 @@ export function PriceChart({
         }
       });
     }
+    /* Audit-Haken: Zahl der Chart-Panes (Haupt-Pane + je Oszillator-Pane).
+       `data-nc-legend` markiert die Legende und zählt damit GRID-Zellen – nicht
+       die inneren Panes von lightweight-charts. Ein Oszillator wie RSI legt
+       seinen Pane innerhalb DESSELBEN Canvas an, war also über die Legende
+       nicht nachweisbar (Audit-Suite meldete fälschlich „kein Pane"). */
+    containerRef.current?.setAttribute('data-nc-panes', String(chart.panes().length));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey, chartType, chartId]);
 

@@ -18,6 +18,8 @@ wäre.
 | `run-m7-perf.mjs` | **M7-Suite (Performance)**: S1 Ladeleistung (TTFB/FCP/LCP/CLS/TBT bei 4× CPU + Slow 4G), S2 Bundle (kritisch vs. nachgeladen je Seite), S3 Fonts je Sprache inkl. Cyrillic-Nachweis über `unicode-range`, S4 Interaktion (INP via Event-Timing, Menü→Dialog-Latenz), S5 Auslieferung (Cache/Kompression). Schalter: `--quick` (kurze Idle-Fenster), `--compare <report.json>` (zwei Läufe nebeneinander). |
 | `run-m7-smoke.mjs` | **M7-Smoke**: Funktionstest der Pfade, die der Lazy-Umbau berührt (Kopfzeilen-Suche inkl. Lazy-Engine, Teilen-Dialog, Support-Dialog). 6 Checks. |
 | `run-m8-robustness.mjs` | **M8-Suite (Robustheit)**: S1 Speicher (Quote voll, gesperrter Speicher, L2-Verdrängung) · S2 Rate-Limit (429-Overlay, Cooldown, Retry, kein Overlay bei 403) · S3 Netzabbruch (offline/online, Hänger mit Timeout, Abbruch beim Tippen, Dialog-Leichen) · S4 Sekundär-Quellen (Befund O3, hängende Quellen mit 12-s-Deckel) · S5 Payload-Härtung (4-MiB-Deckel, kaputtes JSON, leere/giftige Kerzen, Cache-Vergiftung). Fault-Injection über die `route`-Option der Fixtures. |
+| `run-with-fixtures.mjs` | **Fixture-Wrapper (M9)**: startet ein Projekt-Skript (z. B. `scripts/browser-check.mjs`) und patcht `puppeteer.launch`, sodass **jede** Seite – auch die aus `createBrowserContext()` – den Fixture-Feed erhält. Damit laufen die Canvas-Suiten ohne Börsen-Netz statt in den Timeout. |
+| `verify-offline.sh` | **Gate offline (M9)**: fährt dieselbe Kette wie `.github/workflows/deploy.yml` (`npm run verify:offline`): typecheck · lint · i18n · SEO · CWV · Fit · qa-features · browser-check mit Fixture-Feed. Live-Provider-Prüfungen melden `SKIP`. |
 | `run-m5-a11y.mjs` | **M5-A11y-Suite**: S1 Fokus-Sichtbarkeit (dunkel + hell), S2 Tab-Ordnung/Fokus in 19 Overlays inkl. Fehlerachse, S2b Menü-Tastatur (4 ToolMenüs), S3 Light-Kontrast, S3b Token-Matrix über alle 5 Skins, S4 Icon-Namen (inkl. Lokalisierungs-Detektor), S5 Semantik. Schalter: `--locale de`, `--quick`. |
 
 ## Ablauf
@@ -36,6 +38,9 @@ npx next start -H 0.0.0.0 -p 3000 &
 LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts \
   node scripts/audit-sandbox/run-m5-a11y.mjs
 ```
+
+Gate ohne Netz (Durchgang M9): **867 PASS / 0 FAIL**, 19 Live-Prüfungen `SKIP`,
+Exitcode 0 – `npm run verify:offline` (Server auf :3000 vorausgesetzt).
 
 Aktueller Stand (Durchgang M5): **175 ok / 0 Befunde** in 262 s; Report als JSON
 unter `/tmp/nc-shots/m5-report.json`, Screenshots daneben.

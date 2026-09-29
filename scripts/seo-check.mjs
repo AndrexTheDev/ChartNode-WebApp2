@@ -281,13 +281,49 @@ for (const bot of ['TelegramBot/1.0', 'Twitterbot/1.0', 'facebookexternalhit/1.1
 }
 
 /* ---------------------------------- M6 ---------------------------------- */
-// Font-Budget: gebündelte woff2-Dateien im Build (Subsets × Weight-Schnitt)
-import { readdirSync } from 'node:fs';
+/*
+ * Font-Budget — in BYTES, nicht in Dateien.
+ *
+ * Die frühere Regel „woff2-Dateien ≤ 20" war nur ein Proxy für „die Seite lädt
+ * nicht zu viele Schriften". Seit M7 sind die kyrillischen Subsets bewusst
+ * getrennte Dateien mit `preload:false` (Cyrillic lädt erst beim ersten
+ * kyrillischen Zeichen): die Dateizahl stieg dadurch auf 25, während die
+ * tatsächlich geladenen Bytes von 204 kB auf ~140 kB SANKEN. Eine Regel, die
+ * die Optimierung als Regression liest, blockiert das Deploy-Gate – gemessen
+ * wird deshalb das, was den Nutzer kostet: die Bytes hinter den Preload-Hints
+ * je Sprache plus ein Gesamtdeckel für den Build.
+ */
+import { readdirSync, statSync } from 'node:fs';
+const MEDIA = new URL('../.next/static/media/', import.meta.url); // Schrägstrich nötig: sonst löst new URL(name, MEDIA) eine Ebene zu hoch auf
+let mediaFiles = [];
 try {
-  const woff2 = readdirSync(new URL('../.next/static/media', import.meta.url)).filter((f) => f.endsWith('.woff2'));
-  check('M6: woff2-Files im Build ≤ 20 (Subset/Weight-Schnitt)', woff2.length <= 20, `n=${woff2.length}`);
+  mediaFiles = readdirSync(MEDIA).filter((f) => f.endsWith('.woff2'));
 } catch {
-  check('M6: woff2-Files im Build ≤ 20 (Subset/Weight-Schnitt)', false, '.next/static/media nicht gefunden – build nötig');
+  mediaFiles = [];
+}
+const mediaBytes = (name) => {
+  try {
+    return statSync(new URL(name, MEDIA)).size;
+  } catch {
+    return null;
+  }
+};
+const totalFontBytes = mediaFiles.reduce((sum, f) => sum + (mediaBytes(f) ?? 0), 0);
+check(
+  'M6: Font-Gesamtbestand im Build ≤ 420 kB (Subsets inkl.)',
+  mediaFiles.length > 0 && totalFontBytes > 0 && totalFontBytes <= 420 * 1024,
+  `${(totalFontBytes / 1024).toFixed(1)} kB in ${mediaFiles.length} Dateien`,
+);
+for (const locale of ['de', 'ru', 'zh']) {
+  const html = await (await fetch(`${BASE}/${locale}`)).text();
+  const tags = (html.match(/<link\b[^>]*>/g) ?? []).filter((tag) => tag.includes('as="font"'));
+  const hrefs = tags.map((tag) => /href="([^"]+)"/.exec(tag)?.[1]).filter(Boolean);
+  const bytes = hrefs.reduce((sum, href) => sum + (mediaBytes(href.split('/').pop() ?? '') ?? 0), 0);
+  check(
+    `M6 ${locale}: kritische Font-Bytes (Preloads) ≤ 180 kB`,
+    hrefs.length > 0 && bytes > 0 && bytes <= 180 * 1024,
+    `${(bytes / 1024).toFixed(1)} kB aus ${hrefs.length} Dateien`,
+  );
 }
 for (const locale of ['de', 'ru']) {
   const html = await (await fetch(`${BASE}/${locale}`)).text();

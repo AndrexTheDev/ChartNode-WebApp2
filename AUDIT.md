@@ -4,8 +4,8 @@ Systematisches Qualitäts-/Vollständigkeitsaudit in Modulen. Dieses Dokument is
 Arbeitsprotokoll auf dem Weg zur finalen Version: **was geprüft wurde, was gefunden wurde,
 was bereits behoben ist und was als Nächstes dran ist.**
 
-- Stand: 2026-09-28
-- Geprüfter Commit: `aa809ae` (`main`) + Fixes der Durchgänge 1–2 (`2ae6ebf` + Arbeitsstand, Branch `arena/01a0e92c-chartnode-webapp2`)
+- Stand: 2026-09-29 (Module M0–M9 abgeschlossen)
+- Geprüfter Commit: `aa809ae` (`main`) + Fixes der Durchgänge M0–M9 (Branch `arena/01a0e92c-chartnode-webapp2`, PR #1)
 - Umfang: 179 Quelldateien · ~29 200 Zeilen · 5 Locales (à 1 160 Keys) · 38 vorgebaute Routen
 
 ---
@@ -24,7 +24,7 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M6 | Werbung/Monetarisierung im Fill-Fall (CLS, Kollaps, Social Bar, Ad-Block-Wall, Spender) | ✅ geprüft | **64/64 Checks · 0 Befunde** · 9 echte Fixes (u. a. Doppel-Id auf dem Terminal, unsichtbare Social Bar) |
 | M7 | Performance / Core Web Vitals (Mid-Range-Mobile: 4× CPU + Slow 4G) | ✅ geprüft | **41/41 Checks · 0 Befunde** · 6 echte Fixes (u. a. Terminal-CLS 0,110 → 0,000 · Landing-JS 220,9 → 188,3 kB) |
 | M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher, Payloads) | ✅ geprüft | **54/54 Checks · 0 Befunde** · 4 Fixes (u. a. unbehandeltes `QuotaExceededError` bei voller Quote, Befund O3 bestätigt und behoben) |
-| M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
+| M9 | Deploy-Pfad Cloudflare / Domain | ✅ geprüft | **Deploy-Gate repariert** (Font-Budget in Bytes statt Dateien, 5 Suiten korrigiert, Live-Prüfungen als SKIP klassifiziert, Workflow-Readiness-Schleife) · CF-Bundle + `wrangler deploy --dry-run` ✔ · Endkontrolle **463/0** + **867/0** · Sitemap-Einreichung dokumentiert (§6) |
 
 **Konsistenz der Versprechen (geprüft):** Die Meta-Description nennt „34 Indikatoren" — das
 Indikator-Modal bietet genau **34** Einträge (33 Rechen-Indikatoren + Script-Lab-Einstieg).
@@ -514,7 +514,7 @@ bestehende Prüfung gebrochen. `tsc --noEmit` 0 Fehler, ESLint ohne Befund.
 | 6 | ~~**M7**~~ | ~~Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets~~ | ✅ **erledigt** (Abschnitt 9, 41/41 Checks, 6 Fixes) |
 | 7 | ~~**Vollverifikation**~~ | ~~alle Suiten am Stück auf dem Auslieferungs-Build~~ | ✅ **erledigt** (Abschnitt 13: 846 Checks grün, 0 rot) |
 | 8 | ~~**M8**~~ | ~~Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3)~~ | ✅ **erledigt** (Abschnitt 14, 54/54 Checks, 4 Fixes) |
-| 9 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss (Modul M7 im Audit ist bereits grün) |
+| 9 | ~~**M9**~~ | ~~Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle~~ | ✅ **erledigt** (Abschnitt 15: Gate repariert und offline fahrbar, 463/0 + 867/0, CF-Bundle verifiziert, §6 Sitemap-Einreichung) |
 
 ---
 
@@ -545,6 +545,23 @@ Auf einem Rechner mit normalem Internetzugang entfällt der Font-Mock; `npm run 
 funktioniert dort unverändert. Die Projekt-Skripte `qa:features`, `qa:modules`,
 `browser-check` und `gui-audit` brauchen `PUPPETEER_EXECUTABLE_PATH` bzw. ein
 installiertes Chrome for Testing.
+
+**Das Gate ohne Börsen-/Provider-Netz fahren (M9):** `npm run verify` wartet in
+`fit-check`, `qa:features` und `browser-check` auf ein Canvas – ohne Feed läuft es
+in den Timeout, obwohl die App korrekt ist. Mit dem Fixture-Wrapper läuft dieselbe
+Kette offline:
+
+```bash
+# Server muss auf :3000 laufen (npm start), Build in .next vorhanden
+npm run verify:offline        # = verify, nur mit Fixture-Feed
+# einzelne Suiten:
+node scripts/audit-sandbox/run-with-fixtures.mjs scripts/browser-check.mjs
+```
+
+Live-Provider-Prüfungen (On-Chain, Derivate, Options, Screener, Heatmap,
+Marktbreite, WebSocket-Streams) erscheinen dabei als `SKIP` – nie als `PASS` und
+nie als `FAIL`; die Entscheidung fällt eine Upstream-Sonde zu Beginn des Laufs.
+Auf vernetzten Rechnern (CI) läuft alles unverändert streng.
 
 ---
 
@@ -823,3 +840,117 @@ Fixture-Schicht — dieselbe Antwort-Pipeline wie der echte Feed, nur mit
   geprüft, nicht über zwei getrennte Quellen.
 - Speicherdruck ist als **Quota**- und Heap-Druck geprüft (14 MB bei 4 MiB
   Antwort); ein echter OOM-Test bräuchte ein Speicherlimit des Browsers.
+
+---
+
+## 15. ✅ Modul M9 — Deploy-Pfad (Gate, Cloudflare, Domain, Sitemap, Endkontrolle)
+
+Leitfrage: **Kommt das Projekt wirklich live – und prüft das Gate dabei die
+richtigen Dinge?** M9 ist kein Feature-Modul, sondern die Abnahme des
+Auslieferungswegs. Gefunden wurden acht Punkte, davon drei, die den Deploy
+**blockiert** hätten.
+
+### Deploy-Pfad (verifiziert)
+
+| Prüfung | Ergebnis |
+|---|---|
+| `npm run cf:build` (OpenNext → Cloudflare Worker) | ✔ Worker + Assets gebaut (57 MB Bundle) |
+| `wrangler deploy --dry-run` | ✔ 127 Asset-Dateien, 8.589 KiB (gzip 1.829 KiB), Bindings `ASSETS` + `NEXT_PUBLIC_SITE_URL=https://nodechart.cc` |
+| Prerender-Manifest | 32 statische Routen, 3 dynamische (`/[locale]`, `/[locale]/help`, `/[locale]/legal/[doc]`); das Terminal rendert bewusst pro Request |
+| Cache-Header | Sitemap/robots `s-maxage=3600`, HTML `s-maxage=300, stale-while-revalidate=86400` |
+| `sitemap.xml` | 30 URLs = 6 Routen × 5 Sprachen, je mit `hreflang`-Netz + `x-default` |
+| `robots.txt` | erlaubt alle Bots, verweist auf die Sitemap, lässt das Terminal indexieren |
+| 404-Verhalten | `/de/legal/nope` = 404; `/xx` läuft `307 → /en/xx → 404`, keine Soft-404 |
+| Node-Version | `.nvmrc` = 22, CI `setup-node` = 22, Cloudflare `NODE_VERSION=22` |
+
+### Gefundene Fehler und Behebung
+
+**1. Deploy-Gate rot: Font-Budget zählte Dateien statt Bytes.**
+`seo-check.mjs` verlangte „woff2-Dateien ≤ 20". M7 hatte die kyrillischen
+Subsets bewusst in eigene Dateien mit `preload:false` gelegt (Cyrillic lädt erst
+beim ersten kyrillischen Zeichen): 25 Dateien, aber **204 kB → 139,7 kB**
+tatsächlich geladene Bytes. Die Regel las die Optimierung als Regression und
+blockierte jedes Deploy. Jetzt wird gemessen, was den Nutzer kostet:
+Gesamtbestand ≤ 420 kB (Ist: 384 kB / 25 Dateien) und kritische Bytes hinter den
+Preload-Hints je Sprache ≤ 180 kB (Ist: 139,7 kB aus 9 Dateien, de/ru/zh geprüft).
+
+**2. Zwei „Ausblenden"-Buttons – der Klick traf den falschen.**
+`browser-check` suchte dokumentweit nach einem Button mit dem Text „Ausblenden"
+und traf den **unsichtbaren** Touch-Hinweis der Werkzeugleiste statt des
+Spenden-Walls (Kandidat i=0: nicht im Dialog, Breite 0; i=1: im Dialog). Folge:
+Der Wall blieb offen **und** das persistierte Dismissal ließ danach den
+Mobile-Check „Touchscreen erkannt" mitfallen – ein Selektor-Fehler, der wie zwei
+App-Fehler aussah. Beleg nach dem Fix: Dialog zu, `nc-viral-v1.wallDismissedAt`
+gesetzt, Mobile-Warnung weiterhin sichtbar. Selektor jetzt auf den Dialog begrenzt.
+
+**3. Veralteter Legenden-Selektor in fünf Suiten.**
+`.font-mono.text-micro-10` traf seit dem Toolbar-Umbau auch Toolbar-Buttons; die
+Suites lasen den Legendentext „Ausblenden" statt der Kurse. 15 Stellen auf den
+stabilen Audit-Haken `[data-nc-legend]` umgestellt (`browser-check`,
+`qa-features`, `qa-modules`, `qa-monetization`, `qa-edge-visual`).
+
+**4. S2b prüfte die falsche Größe – und konnte seinen eigenen Befund nie belegen.**
+„RSI öffnet eigenes Oszillator-Pane" zählte Grid-Zellen über `data-nc-legend`.
+Ein Oszillator legt seinen Pane aber **innerhalb desselben Canvas** an
+(`chart.addSeries(..., paneIndex)`) – die Zahl blieb bei 1, der Check schlug
+falsch fehl. Neu: `PriceChart` schreibt die echte Pane-Zahl in `data-nc-panes`
+(`chart.panes().length`). Beleg mit Gegenprobe in derselben Suite: Overlay (VWAP)
+⇒ `chartPanes=1`, RSI ⇒ `chartPanes=2`, Grid-Zellen bleiben 1.
+
+**5. Das Gate war offline nicht fahrbar.**
+`fit-check`, `qa:features` und `browser-check` warten auf ein Canvas; ohne
+Börsen-/Provider-Netz läuft die Prüfung in den Timeout, obwohl die App korrekt
+ist. Neu: `scripts/audit-sandbox/run-with-fixtures.mjs` patcht `puppeteer.launch`
+und hängt **jeder** Seite (auch denen aus `createBrowserContext()`) den
+Fixture-Feed an; `npm run verify:offline` fährt damit dieselbe Kette wie
+`.github/workflows/deploy.yml`.
+
+**6. Live-Prüfungen ehrlich klassifiziert (SKIP statt FAIL).**
+19 der Checks in `browser-check` messen Live-Provider (On-Chain, EVM-Gas,
+Solana, DeFi-TVL, GoPlus, Derivate, Order-Flow, Options, Marktbreite, Screener,
+Heatmap, WebSocket-Streams). Eine Upstream-Sonde zu Beginn entscheidet: Mit Netz
+sind sie unverändert streng; ohne Netz erscheinen sie als `SKIP` – nie als
+`PASS`, nie als `FAIL`, in der Zusammenfassung gezählt. Netzrauschen
+(`net::ERR_CONNECTION_CLOSED`, `WebSocket connection to … failed`) wird nur im
+Offline-Modus und nur gezählt unterdrückt; `Failed to fetch` bleibt immer ein
+Befund (dafür war der M8-Fix da).
+
+**7. Deploy-Workflow: `sleep 4` → Readiness-Schleife.**
+Das Gate startete den Server mit `(npm start … &) && sleep 4 && npm run verify`.
+Auf langsameren Runnern kippt das ohne App-Fehler. Jetzt: expliziter Start
+(`npx next start -H 127.0.0.1 -p 3000`), `curl`-Polling auf `/de` bis 60 s,
+danach die Suite.
+
+**8. Doku widersprach dem Produkt.**
+README bezeichnete das Terminal als „pending"/`noindex` mit 300 Keys und 36
+statischen Seiten (Ist: vollständige Chart-Engine mit 34 Indikatoren,
+indexierbar in der Sitemap, 976 Keys je Locale, 25 vorgerenderte Locale-Seiten).
+`seo-audit.mjs` erwartete 25 Sitemap-URLs, Terminal-`noindex`, robots-Ausschluss
+und eine FAQ-Sektion auf der Landing – alles bewusst anders im Produkt; die
+Erwartungen sind auf den Auslieferungsstand gezogen (jetzt **90/90**).
+`VEROEFFENTLICHEN.md` trägt neue Zahlen (463/0) und einen neuen **§6 Sitemap
+einreichen** (Google Search Console + Bing Webmaster Tools, Rich-Results-Test).
+
+### Endkontrolle (Auslieferungs-Build)
+
+* `npm run qa:full` → **463 PASS / 0 FAIL**, Exitcode 0 (10 Module).
+* `npm run verify:offline` → **867 PASS / 0 FAIL**, 19 Live-Prüfungen `SKIP`,
+  Exitcode 0 (typecheck · lint · i18n × 5 · SEO · CWV · Fit · qa-features ·
+  browser-check).
+* `npm run cf:build` + `wrangler deploy --dry-run` → Exitcode 0 (Bundle und
+  Bindings siehe Tabelle).
+* `seo-audit.mjs` (zweite, fetch-basierte Sicht) → **90/90**.
+* Einzelsuiten auf demselben Build: `qa:i18n`, `qa:a11y`, `qa:ads`,
+  `qa:monetization`, `qa:smartlinks`, `qa:release`, `qa:perf` – alle 0 FAIL.
+
+### 📋 Grenzen dieser Runde
+
+* Ohne Upstream-Netz bleiben 19 Live-Prüfungen `SKIP`; die Endabnahme dieser
+  Punkte passiert in der CI (dort läuft `npm run verify` mit Internet) oder auf
+  einer vernetzten Maschine über denselben Befehl.
+* Cloudflare-Kontoeinstellungen (Always HTTPS, Early Hints, Brotli,
+  `www → apex`, Hotlink-Ausnahme für `/og.png`) liegen außerhalb des Repos und
+  sind deshalb dokumentiert, aber nicht automatisch prüfbar; die Sitemap-
+  Einreichung bei Google/Bing ist ein einmaliger Klickpfad (§6).
+* Der Live-Beweis „echte Börse unter echter Domain" bleibt die §5-Checkliste;
+  jede Position davon ist hier offline gegen den Fixture-Feed geprüft.

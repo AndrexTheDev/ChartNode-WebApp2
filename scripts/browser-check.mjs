@@ -33,6 +33,37 @@ function check(name, condition, detail = '') {
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* ---------- Upstream-Erreichbarkeit --------------------------------------
+   Ein Teil dieses Berichts prüft LIVE-Daten: Börsen-Streams (Binance/Bybit),
+   On-Chain-Provider (mempool.space, GoPlus), Derivate/Options (Deribit …).
+   Auf einem vernetzten Rechner (CI, Entwickler-Maschine) sind das echte
+   Prüfungen. In einer abgeschotteten Umgebung ohne Internet können sie
+   strukturell nicht grün werden, ohne dass die App etwas falsch macht.
+   Statt sie stillschweigend zu entfernen, wird die Erreichbarkeit EINMAL
+   gemessen: abhängige Prüfungen erscheinen dann als SKIP – nie als PASS und
+   nie als FAIL. Mit Netz bleibt das Verhalten unverändert streng. */
+const UPSTREAM_PROBES = ['https://api.binance.com/api/v3/ping', 'https://mempool.space/api/v1/fees/recommended'];
+let LIVE = false;
+for (const url of UPSTREAM_PROBES) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      LIVE = true;
+      break;
+    }
+  } catch {
+    /* nicht erreichbar – nächste Sonde */
+  }
+}
+let skips = 0;
+function liveCheck(name, condition, detail = '') {
+  if (LIVE) return check(name, condition, detail);
+  skips += 1;
+  checks.push({ name, skipped: true, ok: true, detail });
+  console.log(`  SKIP  ${name}${detail ? ` — ${detail}` : ''}   (offline: Live-Provider nicht erreichbar)`);
+}
+console.log(`\n  Upstream-Netz: ${LIVE ? 'erreichbar → Live-Prüfungen aktiv' : 'NICHT erreichbar → Live-Prüfungen werden als SKIP geführt'}`);
+
 /** Clicks a toolbar entry that may live behind one of the dropdown menus. */
 async function clickMenuItem(page, text) {
   const direct = await page.evaluate((t) => {
@@ -102,7 +133,7 @@ try {
   console.log('\n— waiting for live candles —');
   let legend = '';
   for (let i = 0; i < 40; i += 1) {
-    legend = await page.$eval('.font-mono.text-micro-10', (el) => el.textContent ?? '').catch(() => '');
+    legend = await page.$eval('[data-nc-legend]', (el) => el.textContent ?? '').catch(() => '');
     if (/O\s*[\d.]+/.test(legend)) break;
     await wait(1000);
   }
@@ -178,7 +209,7 @@ try {
   const canvasAfter = await page.$$eval('canvas', (nodes) => nodes.length);
   check('oscillator panes created (more canvases)', canvasAfter > canvasCount, `${canvasCount} → ${canvasAfter}`);
 
-  const legendWithIndicators = await page.$eval('.font-mono.text-micro-10', (el) => el.textContent ?? '');
+  const legendWithIndicators = await page.$eval('[data-nc-legend]', (el) => el.textContent ?? '');
   check('legend shows indicator readouts', /EMA 21/.test(legendWithIndicators) && /RSI/.test(legendWithIndicators), legendWithIndicators.slice(0, 140));
   await shot(page, 'terminal-indicators.png');
 
@@ -272,7 +303,7 @@ try {
   });
   let legends = [];
   for (let i = 0; i < 25; i += 1) {
-    legends = await page.$$eval('.font-mono.text-micro-10', (nodes) => nodes.map((n) => n.textContent ?? ''));
+    legends = await page.$$eval('[data-nc-legend]', (nodes) => nodes.map((n) => n.textContent ?? ''));
     if (legends.length >= 2) break;
     await wait(1000);
   }
@@ -296,7 +327,7 @@ let bybitLegend = '';
 let bybitNote = '';
 for (let i = 0; i < 20; i += 1) {
   const state = await page.evaluate(() => ({
-    legend: [...document.querySelectorAll('.font-mono.text-micro-10')].map((n) => n.textContent ?? '').join(' | '),
+    legend: [...document.querySelectorAll('[data-nc-legend]')].map((n) => n.textContent ?? '').join(' | '),
     note: document.body.innerText,
   }));
   bybitLegend = state.legend;
@@ -370,7 +401,13 @@ const copiedFeedback = await wall.evaluate(() => document.body.innerText.toLower
 check('copy button gives visual feedback', copiedFeedback);
 await wall.screenshot({ path: join(artifacts, 'terminal-support-wall.png') });
 await wall.evaluate(() => {
-  const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Ausblenden');
+  /* NUR den Dialog-Button klicken: „Ausblenden" trägt auch der (auf Desktop
+     unsichtbare) Touch-Hinweis der Werkzeugleiste, und der steht im DOM VOR
+     dem Portal. Ein document-weiter Textvergleich traf ihn, persistierte das
+     Dismissal und ließ anschließend den Mobile-Check der Touch-Warnung
+     mitfallen – ein Selektor-Fehler, der wie zwei App-Fehler aussah. */
+  const dialog = document.querySelector('[role="dialog"]');
+  const button = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === 'Ausblenden');
   button?.click();
 });
 await new Promise((r) => setTimeout(r, 400));
@@ -517,11 +554,11 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
       { timeout: 45000, polling: 1000 },
     ).catch(() => {});
     const panelText = await onchain.evaluate(() => document.querySelector('aside[aria-label="On-Chain-Signale"]')?.textContent ?? '');
-    check('BTC fees + mempool render live values', panelText.includes('Gebühren in sat/vB') && panelText.includes('Unbestätigt') && panelText.includes('Mempool'));
-    check('EVM gas renders for the tracked chains', panelText.includes('Ethereum') && panelText.includes('gwei') && panelText.includes('Polygon'));
-    check('Solana TPS + slot render', panelText.includes('Slot') && panelText.includes('User-TPS'));
-    check('DeFi TVL + stablecoins render', panelText.includes('Gesamt-TVL') && panelText.includes('$') && panelText.includes('Stablecoins'));
-    check('DEX heat lists trending pools', panelText.includes('Trending Pools'));
+    liveCheck('BTC fees + mempool render live values', panelText.includes('Gebühren in sat/vB') && panelText.includes('Unbestätigt') && panelText.includes('Mempool'));
+    liveCheck('EVM gas renders for the tracked chains', panelText.includes('Ethereum') && panelText.includes('gwei') && panelText.includes('Polygon'));
+    liveCheck('Solana TPS + slot render', panelText.includes('Slot') && panelText.includes('User-TPS'));
+    liveCheck('DeFi TVL + stablecoins render', panelText.includes('Gesamt-TVL') && panelText.includes('$') && panelText.includes('Stablecoins'));
+    liveCheck('DEX heat lists trending pools', panelText.includes('Trending Pools'));
     await onchain.screenshot({ path: join(artifacts, 'onchain-panel.png') });
 
     // token forensics: switch to the DEX WBTC token and expect GoPlus data
@@ -544,7 +581,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
       { timeout: 30000, polling: 1000 },
     ).catch(() => {});
     const forensicsText = await onchain.evaluate(() => document.querySelector('aside[aria-label="On-Chain-Signale"] section[aria-label="Token-Forensik"]')?.textContent ?? '');
-    check('GoPlus forensics render for the DEX token', forensicsText.includes('Holder') && forensicsText.includes('Top-10-Anteil') && forensicsText.includes('LP gelockt'), forensicsText.slice(0, 120));
+    liveCheck('GoPlus forensics render for the DEX token', forensicsText.includes('Holder') && forensicsText.includes('Top-10-Anteil') && forensicsText.includes('LP gelockt'), forensicsText.slice(0, 120));
 
     // close button undocks the panel
     await onchain.evaluate(() => {
@@ -581,9 +618,9 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
       { timeout: 45000, polling: 1000 },
     ).catch(() => {});
     const proText = await pro.evaluate(() => document.querySelector('aside[aria-label="Pro-Metriken"]')?.textContent ?? '');
-    check('derivatives: funding + OI + long/short render', proText.includes('Funding') && proText.includes('Open Interest') && proText.includes('L/S Konten'));
-    check('order flow: spread + imbalance + CVD render', proText.includes('Spread') && proText.includes('Imbalance') && proText.includes('CVD Session'));
-    check('global: market cap + dominance + sentiment render', proText.includes('Marktkap.') && proText.includes('BTC.D') && proText.includes('Fear & Greed'));
+    liveCheck('derivatives: funding + OI + long/short render', proText.includes('Funding') && proText.includes('Open Interest') && proText.includes('L/S Konten'));
+    liveCheck('order flow: spread + imbalance + CVD render', proText.includes('Spread') && proText.includes('Imbalance') && proText.includes('CVD Session'));
+    liveCheck('global: market cap + dominance + sentiment render', proText.includes('Marktkap.') && proText.includes('BTC.D') && proText.includes('Fear & Greed'));
     // gate.io spot tickers can sit in a 429 backoff – give the tiles time
     await pro
       .waitForFunction(
@@ -592,8 +629,8 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
       )
       .catch(() => {});
     const heatTiles = await pro.$$eval('aside[aria-label="Pro-Metriken"] section[aria-label="Heatmap"] span[title]', (nodes) => nodes.length);
-    check('heatmap paints 28 tiles', heatTiles === 28, `${heatTiles} tiles`);
-    check('options: DVOL + put/call + max pain render', proText.includes('DVOL BTC') && proText.includes('Put/Call OI') && proText.includes('Max Pain'));
+    liveCheck('heatmap paints 28 tiles', heatTiles === 28, `${heatTiles} tiles`);
+    liveCheck('options: DVOL + put/call + max pain render', proText.includes('DVOL BTC') && proText.includes('Put/Call OI') && proText.includes('Max Pain'));
     // wave 2: countdown + sparklines need deriv/flow/hist; smile/term need Deribit
     await pro.waitForFunction(
       () => {
@@ -603,13 +640,13 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
       { timeout: 90000, polling: 1000 },
     ).catch(() => {});
     const proText2 = await pro.evaluate(() => document.querySelector('aside[aria-label="Pro-Metriken"]')?.textContent ?? '');
-    check('wave2 pro: funding countdown renders', proText2.includes('Nächstes Funding') && /\d\d:\d\d/.test(proText2));
-    check('wave2 pro: OI + L/S + funding history sparklines render', proText2.includes('OI · 2,5 h') && proText2.includes('L/S Taker · 2,5 h') && proText2.includes('Funding · 8 Tage'));
-    check('wave2 pro: cumulative depth chart renders', proText2.includes('Orderbuch-Tiefe'));
-    check('wave2 pro: market breadth card renders adv/dec', proText2.includes('Marktbreite') && proText2.includes('Steigend') && proText2.includes('Fallend') && proText2.includes('Advancer-Quote'));
-    check('wave2 pro: IV smile + term structure render', proText2.includes('IV-Smile') && proText2.includes('IV-Termstruktur'));
+    liveCheck('wave2 pro: funding countdown renders', proText2.includes('Nächstes Funding') && /\d\d:\d\d/.test(proText2));
+    liveCheck('wave2 pro: OI + L/S + funding history sparklines render', proText2.includes('OI · 2,5 h') && proText2.includes('L/S Taker · 2,5 h') && proText2.includes('Funding · 8 Tage'));
+    liveCheck('wave2 pro: cumulative depth chart renders', proText2.includes('Orderbuch-Tiefe'));
+    liveCheck('wave2 pro: market breadth card renders adv/dec', proText2.includes('Marktbreite') && proText2.includes('Steigend') && proText2.includes('Fallend') && proText2.includes('Advancer-Quote'));
+    liveCheck('wave2 pro: IV smile + term structure render', proText2.includes('IV-Smile') && proText2.includes('IV-Termstruktur'));
     const sparkPaths = await pro.$$eval('aside[aria-label="Pro-Metriken"] svg polyline, aside[aria-label="Pro-Metriken"] svg path', (nodes) => nodes.length);
-    check('wave2 pro: sparkline/depth/smile SVGs painted', sparkPaths >= 4, `${sparkPaths} svg paths`);
+    liveCheck('wave2 pro: sparkline/depth/smile SVGs painted', sparkPaths >= 4, `${sparkPaths} svg paths`);
     await pro.screenshot({ path: join(artifacts, 'pro-panel.png') });
     await pro.evaluate(() => {
       const button = [...document.querySelectorAll('aside[aria-label="Pro-Metriken"] button')].find((b) => b.getAttribute('aria-label') === 'Schließen');
@@ -844,7 +881,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await pro.waitForSelector('[role="dialog"]', { timeout: 5000 });
   await pro.waitForFunction(() => (document.querySelector('[role="dialog"]')?.textContent ?? '').length > 500, { timeout: 30000, polling: 500 }).catch(() => {});
   const scrRows = await pro.$$eval('[role="dialog"] tbody tr', (nodes) => nodes.length);
-  check('screener lists a deep sortable table', scrRows >= 50, `${scrRows} rows`);
+  liveCheck('screener lists a deep sortable table', scrRows >= 50, `${scrRows} rows`);
   const scrText = await pro.$eval('[role="dialog"]', (node) => node.textContent ?? '');
   check('screener filters + csv export present', scrText.includes('Gainer >3%') && scrText.includes('CSV'));
   await pro.keyboard.press('Escape');
@@ -1054,7 +1091,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
     })
     .then(() => true)
     .catch(() => false);
-  check('heatmap renders 10+ volume tiles', tiles);
+  liveCheck('heatmap renders 10+ volume tiles', tiles);
   const tileBase = await w4.evaluate(() => document.querySelector('[role="dialog"] button[title*="/USDT ·"]')?.title.split('/')[0] ?? null);
   if (tileBase) {
     await w4.evaluate(() => document.querySelector('[role="dialog"] button[title*="/USDT ·"]')?.click());
@@ -1392,7 +1429,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   // give the feed time so all four engines have candles to chew on
   await w7
     .waitForFunction(() => {
-      const legend = document.querySelector('.font-mono.text-micro-10');
+      const legend = document.querySelector('[data-nc-legend]');
       return !!legend && /O\s*[\d.]+/.test(legend.textContent ?? '');
     }, { timeout: 60000 })
     .catch(() => {});
@@ -1553,9 +1590,18 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   if (cors.length > 0) console.log(`        CORS-blocked REST hosts: ${[...new Set(cors)].join(', ')}`);
   // 'Ping received after close' is a binance.vision mirror close-handshake race
   // (the socket manager reconnects and recovers; send() is readyState-guarded).
-  const realErrors = errors.filter(
-    (text) => !/favicon|404|Download the React DevTools|CORS policy|ERR_FAILED|Ping received after close/i.test(text),
-  );
+  const noisy = /favicon|404|Download the React DevTools|CORS policy|ERR_FAILED|Ping received after close/i;
+  const offlineNoise = /net::ERR_(CONNECTION_CLOSED|CONNECTION_REFUSED|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|ADDRESS_UNREACHABLE|TIMED_OUT)|WebSocket connection to 'wss?:\/\//i;
+  let suppressed = 0;
+  const realErrors = errors.filter((text) => {
+    if (noisy.test(text)) return false;
+    if (!LIVE && offlineNoise.test(text)) {
+      suppressed += 1;
+      return false;
+    }
+    return true;
+  });
+  if (suppressed > 0) console.log(`        ${suppressed} Netzfehler zur Live-Provider-Zeit unterdrückt (offline-Modus)`);
   check('no console errors on desktop (CORS inventory printed separately)', realErrors.length === 0, realErrors.slice(0, 3).join(' | '));
 } catch (error) {
   check(`browser run completed (${error instanceof Error ? error.message : 'error'})`, false);
@@ -1590,5 +1636,9 @@ await sh.close();
 await browser.close();
 }
 
-console.log(`\n${failures === 0 ? '✔ browser check OK' : `✖ ${failures} failure(s)`}\n`);
+console.log(
+  `\n${failures === 0 ? '✔ browser check OK' : `✖ ${failures} failure(s)`}` +
+    `${skips > 0 ? ` · ${skips} Live-Prüfung(en) ohne Upstream-Netz übersprungen` : ''}` +
+    `${LIVE ? '' : ' · offline-Modus'}\n`,
+);
 process.exit(failures === 0 ? 0 : 1);

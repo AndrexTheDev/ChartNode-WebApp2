@@ -31,14 +31,15 @@ deployed to Cloudflare via `@opennextjs/cloudflare` — **$0 backend cost**.
 Next.js 16 renamed the file convention (`middleware.ts` → `proxy.ts`, `middleware()` → `proxy()`).
 next-intl's `createMiddleware` is used unchanged; only the file name/export contract changed.
 
-### Why a `/terminal` route in Part 1?
-The Part-1 brief requires a working **"Launch Terminal"** CTA. A CTA that 404s is a defect, so the
-route ships as a *state-driven workspace shell* (toolbar, watchlist, multi-pane grid, layout
-switcher). Part 2 added the live feeds on top of it: candle streams, feed-status chip, live SVG
-candles, whale ticker and the Smart Search in the header — only the full canvas chart engine
-(indicators, drawing tools) is still pending.
-It is `noindex` until then. Delete `src/app/[locale]/terminal/` + `src/components/terminal/` if you
-prefer to defer it entirely.
+### Why a `/terminal` route?
+The Part-1 brief requires a working **"Launch Terminal"** CTA — a CTA that 404s is a defect. The
+route is therefore a complete product surface, not a placeholder: live candle streams from 12 venues
+(REST + WebSocket), the canvas chart engine (lightweight-charts) with **34 indicator kinds**, drawing
+tools, multi-pane grid with synced crosshair/zoom/timeframe, whale-flow, script engine,
+replay/backtest/screener/risk and the wave-2…7 edge tools (Liq Radar, Clock Edge, Lag Oracle, bar
+magnifier, volume profile …).
+It is **indexable** and listed in `sitemap.xml` like every other locale page; only shared parameter
+variants (`?ticker=…&price=…`) stay `noindex` so they cannot compete with the canonical terminal URL.
 
 ---
 
@@ -209,14 +210,14 @@ npm run dev            # http://localhost:3000  (Turbopack)
 
 ## 5. i18n & SEO guarantees
 
-* **5 locales** — `en de es zh ru`, each with a complete message bundle (300 keys, parity-checked).
-* **Static** — every `(locale × route)` pair is prerendered via `generateStaticParams` (36 static pages).
+* **5 locales** — `en de es zh ru`, each with a complete message bundle (**976 keys**, parity-checked by `npm run check:i18n`).
+* **Static** — 25 vorgerenderte Locale-Seiten (5 Sprachen × 5 Routen) plus `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, `icon.svg`, `llms.txt`; das **Terminal** rendert pro Request (Live-Daten) und liegt `s-maxage=300` im Edge-Cache.
 * **`<html lang>`** — exact BCP-47 tags: `en`, `de-DE`, `es-ES`, `zh-Hans`, `ru-RU`.
 * **hreflang** — `x-default` + all 5 languages on every page and in `sitemap.xml`.
 * **canonical / og:url / og:locale** — per-locale, absolute, derived from `NEXT_PUBLIC_SITE_URL`.
 * **Fonts** — self-hosted via `next/font` (Exo 2 + Manrope + JetBrains Mono cover Latin & Cyrillic;
   CJK falls back to system fonts to avoid shipping megabytes).
-* **robots/sitemap/manifest/icon.svg** — generated at build time; `/terminal` is `noindex` while the chart engine is pending.
+* **robots/sitemap/manifest/icon.svg** — at build time; `sitemap.xml` listet 30 URLs (6 Routen × 5 Sprachen) mit `hreflang` + `x-default`, `robots.txt` erlaubt alle Bots und verweist auf die Sitemap.
 
 ---
 
@@ -716,7 +717,7 @@ Test matrix (all green as of this commit):
 | i18n parity | `node scripts/check-i18n.mjs` | 1098 keys × 5 locales |
 | Unit/smoke (Node) | `npm run smoke` | ws + api + chart smoke ✔ (**211 chart checks** incl. all 34 indicator kinds, wave-2 oscillator maths, S/R clustering, divergence scanner, realized vol, session stats, alert store, **backtester fee/equity/marker proofs for all 6 strategies, risk maths**, **wave-5 script engine: helper maths vs references, error taxonomy, GitHub/gist raw-URL rewriting, script storage cap, CUSTOM store flow, hostile-persist script healing**; 7 live on-chain sources; live PRO-metric checks; **wave-7 edge-smoke: 41 checks** over Liq Radar bucket maths/placement, lead-lag lag+beta+pending pulse, regime classification/drivers/history, seasonality significance gates, edge store flags + persistence) |
 | Browser E2E | `node scripts/browser-check.mjs` | **169/169** (on-chain panel, PRO panel incl. countdown/sparklines/depth/breadth/smile/term, VP/aVWAP, S/R + divergence + alert + compare chips, session strip, 12 wave-2 indicators in the modal, replay transport + stepping + playback, strategy lab + markers, 150-row screener, risk calculator, watchlist popover, log/% axes, bar countdown, tip jar + celebration ribbon + usage nudge, wave-4 tools: pattern scanner + marker toggle, ratings matrix, heatmap treemap + tile-load, journal entry + stats, bar magnifier, alert create/persist, Renko & P&F switches, custom 7m legend, **wave-5: `www.NodeChart.cc` watermark attribute, Script Lab open/test/syntax-error/apply → CUSTOM legend chip, CUSTOM tile → lab routing, help center 34 indicator + 42 metric + 3 script docs with badges & search**, **wave-6: toolbar dropdown menus (role=menu, escape/outside close, aria-pressed toggles) + menu-routed tool flows**, **wave-7: Edge menu with all four engines, Liq Radar modal + `data-liq-radar` canvas flag toggle, Lag Oracle live stats + CEX leader select, Regime Compass readout, Clock Edge heatmaps, help Edge-Suite category (4 topics)**, landing survival section + wave-4/5/7 feature grids, DEX candles) |
-| SEO audit | `node scripts/seo-audit.mjs` | **~95/95** (per locale: title/description length, canonical, hreflang mesh 5+x-default, OG + locale alternates, twitter card, robots meta, JSON-LD graph types, single h1, visible FAQ, internal links; help: FAQPage+DefinedTermSet+BreadcrumbList; legal breadcrumbs; terminal noindex; robots.txt, sitemap 25 URLs + alternates, llms.txt) |
+| SEO audit (2. Sicht) | `node scripts/seo-audit.mjs` | **90/90** (fetch-basiert, unabhängig von `seo-check.mjs`: Titel-/Description-Länge, Canonical, hreflang-Netz 5+x-default, OG + Locale-Alternates, Twitter-Card, robots-Meta, JSON-LD-Typen, eine h1, interne Links; Hilfe: FAQPage+DefinedTermSet+BreadcrumbList; Legal-Breadcrumbs; Terminal indexierbar; robots.txt, Sitemap 30 URLs + Alternates, llms.txt) |
 | Ad containers | `node scripts/ad-slots-check.mjs` (fixture build :3001) | 13/13 |
 | Wave-7 QA (modular) | `npm run edge:smoke` + `node scripts/qa-edge-visual.mjs <step>` + `node scripts/qa-i18n-usage.mjs` | **steps 1–10 green (series complete; Step-Protokoll in der Git-Historie)**: Liq Radar 22 engine + 22 browser checks (pixel proof of magnet bands + leverage tags, modal DOM, persistence, sanitizer); Lag Oracle 20 engine + 16 browser checks (beta/hit-rate reconstruction, pulse gates, kline-subscribe lifecycle: leader feed only while the modal is open, unsubscribe on switch/close); Regime Compass 19 engine + 10 browser checks (precedence rules, boundary 80, history windowing, recommendation buttons proven to flip real tool toggles); Clock Edge 16 engine + 11 browser checks (bucket accounting, t-gate positive+negative, now-ring uniqueness, computed tint proof); Edge menu/toolbar 17 browser checks (ARIA semantics, engaged neon lifecycle, viral nudge, 1280/1024/768 layout integrity after a pre-existing header-wrap fix); primitive lifecycle 9 browser checks (setSource(null) clears every band row, theme-palette tint fingerprint acid→matrix→acid, 2x2 all-pane painting, chart-type re-attach, resize); i18n browser sweep 40/40 (5 locales × menu, four modals, help category, landing feature, zero intl errors); mobile & graceful failure 13/13 (390px gate + four modals fit/scroll, total feed outage via patched fetch/WebSocket → pane placeholder + need-hints in all four modals, armed magnets paint nothing, zero crashes); full regression sweep green (tsc, eslint, i18n parity 1098×5, production build, ws/api/chart/edge smoke, beta 30/30, browser-check 169, seo audit); docs & artifacts audit green (feature matrix, 4×5 edge help topics, screenshot inventory, donation-doctrine consistency); 62/62 edge i18n keys ×5 |
 | Beta journeys | `npm run beta` (fresh profiles: 5 locales × 4 routes, desktop/mobile newcomer, on-chain + PRO panels incl. wave-2 cards, S/R + divergence + alert tools, ad-block soft-wall, share-unlock, deep link + OG, 404/unknown-locale/hostile-param) | **30/30** |
@@ -735,20 +736,22 @@ running production build – SEO here is measured, not hoped for.
 2. **Metadata discipline** – per-locale titles/descriptions from the message
    bundles (descriptions kept inside the 70–170 char snippet window), keyword
    sets, `robots` with `max-image-preview: large` / unlimited snippets,
-   Twitter summary-large-image with the dynamic `/api/og` card, terminal
-   deliberately `noindex` (client workspace = thin content for crawlers).
+   Twitter summary-large-image with the dynamic `/api/og` card; the terminal is
+   indexable as the product page, only its shared parameter variants are not.
 3. **Structured data graph** (`src/lib/jsonld.ts` + `<JsonLd/>`):
    `Organization` + `WebSite` site-wide, `SoftwareApplication` (free offer,
-   full featureList) and `FAQPage` on the landing, `FAQPage` + `DefinedTermSet`
+   full featureList) on the landing, `FAQPage` + `DefinedTermSet`
    glossary (all 34 indicators + 42 metrics) + `BreadcrumbList` on help,
    `BreadcrumbList` on legal docs. Rich-result eligible: FAQ, glossary,
    breadcrumbs, software.
-4. **Visible, crawlable content** – the landing FAQ ships as zero-JS
-   `<details>` markup in six keyword-rich Q/As per locale (funding model,
-   venue coverage, script lab, privacy, TradingView comparison); help docs and
-   FAQ mirror 1:1 into schema so nothing is cloaked.
-5. **Crawler hygiene** – `robots.ts` (allow all, workspace disallowed, sitemap
-   + host), `sitemap.ts` (25 URLs, lastmod, change frequencies, hreflang),
+4. **Visible, crawlable content** – the landing stays deliberately short
+   (no FAQ/story sections; measured text length < 6k chars per locale), while
+   the help centre carries the zero-JS `<details>` FAQ in six keyword-rich Q/As
+   per locale (funding model, venue coverage, script lab, privacy,
+   TradingView comparison) plus 100+ glossary terms — all mirrored 1:1 into
+   schema so nothing is cloaked.
+5. **Crawler hygiene** – `robots.ts` (allow all + sitemap + host),
+   `sitemap.ts` (30 URLs, lastmod, change frequencies, hreflang),
    self-hosted `next/font` subsets (no external font requests, no CLS),
    semantic landmarks, exactly one `h1` per indexed page, breadcrumb navs as
    internal links, `llms.txt` so AI answer engines cite NodeChart correctly.
@@ -824,11 +827,12 @@ All four live behind the neon **Edge** dropdown in the toolbar row
   Mehr, `role="menu"` + `aria-pressed` toggles, Escape/outside-click close,
   neon engaged-state on the trigger) so ~26 chips became ~12 calm controls;
   and a systematic SEO programme: JSON-LD graph (Organization, WebSite,
-  SoftwareApplication, FAQPage, DefinedTermSet glossary, BreadcrumbList),
-  visible keyword-rich FAQ on the landing (zero-JS `<details>`, ×5 locales),
-  og:locale alternates, trimmed meta descriptions, visual breadcrumbs,
-  `llms.txt` for AI answer engines – audited by `scripts/seo-audit.mjs`
-  (~95 checks across 5 locales × 4 routes) – see §13.
+  SoftwareApplication on the landing, FAQPage + DefinedTermSet glossary +
+  BreadcrumbList on help/legal), keyword-rich FAQ in the help centre
+  (zero-JS `<details>`, ×5 locales), og:locale alternates, trimmed meta
+  descriptions, visual breadcrumbs, `llms.txt` for AI answer engines – audited
+  by `scripts/seo-audit.mjs` (90 checks across 5 locales × 4 routes) and
+  `scripts/seo-check.mjs` (Deploy-Gate) – see §13.
 * **Part 4 ✅ shipped (chart engine)** — `lightweight-charts` canvas terminal with uncroppable
   watermark, unlimited editable indicators (technicalindicators) incl. oscillator panes, 1x1/2x1/2x2
   grid with zoom/crosshair/timeframe sync, data-space drawing tools with persistence, mobile

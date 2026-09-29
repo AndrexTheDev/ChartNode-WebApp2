@@ -1,12 +1,14 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Systematic SEO audit (dev-only harness, not shipped).
+ * Systematischer SEO-Audit (Fetch-basiert, ohne Browser) — zweite, unabhängige
+ * Sicht auf die Metadaten-Programme. Das Deploy-Gate ist `npm run verify`
+ * (`scripts/seo-check.mjs`); dieser Audit läuft zusätzlich von Hand und prüft
+ * dieselben Seiten mit einer eigenen Implementierung (fetch + Regex statt
+ * DOM), damit ein Fehler in der einen Implementierung nicht still durchgeht.
  *
- * Crawls every locale × route of a running build and verifies the full
- * on-page programme: titles, descriptions, canonicals, hreflang mesh,
- * OpenGraph/Twitter cards, robots directives, JSON-LD graph types,
- * heading hygiene, internal links, FAQ content, sitemap + robots.txt +
- * llms.txt. Run with: node scripts/seo-audit.mjs
+ * Erwartungen = ausgelieferter Stand: Landing ohne FAQ-Sektion (schlank,
+ * Abschnitt M2), Terminal indexierbar, Sitemap 30 URLs (6 Routen × 5 Sprachen).
+ * Run mit: node scripts/seo-audit.mjs
  */
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
 const SITE = 'https://nodechart.cc';
@@ -95,13 +97,16 @@ for (const locale of LOCALES) {
   check(`[${locale}] robots meta index,follow`, (metaName(home.body, 'robots') ?? '').includes('index'));
   const types = jsonLdTypes(home.body);
   check(
-    `[${locale}] JSON-LD graph: Organization+WebSite+SoftwareApplication+FAQPage`,
-    ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage'].every((type) => types.has(type)),
+    `[${locale}] JSON-LD graph: Organization+WebSite+SoftwareApplication`,
+    ['Organization', 'WebSite', 'SoftwareApplication'].every((type) => types.has(type)),
     [...types].join(','),
   );
   const h1Count = (home.body.match(/<h1[\s>]/g) ?? []).length;
   check(`[${locale}] exactly one h1 on landing`, h1Count === 1, String(h1Count));
-  check(`[${locale}] visible FAQ section with six entries`, home.body.includes('id="faq"') && (home.body.match(/<details/g) ?? []).length === 6);
+  /* Die Landing trägt bewusst KEINE FAQ-Sektion (M2: schlanke Seite, Text
+     < 6k Zeichen, FAQ wandert in die Hilfeseite). Geprüft wird deshalb, dass
+     sie nicht zurückkommt – und dass die Hilfe-Seite die FAQ trägt. */
+  check(`[${locale}] landing intentionally has no FAQ section`, !home.body.includes('id="faq"'));
   check(`[${locale}] landing links into terminal + help`, home.body.includes(`/${locale}/terminal`) && home.body.includes(`/${locale}/help`));
 
   const help = await get(`/${locale}/help`);
@@ -119,17 +124,21 @@ for (const locale of LOCALES) {
   check(`[${locale}] legal JSON-LD breadcrumb`, jsonLdTypes(legal.body).has('BreadcrumbList'));
 
   const terminal = await get(`/${locale}/terminal`);
-  check(`[${locale}] terminal stays noindex`, (metaName(terminal.body, 'robots') ?? '').includes('noindex'));
+  check(
+    `[${locale}] terminal indexierbar (Produktseite, nicht mehr Baustelle)`,
+    (metaName(terminal.body, 'robots') ?? '').includes('index'),
+    metaName(terminal.body, 'robots') ?? 'kein robots-Meta',
+  );
 }
 
 console.log('\n— SEO audit: crawlers & machine readers —');
 const robots = await get('/robots.txt');
 check('robots.txt allows site + names sitemap', robots.status === 200 && robots.body.includes('Sitemap:') && robots.body.includes('/sitemap.xml'));
-check('robots.txt keeps the workspace out of the index', robots.body.includes('/*/terminal'));
+check('robots.txt lässt das Terminal indexieren (erlaubt Sitemap-Scan)', !robots.body.includes('Disallow: /*/terminal'));
 
 const sitemap = await get('/sitemap.xml');
 const urlCount = (sitemap.body.match(/<url>/g) ?? []).length;
-check(`sitemap lists all 25 locale×route URLs (${urlCount})`, urlCount === 25);
+check(`sitemap lists all 30 locale×route URLs (${urlCount})`, urlCount === 30);
 check('sitemap carries hreflang alternates + lastmod', sitemap.body.includes('xhtml:link') && sitemap.body.includes('<lastmod>'));
 
 const llms = await get('/llms.txt');
