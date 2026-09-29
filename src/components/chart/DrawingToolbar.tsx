@@ -83,7 +83,11 @@ export function DrawingToolbar({ paneId, drawingCount, onClearDrawings, classNam
       <div
         role="group"
         aria-label={t('tools.group')}
-        className={cn('flex items-center gap-1', toolsLocked && 'pointer-events-none opacity-35')}
+        /* `flex-wrap`: die neun Werkzeug-Buttons sind zusammen ~380 px breit –
+           in einem Pane auf einem 360-px-Gerät (326 px Innenbreite) lag der
+           „Alle Zeichnungen löschen"-Button 45 px außerhalb und war wegen des
+           `overflow-hidden` des Panels unsichtbar. */
+        className={cn('flex flex-wrap items-center gap-1', toolsLocked && 'pointer-events-none opacity-35')}
       >
         <ToolButton
           active={tool === 'none'}

@@ -67,7 +67,7 @@ export function AlertsPanelModal({ symbol, lastPrice, open, onClose }: AlertsPan
   return (
     <Modal open={open} onClose={onClose} title={t('alerts.title')} subtitle={t('alerts.sub')}>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {

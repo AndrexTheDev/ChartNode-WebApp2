@@ -127,7 +127,11 @@ export function Dropdown({
   }
 
   return (
-    <div ref={rootRef} className={cn('relative', className)}>
+    // `shrink-0`: Die Hülle ist ein Flex-Item in Toolbar-/Header-Zeilen. Ohne
+    // Schrumpfverbot quetschte eine enge Zeile (360-px-Pane) den Wrapper auf
+    // 43 px, während der Button 52 px breit blieb – die Box lief also aus ihrer
+    // eigenen Hülle heraus (9–16 px Überhang, vom Pane-`overflow-hidden` gekappt).
+    <div ref={rootRef} className={cn('relative shrink-0', className)}>
       <button
         ref={triggerRef}
         type="button"

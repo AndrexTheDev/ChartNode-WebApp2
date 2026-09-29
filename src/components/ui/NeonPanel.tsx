@@ -64,7 +64,12 @@ export function NeonPanel({
       )}
 
       {(title || actions) && (
-        <header className="relative flex items-center justify-between gap-3 border-b border-line/80 bg-elevated/50 px-3 py-2">
+        /* `flex-wrap`: auf 360-px-Geräten passte die Aktionsleiste (Timeframe,
+           Symbol, +, Vollbild, PNG, CSV, Zeichnungen löschen) nicht neben den
+           Titel – der letzte Button lag 45 px außerhalb des Panels und war wegen
+           `overflow-hidden` unsichtbar. Jetzt rutscht die Leiste in eine zweite
+           Zeile. Ab ~640 px ändert sich nichts. */
+        <header className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-line/80 bg-elevated/50 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <span aria-hidden className="flex gap-1">
               <span className="size-1.5 rounded-full bg-bear/70" />
@@ -73,7 +78,7 @@ export function NeonPanel({
             </span>
             <TitleTag className="truncate font-mono text-2xs uppercase tracking-cyber text-muted">{title}</TitleTag>
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center justify-end gap-1.5">{actions}</div>}
         </header>
       )}
 

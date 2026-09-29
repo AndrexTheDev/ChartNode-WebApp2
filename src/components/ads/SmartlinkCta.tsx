@@ -30,6 +30,13 @@ export function SmartlinkCta({ label, badge, leading, size = 'sm' }: SmartlinkCt
       data-smartlink=""
       variant="outline"
       size={size}
+      /* NeonButton-Basis ist `whitespace-nowrap`: die CTA war damit intrinsisch
+         ~306 px breit. Auf 320-px-Geräten ist der Strip-Container aber nur
+         288 px, sodass die CTA 20 px über den Rand lief und die Badge-Kante
+         abgeschnitten wurde. `max-w-full` begrenzt die Box, das Label oben darf
+         als einziges Element umbrechen – Badge und Höhe bleiben dadurch exakt
+         wie auf dem Desktop. */
+      className="max-w-full"
       leading={leading}
       trailing={
         <span className="nc-sl-badge ml-1 border border-primary/30 bg-primary/5 px-1 font-mono text-micro-8 uppercase tracking-cyber text-primary/80">
@@ -37,7 +44,7 @@ export function SmartlinkCta({ label, badge, leading, size = 'sm' }: SmartlinkCt
         </span>
       }
     >
-      {label}
+      <span className="whitespace-normal [overflow-wrap:anywhere]">{label}</span>
     </NeonButton>
   );
 }

@@ -193,7 +193,7 @@ export function ScriptLabModal({ candles, open, onClose }: ScriptLabModalProps) 
           </ul>
         )}
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => {
@@ -202,7 +202,7 @@ export function ScriptLabModal({ candles, open, onClose }: ScriptLabModalProps) 
               setResult(null);
               setError(null);
             }}
-            className="flex items-center gap-1 border border-line px-3 py-1.5 font-mono text-2xs uppercase tracking-cyber text-muted hover:text-fg"
+            className="flex shrink-0 items-center gap-1 border border-line px-3 py-1.5 font-mono text-2xs uppercase tracking-cyber text-muted hover:text-fg"
           >
             <Plus size={12} /> {t('scripts.new')}
           </button>

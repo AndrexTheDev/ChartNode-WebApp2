@@ -291,7 +291,10 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
           </span>
         }
         actions={
-          <div className="flex items-center gap-1">
+          /* `flex-wrap`: Dropdowns + PaneButtons sind als eine Zeile ~352 px breit
+             und passen in ein 360-px-Pane nicht (326 px). Ohne Umbruch schob die
+             Zeile den Header 26 px über den Panel-Rand. */
+          <div className="flex flex-wrap items-center justify-end gap-1">
             <Dropdown
               items={timeframeItems}
               triggerLabel={t('pane.timeframe')}

@@ -93,7 +93,7 @@ export function RiskModal({ symbol, lastPrice, open, onClose }: RiskModalProps) 
 function Out({ label, value, tone }: { label: string; value: string; tone?: 'bull' | 'bear' }) {
   return (
     <div className="nc-clip-sm border border-line/70 bg-bg/50 px-2 py-1.5">
-      <p className="font-mono text-2xs uppercase tracking-cyber text-faint">{label}</p>
+      <p className="font-mono text-2xs uppercase tracking-cyber text-faint [overflow-wrap:anywhere]">{label}</p>
       <p className={cn('font-mono text-sm tabular-nums', tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', !tone && 'text-fg')}>{value}</p>
     </div>
   );

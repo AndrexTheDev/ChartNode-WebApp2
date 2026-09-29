@@ -19,7 +19,7 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M2 | Terminal-Funktionalität (16 Modals, Layouts, Palette, Themes) | ✅ geprüft | alle 16 Modals öffnen/schließen korrekt, Inhalte vollständig lokalisiert |
 | M2b | **Mobile Terminal-Layout (Prio 1)** | ✅ umgebaut | Chartfläche im First-View: **47 px → 625 px** (74 % des Viewports) |
 | M3 | Chart-Engine / Canvas (Indikatoren, Zeichnungen, Pane-Sync, Replay, Export) | ✅ geprüft | Fixture-Feed: 300 Candles, 36 Indikatoren, Zeichnungen, Pane-Sync, Bar-Replay, Backtest-Marker, PNG **mit** Wasserzeichen – 0 Page-Errors |
-| M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings) | ⏳ offen | – |
+| M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings, 15 Modals) | ✅ geprüft | 120/120 Seiten-Kombis · 132/170 Modal-Läufe (Rest = Toggles) · **7 echte Layout-Bugs behoben** |
 | M5 | A11y vertieft (Tastatur, Fokus, Screenreader, Kontrast) | ⏳ offen | – |
 | M6 | Werbung/Monetarisierung im echten Fill-Fall | ⏳ offen | – |
 | M7 | Performance / Core Web Vitals | ⏳ offen | – |
@@ -36,7 +36,9 @@ Rechen-Indikatoren. Kein Widerspruch.
 > Whale-Ticker, Rate-Limit-Overlay), zeigt deshalb legale Leerzustände. Das ist **kein**
 > Defekt, sondern Umgebung. Für M3 wurde deshalb ein Fixture-Layer gebaut (`.audit/fixtures.mjs`),
 > der die Kline-Antworten aller 12 Venues im Original-Wire-Format beantwortet — der Chart läuft
-> damit über den echten Adapter-/Parser-/Render-Pfad.
+> damit über den echten Adapter-/Parser-/Render-Pfad. Für M4 kam eine **echte CJK-Schrift**
+> dazu (Noto Sans CJK SC): ohne sie rendert Chrome ZH als Tofu-Kästchen und jede Messung
+> wäre wertlos.
 
 ---
 
@@ -229,13 +231,64 @@ Datumsangaben korrekt lokalisiert, Canvas unverändert 1508×634.
 
 ---
 
-## 6. Vorschlag für die nächsten Schritte
+## 6. ✅ Modul M4 — i18n-Layout-Stresstest
+
+5 Sprachen × 6 Seiten × 4 Viewports (360/390/768/1024) plus **jedes** Werkzeug-Modal
+in 5 Sprachen × 2 Viewports (360/1024) = 170 Modal-Läufe. Geprüft wurden Overflow,
+abgeschnittener Text, rohe i18n-Keys, Dialog-Fit und Scrollbarkeit.
+
+### Ergebnis
+
+| Suite | Umfang | Ergebnis |
+|---|---|---|
+| Seiten (eigener Sweep) | 120 Kombinationen | **120/120 sauber** |
+| Werkzeug-Modals (eigener Sweep) | 170 Läufe | **132 ok**; die 38 „Fehlschläge" sind reine Toggle-Buttons (Whale-Flow, aVWAP, S/R Auto, Divergenzen) — sie öffnen definitionsgemäß keinen Dialog. **0 echte Befunde** |
+| Projekt-Suite `npm run qa:i18n-layout` | 110 Checks (5 Sprachen × 6 Viewports, 320 px → 3440 px) | **110/110** (vorher 108/110) |
+
+### 🔧 Sieben echte Layout-Bugs gefunden und behoben
+
+Alle entstanden durch **lange Wörter in festen Rastern** bzw. **nicht umbruchfähige
+Aktionsleisten** — genau die Klasse von Fehlern, die von Übersetzern ausgelöst wird
+und in der Quellsprache unsichtbar bleibt.
+
+| # | Stelle | Symptom (gemessen) | Fix |
+|---|---|---|---|
+| 1 | `NeonPanel` (Panel-Header) | Aktionsleiste kann nicht umbrechen → auf 360 px **45 px neben dem Panel** (Werkzeugleiste) bzw. 26 px (Pane-Header); `overflow-hidden` schnitt sie weg | Header `flex-wrap` + `gap-y`, Aktionsleiste `flex-wrap justify-end` |
+| 2 | `ChartGrid` Pane-Aktionen | Zeitrahmen/Symbol/+ /Vollbild/PNG/CSV = ~352 px in 326 px → 26 px Überhang | Aktionszeile `flex-wrap justify-end` |
+| 3 | `DrawingToolbar` Werkzeuggruppe | 9 Buttons ≈ 380 px → „Alle Zeichnungen löschen" **lag 45 px außerhalb und war unsichtbar** | Werkzeuggruppe `flex-wrap` |
+| 4 | `BacktestModal` / `RiskModal` / `JournalModal` | Lange Wörter („Матожидание", „Trefferquote", „Recompensa/Riesgo") sprengten ihre Rasterspalte (7–23 px) | Labels `[overflow-wrap:anywhere]` — bricht im Wort und senkt die min-content-Breite |
+| 5 | `RatingsModal` | „Verkaufen" blieb 45 px breit (min-content ≈ 88 px) → Textüberhang 44 px, RS-Zeile bis 40 px | Zeile `flex-wrap`, Gauge auf Phones schmaler, Textspalte `min-w-[9rem]` |
+| 6 | `AlertsPanelModal` / `ScriptLabModal` | Buttonzeilen wurden auf 119/46 px gequetscht („Benachrichtigungen aus" 40 px Überhang) | `flex-wrap` + `shrink-0` |
+| 7 | `Dropdown` (Zeitrahmen/Symbol) | Wrapper quetschte unter die Inhaltsbreite (43 px Box bei 52 px Button) | Wrapper `shrink-0` |
+
+### 🔧 Smartlink-Leiste (Werbung) — drei Fixes in `ads-kit/smartlinks.css` + `SmartlinkCta`
+
+| # | Symptom | Fix |
+|---|---|---|
+| 8 | Badge brach mitten im Wort („Patrocinad/o", bis 13 px Überhang) | `white-space: nowrap` + `flex: 0 0 auto` |
+| 9 | Emoji-Icon verlor 3–4 px (Flex-Schrumpfung) | `.nc-sl-strip-icon { flex: 0 0 auto }` |
+| 10 | Landing-CTA (`SmartlinkCta`) war intrinsisch 306 px breit und lief auf 320-px-Geräten 20 px über den Rand, Badge-Kante abgeschnitten | Button `max-w-full`, Label umbruchfähig — Desktop bleibt exakt einzeilig/32 px hoch |
+
+### ✅ Bewusst nicht geändert (kein Defekt)
+
+- **Tofu-Kästchen im ZH-Terminal** vor dem CJK-Font-Setup waren eine Sandbox-Lücke
+  (keine CJK-Schrift im Container), kein App-Fehler. Mit installierter Schrift ist ZH
+  vollständig lesbar und alle 5 Sprachen messen gleich.
+- Die 10 verbleibenden Treffer meiner ersten Heuristik (`v0.1.0`, Kurszahlen wie `104.9`)
+  waren **Messfehler meines Scanners** (Regex hielt Punkt-Zahlen für i18n-Keys) — der
+  Scanner wurde korrigiert, nicht die App.
+- `sr-only`-Elemente melden konstruktionsbedingt `+277px` Überhang; sie sind 1×1 px und
+  für Screenreader gedacht.
+
+---
+
+## 7. Vorschlag für die nächsten Schritte
 
 | Reihenfolge | Modul | Inhalt | Warum jetzt |
 |---|---|---|---|
 | 1 | ~~**M3a**~~ | ~~mobiler Terminal-Umbau~~ | ✅ **erledigt** (Abschnitt 4) |
 | 2 | ~~**M3b**~~ | ~~Chart-Engine-Prüfung~~ | ✅ **erledigt** (Abschnitt 5, inkl. Fixture-Feed statt Netzzwang) |
-| 3 | **M4** | i18n-Layout-Stresstest RU/ZH + alle Modals auf 360/390/768/1024 | i18n ist Verkaufsargument, Layout-Brüche fallen dort zuerst auf |
+| 3 | ~~**M4**~~ | ~~i18n-Layout-Stresstest~~ | ✅ **erledigt** (Abschnitt 6, 10 Fixes) |
 | 4 | **M5** | A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons | Barrierefreiheit + SEO-Nebenwirkung |
 | 5 | **M6** | Werbung/Monetarisierung im Fill-Fall (CLS, „kollabiert ohne Fill", Social Bar, Ad-Block-Wall) | Einnahmen, ohne die UX zu beschädigen |
 | 6 | **M7** | Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets | Ranking + subjektive Geschwindigkeit |
@@ -244,7 +297,7 @@ Datumsangaben korrekt lokalisiert, Canvas unverändert 1508×634.
 
 ---
 
-## 7. Arbeitsumgebung / Reproduktion
+## 8. Arbeitsumgebung / Reproduktion
 
 Die Prüfungen liefen in einer Sandbox ohne Zugang zu Börsen/DEX/Fonts (nur npm + GitHub).
 Damit der Produktionsbuild trotzdem echt geprüft werden kann:
@@ -266,7 +319,7 @@ installiertes Chrome for Testing.
 
 ---
 
-## 8. Fixes dieses Durchgangs (Diff-Übersicht)
+## 9. Fixes dieses Durchgangs (Diff-Übersicht)
 
 | Datei | Änderung |
 |---|---|
@@ -290,5 +343,20 @@ installiertes Chrome for Testing.
 | `src/components/tools/MagnifierModal.tsx` | Zeitstempel über `dateTime(ms, locale)` statt `toLocaleString()` |
 | `src/components/tools/PatternsModal.tsx` | dito für die Muster-Zeitstempel |
 | `src/components/tools/AlertsPanelModal.tsx` | dito für den Alarm-Zeitstempel |
+
+**Nachtrag Durchgang 3 (M4):**
+
+| Datei | Änderung |
+|---|---|
+| `src/components/ui/NeonPanel.tsx` | Header/Aktionsleiste umbruchfähig (Werkzeugleiste lag 45 px außerhalb des Panels) |
+| `src/components/chart/ChartGrid.tsx` | Pane-Aktionszeile `flex-wrap justify-end` |
+| `src/components/chart/DrawingToolbar.tsx` | Werkzeuggruppe `flex-wrap` („Alle Zeichnungen löschen" war unsichtbar) |
+| `src/components/ui/Dropdown.tsx` | Wrapper `shrink-0` statt Quetschung unter die Buttonbreite |
+| `src/components/tools/{Backtest,Risk,Journal}Modal.tsx` | Stat-Labels `[overflow-wrap:anywhere]` |
+| `src/components/tools/RatingsModal.tsx` | Zeile umbruchfähig, Gauge responsiv, Textspalte `min-w-[9rem]` |
+| `src/components/tools/{AlertsPanel,ScriptLab}Modal.tsx` | Buttonzeilen `flex-wrap` + `shrink-0` |
+| `ads-kit/smartlinks.css` | Badge `nowrap` + `flex:0 0 auto`, Strip-Icon `flex:0 0 auto`, Strip-Button `flex-wrap` |
+| `public/ads/smartlinks.css` | via `npm run ads:sync` gespiegelt |
+| `src/components/ads/SmartlinkCta.tsx` | `max-w-full` + umbruchfähiges Label (CTA lief auf 320 px über den Rand) |
 
 Alle Änderungen sind typgeprüft (`tsc`), lint-frei, gebaut und im Browser nachgemessen.
