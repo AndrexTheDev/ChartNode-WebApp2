@@ -1,14 +1,16 @@
 # © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 # Gate bei jedem Pull Request: dieselben Prüfungen, die der Deploy-Workflow
-# (.github/workflows/deploy.yml, Schritt „Guard-Suite") vor dem Ausrollen fährt.
+# (.github/workflows/deploy.yml) vor dem Ausrollen fährt.
 #
 # Warum als eigener Workflow: Am 2026-09-15 lief der Deploy auf `main` in der
-# Guard-Suite auf und riss den Job mit – ohne dass es vorher eine Prüfung am
-# Pull Request gab. Jetzt ist die Kette für jeden PR sichtbar, BEVOR gemergt
-# wird; deploy.yml ruft exakt diese Datei auf (workflow_call), damit Gate und
-# Deploy nicht auseinanderlaufen können.
+# Guard-Suite auf und riss den Job mit; vorher gab es keine Prüfung am Pull
+# Request, also war der Fehlschlag erst auf main sichtbar. Jetzt ist die Kette
+# für jeden PR sichtbar, BEVOR gemergt wird; deploy.yml ruft exakt diese Datei
+# auf (workflow_call), damit Gate und Deploy nicht auseinanderlaufen können.
 #
-# Kein Deploy, keine Secrets: dieser Workflow prüft nur.
+# Kein Deploy, keine Secrets: dieser Workflow prüft nur. Scheitert das Gate,
+# stehen die FAIL-Zeilen als Annotation am Check (und in der Job-Zusammenfassung)
+# plus das vollständige Protokoll als Artefakt.
 name: Verify (Gate)
 
 on:
@@ -34,23 +36,19 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Build (Produktionsbuild wie beim Deploy)
+        run: npm run build
+
       - name: Guard-Suite (SEO/CWV/Fit/QA) – Deploy nur grün
-        run: |
-          npm run build
-          npx next start -H 127.0.0.1 -p 3000 &
-          # Auf den Server WARTEN statt blind zu schlafen: ein fixes `sleep 4`
-          # kippt auf langsameren Runnern und lässt das Gate ohne App-Fehler
-          # scheitern. Erst wenn /de antwortet, startet die Prüfsuite.
-          for attempt in $(seq 1 60); do
-            if curl -sf -o /dev/null http://127.0.0.1:3000/de; then
-              echo "Server bereit nach ${attempt}s"
-              break
-            fi
-            if [ "$attempt" = "60" ]; then
-              echo "Server nach 60s nicht erreichbar – Build-Log oben prüfen"
-              exit 1
-            fi
-            sleep 1
-          done
-          npm run verify
-          kill %1 || true
+        run: bash scripts/ci-gate.sh
+
+      - name: Protokoll sichern (nur bei Fehlschlag)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-log
+          path: |
+            verify.log
+            server.log
+          retention-days: 14
+          if-no-files-found: ignore
