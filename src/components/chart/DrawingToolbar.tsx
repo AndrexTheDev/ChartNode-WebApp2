@@ -149,11 +149,15 @@ export function DrawingToolbar({ paneId, drawingCount, onClearDrawings, classNam
         />
       </div>
 
-      {/* ------------------------------ mobile gate ---------------------------- */}
-      {isTouch && !dismissed && (
+      {/* ------------------------------ mobile gate ----------------------------
+          M7: Sichtbarkeit entscheidet CSS (`nc-touch-gate` + `data-nc-touch`
+          aus dem Boot-Skript), nicht die Hydration. Vorher erschien der Hinweis
+          erst nach der JS-Touch-Erkennung und schob die Chart-Fläche um 194 px
+          nach unten (0,110 CLS). Das Markup ist jetzt serverseitig identisch. */}
+      {!dismissed && (
         <div
           role="status"
-          className="nc-clip flex w-full flex-col gap-2 border border-warning/45 bg-warning/10 px-3 py-2"
+          className="nc-touch-gate nc-clip w-full flex-col gap-2 border border-warning/45 bg-warning/10 px-3 py-2"
         >
           <div className="flex items-start gap-2">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />

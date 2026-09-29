@@ -494,7 +494,6 @@ async function main() {
     await wait(900);
     const second = await clickText(page, '3x2');
     await wait(900);
-    const state = await readAdState(page);
     check('Multi-Chart-Geste löst genau einen Popunder aus', route.counts.popunder === 1, `Gestes=${first}/${second}, popunder-Skripte=${route.counts.popunder}`);
     await page.click('body').catch(() => undefined);
     await wait(500);

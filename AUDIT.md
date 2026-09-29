@@ -22,7 +22,7 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings, 15 Modals) | ✅ geprüft | 120/120 Seiten-Kombis · 132/170 Modal-Läufe (Rest = Toggles) · **7 echte Layout-Bugs behoben** |
 | M5 | A11y-Deep-Dive (Fokusringe, Tab-Ordnung in 19 Overlays, Light-Kontrast, Icon-Namen) | ✅ geprüft | **175/175 Checks · 0 Befunde** · 11 echte Fixes (u. a. bull/bear folgten dem Theme nicht) |
 | M6 | Werbung/Monetarisierung im Fill-Fall (CLS, Kollaps, Social Bar, Ad-Block-Wall, Spender) | ✅ geprüft | **64/64 Checks · 0 Befunde** · 9 echte Fixes (u. a. Doppel-Id auf dem Terminal, unsichtbare Social Bar) |
-| M7 | Performance / Core Web Vitals | ⏳ offen | – |
+| M7 | Performance / Core Web Vitals (Mid-Range-Mobile: 4× CPU + Slow 4G) | ✅ geprüft | **41/41 Checks · 0 Befunde** · 6 echte Fixes (u. a. Terminal-CLS 0,110 → 0,000 · Landing-JS 220,9 → 188,3 kB) |
 | M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher) | ⏳ offen | – |
 | M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
 
@@ -424,7 +424,85 @@ also ohne Terminal-Slots) gefahren: **57/57 Checks, 0 Befunde**.
 
 ---
 
-## 9. Vorschlag für die nächsten Schritte
+## 9. ✅ Modul M7 — Performance / Core Web Vitals
+
+Gemessen wird der **Produktionsbuild** (`next build --webpack` + `next start`) unter
+**4× CPU-Bremse und Slow-4G-Netz** (CDP-Emulation) — also ungefähr das, was ein
+Mittelklasse-Handy im Mobilfunknetz sieht. Die Transfergrößen kommen aus
+`encodedDataLength` **je Request**, nicht aus dem Bundle-Report: „kritisch" heißt
+hier *vor dem `load`-Event fertig*, „nachgeladen" alles danach. Das ist die
+ehrlichere Zahl, weil sie die echte Ladelinie inklusive Lazy-Chunks zeigt.
+
+| Stufe | Was gemessen wird | Umfang |
+|---|---|---|
+| **S1** Ladeleistung | Landing + Terminal gedrosselt: TTFB, FCP, LCP (+ LCP-Element), CLS, TBT, Long Tasks, Transfer je Ressourcentyp | 12 Checks |
+| **S2** Bundle | Kritisches vs. nachgeladenes JS je Seite, größte Chunks namentlich | 4 |
+| **S3** Fonts je Sprache | Transfer + Dateizahl für de/ru/zh, Preload-Anzahl, **Cyrillic nur bei Bedarf** (Nachweis über die `unicode-range`-Regeln) | 14 |
+| **S4** Interaktion | INP-Kandidat (Event-Timing) und Menü→Dialog-Latenz bei 4× CPU, inklusive Nachladen des Dialog-Chunks; Long Tasks der Startphase | 5 |
+| **S5** Auslieferung | Cache-Header (immutable, 1 Jahr) und Kompression für HTML/JS/CSS/Fonts | 6 |
+
+**Ergebnis:** Baseline **29 ok / 7 Befunde** → nach den Fixes **41 ok / 0 Befunde**.
+
+**Regression nach den Umbauten:** M5-A11y **175/175** · M6-Werbung **57/57**
+(Auslieferungs-Build) · i18n-Layout-Stresstest **110/110** · Funktions-Smoke
+(`npm run qa:perf:smoke`: Suche, Teilen, Support) **6/6** — der Lazy-Umbau hat keine
+bestehende Prüfung gebrochen. `tsc --noEmit` 0 Fehler, ESLint ohne Befund.
+
+| Metrik (4× CPU, Slow 4G) | vorher | nachher |
+|---|---|---|
+| Terminal LCP | 3784 ms | **1116 ms** |
+| Terminal CLS | 0,110 | **0,0004** |
+| Landing LCP · CLS · TBT | 1124 ms · 0,000 · 190 ms | **1088 ms · 0,000 · 168 ms** |
+| Landing kritisches JS | 220,9 kB | **188,3 kB** (Budget 200) |
+| Terminal kritisches JS | 365,0 kB | **255,8 kB** (Budget 300) |
+| Schriftdateien je Seite | 17 Dateien / 204,2 kB | **9 Preloads**; de 12/147,3 · ru 11/130,5 · zh 10/122,6 kB |
+| INP · Dialog-Latenz (4× CPU) | 715 ms / 1974 ms (beides Messartefakt) | **4 ms / 38 ms** |
+
+### 🔧 Sechs echte Befunde gefunden und behoben
+
+| # | Stelle | Befund (gemessen) | Fix |
+|---|---|---|---|
+| 1 | `app/[locale]/layout.tsx` + `tailwind.config.js` | **17 Schriftdateien / 204,2 kB auf jeder Seite** — davon acht kyrillische (≈ 78 kB), die nur /ru braucht: `next/font` hängt an jedes Subset einen Preload-Hinweis, unabhängig von der Sprache. | Zweiter `next/font`-Aufruf je Familie für `cyrillic` mit `preload:false`; beide Variablen hintereinander in der Tailwind-Kette, sodass der Browser je Glyph über `unicode-range` wählt (9 Preloads, Cyrillic lädt erst beim ersten kyrillischen Zeichen) |
+| 2 | `layout/ThemeBootScript.tsx` + `styles/globals.css` + `chart/DrawingToolbar.tsx` | Die Touch-Warnung der Zeichenwerkzeuge stand **unbedingt** im Terminal-Baum (nur per CSS versteckt) und schob beim Mount das Chart-Pane von `[420,424]` auf `[614,231]` ⇒ **CLS 0,110** beim Erstbesuch. | Warnung hängt jetzt an einer **Pre-Paint-Klasse**: das Boot-Skript setzt `data-nc-touch='1'` (`pointer: coarse` / Touch-Punkte), CSS blendet sie aus — der Sprung ist beseitigt, bevor das erste Paint passiert (CLS 0,000) |
+| 3 | `components/ui/LazyGate.tsx` (**neu**) + `terminal/TerminalShell.tsx` | 15 Modals sowie On-Chain- und Pro-Metrics-Dock lagen im Erstkontakt-Bundle des Terminals ⇒ **365,0 kB** kritisches JS, TBT 383 ms mit 9 Long Tasks. | `LazyGate` mountet erst beim ersten Öffnen (`active`) bzw. beim Vorwärmen (`warm`), 15 Komponenten als `dynamic(…,{ssr:false})`; `warmToolChunks()` lädt Backtest/Risk/Journal/Alerts/Screener nach 3 s Idle nach ⇒ kritisch **255,8 kB**, der Dialog-Chunk steht in 38 ms |
+| 4 | `components/search/SmartSearch.tsx` + `store/useExchangeSelection.ts` + `lib/exchanges.ts` + `ads/AdManager.tsx` | Die Kopfzeilen-Suche hing am Layout-Baum **jeder** Seite und zog die Such-Engine (DEX-Adapter + CEX-Katalog), das GoPlus-Audit, den Börsen-Infrastruktur-Chunk (alle zwölf Venue-Hosts, ≈ 20 kB gzip) und die beiden Monetarisierungs-Dialoge mit ⇒ Landing **220,9 kB** kritisch, obwohl die Startseite nichts davon benutzt. | `isCexExchange` als Leaf-Guard nach `lib/exchanges`; Region-/Börsen-Probe (`exchangeProbe`) lädt der Bootstrap dynamisch; Such-Engine, `cex-universe` und GoPlus-Audit kommen erst beim Tippen bzw. beim ersten Treffer; Support- und Teilen-Dialog hängen hinter `LazyGate` ⇒ Landing **188,3 kB** |
+| 5 | `package.json` (`browserslist`) | Ohne Zielbrowser-Angabe transpilierte Next für sehr alte Browser — Mehrkosten in jedem Chunk. | browserslist auf gepflegte Browser (Chrome/Edge/FF ≥ 111, Safari/iOS ≥ 16.4, Opera ≥ 97) statt „last 2 versions/dead" |
+| 6 | `scripts/audit-sandbox/run-m7-perf.mjs` | **Zwei Checks konnten nie grün werden** — beide Messfehler: „Dialog steht ≤ 1200 ms" addierte feste Skript-Wartezeiten (400 + 1500 ms) zu *jedem* Lauf (≈ 1974 ms), und der INP las Event-Timing-Einträge, bevor der Browser sie auslieferte (0 Events ⇒ Check still wirkungslos). | S4 pollt jetzt **im Browser** (25-ms-Raster, `performance.now()`) bis Menü bzw. Dialog stehen; vor dem Event-Timing-Read wird gewartet und der Check verlangt ≥ 1 Event; die Startphase-Longtasks werden vor dem Zähler-Reset gesichert |
+
+### ✅ Aufgeklärt, **nicht** geändert (kein Defekt)
+
+- **Die Untergrenze ist das Framework:** Next-Client-Runtime (64,8 kB gzip) plus
+  React/React-DOM (`framework` + `4bd1b696`, ≈ 126 kB gzip) sind rund zwei Drittel
+  der 188,3 kB. Weiteres Splitten würde Bytes nicht sparen, sondern nur die
+  Ladelinie verketten (der Chunk müsste vor der ersten Interaktion nachkommen).
+- **Der `polyfills`-Chunk** (110 kB roh) steht im Bundle-Report, wird aber als
+  `noModule`-Legacy-Skript ausgeliefert und von modernen Browsern **nie
+  angefordert** — im Netz-Mitschnitt taucht er als Transfer nicht auf.
+- **Das LCP-Element** ist auf beiden Seiten ein Textabsatz (Landing: Hero-Absatz,
+  Terminal: Kurszeile), nicht das Canvas. Das Chart wächst danach ohne
+  Layoutsprung — CLS 0,000.
+- **Das Terminal bleibt schwerer als die Landing** (255,8 vs. 188,3 kB kritisch):
+  Chart-Engine (`lightweight-charts`, 54,8 kB gzip) und Feed-Infrastruktur werden
+  erst geladen, wenn wirklich gerendert wird; die Startseite bleibt davon frei.
+  Weitere Terminal-Chunks (100,7 kB) kommen nach dem `load` und stören die
+  Interaktionsbereitschaft nicht.
+- **Transiente Long Tasks** von 142–156 ms in der Startphase stammen aus der
+  Chart-Initialisierung und dem ersten Feed-Batch; der TBT liegt mit 305 ms
+  (Terminal) klar unter der 600-ms-Grenze.
+
+### 📋 Umgebungshinweise
+
+- Suite: `npm run qa:perf` bzw. `node scripts/audit-sandbox/run-m7-perf.mjs [--quick] [--compare <report.json>]`
+  gegen `next start` auf `:3000`. Report `/tmp/nc-shots/m7-report.json`,
+  Screenshots `/tmp/nc-shots/m7-*.png`. `--quick` kürzt nur die Idle-Fenster.
+- `--compare` stellt zwei Läufe nebeneinander (Baseline gegen Fix) — alle Zahlen
+  dieser Tabelle stammen aus solchen Paaren.
+- Die Suite **prüft die App, nicht die Sandbox**: geblockte Börsen-Hosts erzeugen
+  fehlgeschlagene Requests, zählen aber nicht als Befund (Noise-Filter).
+
+---
+
+## 10. Vorschlag für die nächsten Schritte
 
 | Reihenfolge | Modul | Inhalt | Warum jetzt |
 |---|---|---|---|
@@ -433,13 +511,13 @@ also ohne Terminal-Slots) gefahren: **57/57 Checks, 0 Befunde**.
 | 3 | ~~**M4**~~ | ~~i18n-Layout-Stresstest~~ | ✅ **erledigt** (Abschnitt 6, 10 Fixes) |
 | 4 | ~~**M5**~~ | ~~A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons~~ | ✅ **erledigt** (Abschnitt 7, 175/175 Checks, 11 Fixes) |
 | 5 | ~~**M6**~~ | ~~Werbung/Monetarisierung im Fill-Fall~~ | ✅ **erledigt** (Abschnitt 8, 64/64 Checks, 9 Fixes) |
-| 6 | **M7** | Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets | Ranking + subjektive Geschwindigkeit |
+| 6 | ~~**M7**~~ | ~~Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets~~ | ✅ **erledigt** (Abschnitt 9, 41/41 Checks, 6 Fixes) |
 | 7 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten |
 | 8 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss |
 
 ---
 
-## 10. Arbeitsumgebung / Reproduktion
+## 11. Arbeitsumgebung / Reproduktion
 
 Die Prüfungen liefen in einer Sandbox ohne Zugang zu Börsen/DEX/Fonts (nur npm + GitHub).
 Damit der Produktionsbuild trotzdem echt geprüft werden kann:
@@ -469,7 +547,7 @@ installiertes Chrome for Testing.
 
 ---
 
-## 11. Fixes dieses Durchgangs (Diff-Übersicht)
+## 12. Fixes dieses Durchgangs (Diff-Übersicht)
 
 | Datei | Änderung |
 |---|---|
@@ -545,3 +623,23 @@ Alle Änderungen sind typgeprüft (`tsc`), lint-frei (`0 Fehler / 2 Alt-Warnunge
 | `public/ads/smartlinks.css` | via `npm run ads:sync` gespiegelt |
 | `scripts/audit-sandbox/ad-fixtures.mjs` | **neu**: Ad-Stubs (Native 4:1, Rail 160×600, Social Bar, Popunder, Direct-Link) + CLS-Zeitachse mit Quell-Rechtecken |
 | `scripts/audit-sandbox/run-m6-ads.mjs` | **neu**: M6-Suite S0–S11 (64 Checks) |
+
+**Nachtrag Durchgang 6 (M7 · Performance):**
+
+| Datei | Änderung |
+|---|---|
+| `src/app/[locale]/layout.tsx` | Fonts je Familie gesplittet: `latin` (Preload an) + `cyrillic` (`preload:false`, eigene `--font-*-cyr`-Variablen), alle via `cn()` am Layout-Wrapper |
+| `tailwind.config.js` | `fontFamily`-Ketten enthalten beide Variablen (`display`/`display-cyr` usw.) — der Browser wählt pro Glyph über `unicode-range` |
+| `src/components/layout/ThemeBootScript.tsx` | setzt zusätzlich `data-nc-touch='1'` pre-paint (`pointer: coarse` / `ontouchstart` / `maxTouchPoints`) — zusammen mit dem Ad-Guard in einem Durchlauf |
+| `src/styles/globals.css` | `.nc-touch-gate{display:none}` / `[data-nc-touch='1'] .nc-touch-gate{display:flex}` für die Touch-Warnung ohne Layoutsprung |
+| `src/components/chart/DrawingToolbar.tsx` | Touch-Warnung als CSS-erste Gating-Klasse (`nc-touch-gate`), Desktop unverändert |
+| `src/components/ui/LazyGate.tsx` | **neu**: mountet Kinder erst bei `active`/`warm` (deferred `setState`), `warmToolChunks()` lädt die fünf Werkzeug-Chunks nach 3 s Idle |
+| `src/components/terminal/TerminalShell.tsx` | 15 Modals + On-Chain-/Pro-Metrics-Dock als `dynamic(…,{ssr:false})` in `<LazyGate>`, Watchlist-Popover gegated, `warmToolChunks()` im Mount-Effect |
+| `src/components/ads/AdManager.tsx` | Support- und Teilen-Dialog hinter `LazyGate` + `dynamic(…,{ssr:false})` (hingen vorher im Layout-Bundle jeder Seite) |
+| `src/components/search/SmartSearch.tsx` | Such-Engine (`api/search`), `cex-universe` und GoPlus-Audit (`api/security`) werden beim Tippen/Auswählen/Treffer nachgeladen; Guard-Import aus `lib/exchanges` |
+| `src/store/useExchangeSelection.ts` | Region-/Börsen-Probe (`api/exchangeProbe` → `websockets/rest` + `registry`) lädt der Bootstrap dynamisch; `isCexExchange` kommt aus `lib/exchanges` |
+| `src/lib/exchanges.ts` | `isCexExchange()` als Leaf-Guard (keine Börsen-Infrastruktur im Layout-Bundle) |
+| `package.json` | `browserslist` auf gepflegte Browser (Chrome/Edge/FF ≥ 111, Safari/iOS ≥ 16.4, Opera ≥ 97) |
+| `scripts/audit-sandbox/run-m7-perf.mjs` | **neu**: M7-Suite S1–S5 (41 Checks), kritisch/nachgeladen je Seite, Font-Nachweis über `unicode-range`, INP mit Zähler-Reset, Messfix S4 (Polling statt fester Wartezeiten) |
+| `scripts/audit-sandbox/run-m7-smoke.mjs` | **neu**: Funktions-Smoke für die drei Pfade des Lazy-Umbaus (Suche, Teilen-Dialog, Support-Dialog) |
+| `package.json` | Sammelskripte für die Suiten: `qa:a11y`, `qa:ads`, `qa:perf`, `qa:perf:smoke` |

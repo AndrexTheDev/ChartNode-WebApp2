@@ -44,8 +44,6 @@ import { ToolMenu } from '@/components/ui/ToolMenu';
 import { AdSlot } from '@/components/ads/AdManager';
 import { SmartlinkKit } from '@/components/ads/SmartlinkKit';
 import { SidebarBanner } from '@/components/ads/SidebarBanner';
-import { OnChainPanel } from '@/components/onchain/OnChainPanel';
-import { ProMetricsPanel } from '@/components/pro/ProMetricsPanel';
 import { requestPopunder } from '@/lib/ads/adsterra';
 import { offerToast, SMARTLINKS_ENABLED } from '@/lib/ads/smartlinks';
 import { ExchangePicker } from './ExchangePicker';
@@ -75,18 +73,32 @@ import {
   useChartStore,
 } from '@/store/useChartStore';
 import { ToastHost } from '@/components/ui/ToastHost';
-import { BacktestModal } from '@/components/tools/BacktestModal';
-import { RiskModal } from '@/components/tools/RiskModal';
-import { ScreenerModal } from '@/components/tools/ScreenerModal';
-import { WatchlistPopover } from '@/components/tools/WatchlistPopover';
-import { RatingsModal } from '@/components/tools/RatingsModal';
-import { HeatmapModal } from '@/components/tools/HeatmapModal';
-import { JournalModal } from '@/components/tools/JournalModal';
-import { MagnifierModal } from '@/components/tools/MagnifierModal';
-import { AlertsPanelModal } from '@/components/tools/AlertsPanelModal';
-import { PatternsModal } from '@/components/tools/PatternsModal';
-import { ScriptLabModal } from '@/components/tools/ScriptLabModal';
-import { EdgeLiqModal, EdgeLagModal, EdgeRegimeModal, EdgeClockModal } from '@/components/tools/EdgeModals';
+import { LazyGate, warmToolChunks } from '@/components/ui/LazyGate';
+import dynamic from 'next/dynamic';
+
+/*
+ * M7: Alle Werkzeuge werden erst beim ersten Öffnen geladen (siehe LazyGate).
+ * `ssr: false` ist hier korrekt: die Dialoge rendern geschlossen ohnehin
+ * `null`, und ohne Server-Render bleibt das Markup vor der Hydration identisch.
+ * `EdgeModals` bündelt vier Dialoge in einem Modul – ein Chunk für alle vier.
+ */
+const BacktestModal = dynamic(() => import('@/components/tools/BacktestModal').then((m) => m.BacktestModal), { ssr: false });
+const RiskModal = dynamic(() => import('@/components/tools/RiskModal').then((m) => m.RiskModal), { ssr: false });
+const ScreenerModal = dynamic(() => import('@/components/tools/ScreenerModal').then((m) => m.ScreenerModal), { ssr: false });
+const WatchlistPopover = dynamic(() => import('@/components/tools/WatchlistPopover').then((m) => m.WatchlistPopover), { ssr: false });
+const RatingsModal = dynamic(() => import('@/components/tools/RatingsModal').then((m) => m.RatingsModal), { ssr: false });
+const HeatmapModal = dynamic(() => import('@/components/tools/HeatmapModal').then((m) => m.HeatmapModal), { ssr: false });
+const JournalModal = dynamic(() => import('@/components/tools/JournalModal').then((m) => m.JournalModal), { ssr: false });
+const MagnifierModal = dynamic(() => import('@/components/tools/MagnifierModal').then((m) => m.MagnifierModal), { ssr: false });
+const AlertsPanelModal = dynamic(() => import('@/components/tools/AlertsPanelModal').then((m) => m.AlertsPanelModal), { ssr: false });
+const PatternsModal = dynamic(() => import('@/components/tools/PatternsModal').then((m) => m.PatternsModal), { ssr: false });
+const ScriptLabModal = dynamic(() => import('@/components/tools/ScriptLabModal').then((m) => m.ScriptLabModal), { ssr: false });
+const EdgeLiqModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeLiqModal), { ssr: false });
+const EdgeLagModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeLagModal), { ssr: false });
+const EdgeRegimeModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeRegimeModal), { ssr: false });
+const EdgeClockModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeClockModal), { ssr: false });
+const OnChainPanel = dynamic(() => import('@/components/onchain/OnChainPanel').then((m) => m.OnChainPanel), { ssr: false });
+const ProMetricsPanel = dynamic(() => import('@/components/pro/ProMetricsPanel').then((m) => m.ProMetricsPanel), { ssr: false });
 import { TOKEN_INDEX } from '@/lib/constants';
 import type { ExchangeId } from '@/websockets/types';
 import { SupportModal } from '@/components/support/SupportModal';
@@ -133,6 +145,10 @@ export function TerminalShell() {
   const tp = useTranslations('pro');
   const t2 = useTranslations('support');
   const hydrated = useHydrated();
+  /** M7: Werkzeug-Chunks in der Idle-Zeit wärmen (Klick bleibt sofort). */
+  useEffect(() => {
+    warmToolChunks();
+  }, []);
   const openShare = useViralStore((s) => s.openShare);
   const onChainOpen = useOnChainStore(selectOnChainOpen);
   const toggleOnChain = useOnChainStore((s) => s.toggle);
@@ -728,7 +744,9 @@ export function TerminalShell() {
               <List className="size-3" aria-hidden />
               {t('watch')}
             </Chip>
-            <WatchlistPopover open={watchOpen} onClose={() => setWatchOpen(false)} />
+            <LazyGate active={watchOpen}>
+              <WatchlistPopover open={watchOpen} onClose={() => setWatchOpen(false)} />
+            </LazyGate>
           </span>
           <button
             type="button"
@@ -827,48 +845,74 @@ export function TerminalShell() {
       </div>
 
       {/* live on-chain signals (right dock, fetched only while open) */}
-      <OnChainPanel />
+      <LazyGate active={onChainOpen}>
+        <OnChainPanel />
+      </LazyGate>
 
       {/* PRO metrics dock (derivatives / flow / global / heat / options) */}
-      <ProMetricsPanel />
+      <LazyGate active={proOpen}>
+        <ProMetricsPanel />
+      </LazyGate>
       <ToastHost />
-      <BacktestModal
-        paneId="pane-1"
-        symbol={activeToken.symbol}
-        timeframe={timeframe}
-        candles={sessionCandles}
-        open={backtestOpen}
-        onClose={() => setBacktestOpen(false)}
-      />
-      <ScreenerModal open={screenerOpen} onClose={() => setScreenerOpen(false)} />
-      <RiskModal symbol={activeToken.symbol} lastPrice={livePrice} open={riskOpen} onClose={() => setRiskOpen(false)} />
-      <PatternsModal candles={sessionCandles} open={patternsOpen} onClose={() => setPatternsOpen(false)} />
-      <RatingsModal
-        exchange={(selection?.exchange ?? activeToken.exchange ?? 'binance') as ExchangeId}
-        symbol={activeToken.symbol}
-        open={ratingsOpen}
-        onClose={() => setRatingsOpen(false)}
-      />
-      <HeatmapModal open={heatmapOpen} onClose={() => setHeatmapOpen(false)} onPick={pickSymbol} />
-      <JournalModal symbol={activeToken.symbol} open={journalOpen} onClose={() => setJournalOpen(false)} />
-      <MagnifierModal
-        symbol={activeToken.symbol}
-        barMs={barMs}
-        candles={sessionCandles}
-        open={magnifierOpen}
-        onClose={() => setMagnifierOpen(false)}
-      />
-      <ScriptLabModal candles={sessionCandles} open={scriptLabOpen} onClose={() => setScriptLabOpen(false)} />
-      <EdgeLiqModal candles={sessionCandles} />
-      <EdgeLagModal candles={sessionCandles} />
-      <EdgeRegimeModal candles={sessionCandles} />
-      <EdgeClockModal candles={sessionCandles} />
-      <AlertsPanelModal
-        symbol={activeToken.symbol}
-        lastPrice={livePrice}
-        open={alertsOpen}
-        onClose={() => setAlertsOpen(false)}
-      />
+      <LazyGate active={backtestOpen} warm>
+        <BacktestModal
+          paneId="pane-1"
+          symbol={activeToken.symbol}
+          timeframe={timeframe}
+          candles={sessionCandles}
+          open={backtestOpen}
+          onClose={() => setBacktestOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={screenerOpen} warm>
+        <ScreenerModal open={screenerOpen} onClose={() => setScreenerOpen(false)} />
+      </LazyGate>
+      <LazyGate active={riskOpen} warm>
+        <RiskModal symbol={activeToken.symbol} lastPrice={livePrice} open={riskOpen} onClose={() => setRiskOpen(false)} />
+      </LazyGate>
+      <LazyGate active={patternsOpen}>
+        <PatternsModal candles={sessionCandles} open={patternsOpen} onClose={() => setPatternsOpen(false)} />
+      </LazyGate>
+      <LazyGate active={ratingsOpen}>
+        <RatingsModal
+          exchange={(selection?.exchange ?? activeToken.exchange ?? 'binance') as ExchangeId}
+          symbol={activeToken.symbol}
+          open={ratingsOpen}
+          onClose={() => setRatingsOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={heatmapOpen}>
+        <HeatmapModal open={heatmapOpen} onClose={() => setHeatmapOpen(false)} onPick={pickSymbol} />
+      </LazyGate>
+      <LazyGate active={journalOpen} warm>
+        <JournalModal symbol={activeToken.symbol} open={journalOpen} onClose={() => setJournalOpen(false)} />
+      </LazyGate>
+      <LazyGate active={magnifierOpen}>
+        <MagnifierModal
+          symbol={activeToken.symbol}
+          barMs={barMs}
+          candles={sessionCandles}
+          open={magnifierOpen}
+          onClose={() => setMagnifierOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={scriptLabOpen}>
+        <ScriptLabModal candles={sessionCandles} open={scriptLabOpen} onClose={() => setScriptLabOpen(false)} />
+      </LazyGate>
+      <LazyGate active={edgeLiqOpen || edgeLagOpen || edgeRegimeOpen || edgeClockOpen}>
+        <EdgeLiqModal candles={sessionCandles} />
+        <EdgeLagModal candles={sessionCandles} />
+        <EdgeRegimeModal candles={sessionCandles} />
+        <EdgeClockModal candles={sessionCandles} />
+      </LazyGate>
+      <LazyGate active={alertsOpen} warm>
+        <AlertsPanelModal
+          symbol={activeToken.symbol}
+          lastPrice={livePrice}
+          open={alertsOpen}
+          onClose={() => setAlertsOpen(false)}
+        />
+      </LazyGate>
       <SupportModal />
       <SupportNudge />
       {/* Smartlink-Kit (Terminal): Sponsored-Strip + Post-Action-Offers */}

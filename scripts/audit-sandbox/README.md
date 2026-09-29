@@ -15,6 +15,8 @@ wäre.
 | `font-mock.cjs` | Offline-Font-Mock für `next build`: liefert für jede Google-Fonts-URL echtes CSS + echte Font-Dateien aus den `@fontsource`-Paketen (kein Dummy, damit das Layout realistisch bricht – oder eben nicht). |
 | `ad-fixtures.mjs` | **Ad-Fixtures (M6)**: fängt die Adsterra-Delivery-Skripte ab und ersetzt sie durch Stubs, die sich wie die echten verhalten (Native-Banner füllt sein Container-Div, Rail liefert 160×600-iframe, Social Bar verankert sich am Boden, Popunder armiert sich, Direct-Link antwortet). Modi `fill` / `nofill` / `blocked` / `flake`; dazu CLS-Messung mit Quell-Rechtecken. |
 | `run-m6-ads.mjs` | **M6-Suite**: S0 CLS-Grundrauschen · S1 QA-Guard · S2 Social Bar (Reservierung, Überdeckung, Dialog-Pause) · S4 Sidebar-Rail · S5 Header-Banner · S6 Terminal-Slots · S7 Ad-Block-Wall · S8 Spender-Grace · S9 Popunder-Cap · S10 Smartlinks · S11 Fehler-Sweep. |
+| `run-m7-perf.mjs` | **M7-Suite (Performance)**: S1 Ladeleistung (TTFB/FCP/LCP/CLS/TBT bei 4× CPU + Slow 4G), S2 Bundle (kritisch vs. nachgeladen je Seite), S3 Fonts je Sprache inkl. Cyrillic-Nachweis über `unicode-range`, S4 Interaktion (INP via Event-Timing, Menü→Dialog-Latenz), S5 Auslieferung (Cache/Kompression). Schalter: `--quick` (kurze Idle-Fenster), `--compare <report.json>` (zwei Läufe nebeneinander). |
+| `run-m7-smoke.mjs` | **M7-Smoke**: Funktionstest der Pfade, die der Lazy-Umbau berührt (Kopfzeilen-Suche inkl. Lazy-Engine, Teilen-Dialog, Support-Dialog). 6 Checks. |
 | `run-m5-a11y.mjs` | **M5-A11y-Suite**: S1 Fokus-Sichtbarkeit (dunkel + hell), S2 Tab-Ordnung/Fokus in 19 Overlays inkl. Fehlerachse, S2b Menü-Tastatur (4 ToolMenüs), S3 Light-Kontrast, S3b Token-Matrix über alle 5 Skins, S4 Icon-Namen (inkl. Lokalisierungs-Detektor), S5 Semantik. Schalter: `--locale de`, `--quick`. |
 
 ## Ablauf
@@ -40,7 +42,17 @@ unter `/tmp/nc-shots/m5-report.json`, Screenshots daneben.
 M6 (Werbung im Fill-Fall): **64 ok / 0 Befunde** in 158 s (Full-Fill-Build mit
 `NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE`/`_DESKTOP`); auf dem Auslieferungs-Build ohne
 diese Variablen **57 ok / 0** (die Slot-Stufen überspringen dann bewusst).
-Report `/tmp/nc-shots/m6-report.json`. Die M5-Suite braucht
+Report `/tmp/nc-shots/m6-report.json`.
+
+M7 (Performance): **41 ok / 0 Befunde** (Durchgang 6). Gemessen wird gegen
+`next start` (Produktionsbuild): Landing/`de` **LCP 1088 ms · CLS 0,000 · TBT 168 ms**,
+Terminal **LCP 1116 ms · CLS 0,000 · TBT 305 ms**, kritisches JS **188,3 kB** (Landing)
+bzw. **255,8 kB** (Terminal), 9 Font-Preloads, Cyrillic nur bei Bedarf.
+Report `/tmp/nc-shots/m7-report.json`.
+Die Suite braucht **keine** Fixtures: sie misst, was der Browser tatsächlich lädt
+(geblockte Börsen-Hosts zählen nicht als Befund). Die drei Suiten hängen auch als
+npm-Skripte im Projekt: `npm run qa:a11y`, `npm run qa:ads`, `npm run qa:perf`,
+`npm run qa:perf:smoke`. Die M5-Suite braucht
 den Fixture-Feed **nicht** (geprüft werden Struktur, Fokus, Kontrast) – die
 Fehlerachse pro Fläche läuft trotzdem mit.
 

@@ -524,6 +524,19 @@ select[aria-invalid='true'] {
   }
 }
 
+/* ── Touchscreen-Hinweis (Werkzeugleiste) ──────────────────────────────────
+   M7: Der Hinweis erschien erst nach der Hydration (JS-Touch-Erkennung) und
+   schob die Chart-Fläche um ~194 px nach unten – gemessen 0,110 CLS, der
+   einzige messbare Layout-Sprung des Terminals. Das Boot-Skript setzt
+   `data-nc-touch` jetzt VOR dem ersten Paint, die Sichtbarkeit entscheidet
+   also CSS; Server- und Client-Markup bleiben identisch (Hydration-sicher). */
+.nc-touch-gate {
+  display: none;
+}
+[data-nc-touch='1'] .nc-touch-gate {
+  display: flex;
+}
+
 /* ── Ad-Pause unter offenen Dialogen ───────────────────────────────────────
    Adsterras Social Bar bringt ihren eigenen (sehr hohen) z-index mit. Damit
    kein fremdes UI über Modal-Controls liegt, wird die getaggte Bar solange

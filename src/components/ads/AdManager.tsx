@@ -18,8 +18,17 @@ import {
   type AdVariant,
 } from '@/lib/ads/config';
 import { donationGraceActive, useViralStore, WALL_COOLDOWN_MS } from '@/store/useViralStore';
-import { ShareModal } from '../share/ShareModal';
-import { SupportModal } from './SupportModal';
+import dynamic from 'next/dynamic';
+import { LazyGate } from '@/components/ui/LazyGate';
+
+/*
+ * M7: Die beiden Dialoge der Monetarisierungsschicht (Spenden-Wall, Teilen)
+ * werden erst beim Öffnen geladen. Sie hingen vorher statisch im Root-Layout
+ * und damit im Erstkontakt-Bundle JEDER Seite – auch der Landingpage, die
+ * beide nie zeigt.
+ */
+const SupportModal = dynamic(() => import('./SupportModal').then((m) => m.SupportModal), { ssr: false });
+const ShareModal = dynamic(() => import('../share/ShareModal').then((m) => m.ShareModal), { ssr: false });
 
 /** Social Bar: max. Versuche (Initial + Netz-Retry + Retry nach Wall-Close). */
 const SOCIAL_MAX_TRIES = 3;
@@ -224,10 +233,16 @@ function AdManagerInner() {
     };
   }, []);
 
+  const shareOpen = useViralStore((s) => s.shareOpen);
+
   return (
     <>
-      <SupportModal open={wallOpen} onClose={closeWall} />
-      <ShareModal />
+      <LazyGate active={wallOpen}>
+        <SupportModal open={wallOpen} onClose={closeWall} />
+      </LazyGate>
+      <LazyGate active={shareOpen}>
+        <ShareModal />
+      </LazyGate>
     </>
   );
 }

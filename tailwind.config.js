@@ -77,10 +77,14 @@ module.exports = {
       },
 
       fontFamily: {
+        // M7: Die kyrillische Datei steht direkt hinter der lateinischen –
+        // beide sind dasselbe Schriftbild, nur mit getrenntem `unicode-range`.
+        // So lädt /ru sie beim ersten kyrillischen Glyph nach, während de/en/
+        // es/zh sie gar nicht erst anfassen (vorher: 8 Preload-Dateien für alle).
         brand: ['var(--font-brand)', 'Orbitron', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        display: ['var(--font-display)', 'var(--font-display-cyr)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'var(--font-sans-cyr)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'var(--font-mono-cyr)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
 
       fontSize: {
