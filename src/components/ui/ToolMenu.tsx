@@ -63,6 +63,53 @@ export function ToolMenu({ id, label, icon: Icon, items, align = 'left', engaged
     };
   }, [open, panelRef]);
 
+  /** Pfeiltasten-Pfad wie im Dropdown: Menüs sind role="menu", also mit
+   *  Up/Down/Home/End bedienbar (WAI-ARIA-Menü-Muster). */
+  function menuItems(): HTMLButtonElement[] {
+    return [...(panelRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+  }
+
+  function focusItem(index: number) {
+    const items = menuItems();
+    if (items.length === 0) return;
+    items[(index + items.length) % items.length]?.focus();
+  }
+
+  function onPanelKeyDown(event: React.KeyboardEvent) {
+    const items = menuItems();
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusItem(current + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        focusItem(current - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusItem(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        focusItem(items.length - 1);
+        break;
+      case 'Escape':
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus();
+        break;
+      case 'Tab':
+        // Menü schließen, den Fokus aber normal weiterlaufen lassen.
+        setOpen(false);
+        break;
+      default:
+        break;
+    }
+  }
+
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button
@@ -72,6 +119,14 @@ export function ToolMenu({ id, label, icon: Icon, items, align = 'left', engaged
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        onKeyDown={(event) => {
+          // ArrowDown öffnet das Menü und springt auf den ersten Eintrag.
+          if (event.key === 'ArrowDown' && !open) {
+            event.preventDefault();
+            setOpen(true);
+            window.setTimeout(() => focusItem(0), 0);
+          }
+        }}
         onClick={() => setOpen((value) => !value)}
         className={cn(
           'nc-clip-sm inline-flex h-7 items-center gap-1.5 border px-2 font-mono text-2xs uppercase tracking-cyber transition-colors',
@@ -91,6 +146,7 @@ export function ToolMenu({ id, label, icon: Icon, items, align = 'left', engaged
           ref={panelRef}
           role="menu"
           aria-label={label}
+          onKeyDown={onPanelKeyDown}
           style={anchorStyle}
           className={cn(
             'nc-clip-sm z-overlay min-w-48 animate-fade-up [animation-duration:200ms] border border-line bg-surface/95 py-1 shadow-neon-sm backdrop-blur-xl',
@@ -106,8 +162,13 @@ export function ToolMenu({ id, label, icon: Icon, items, align = 'left', engaged
                 data-menu-item={item.key}
                 aria-pressed={typeof item.active === 'boolean' ? item.active : undefined}
                 onClick={() => {
-                  item.onClick();
+                  /* M5-Fix: Fokus VOR dem Öffnen auf den Trigger zurückgeben
+                     (gleiches Muster wie Dropdown.selectItem). Sonst landet er
+                     nach dem Schließen eines über das Menü geöffneten Dialogs
+                     auf <body>, weil das Menü-Item selbst aus dem DOM fällt. */
                   setOpen(false);
+                  triggerRef.current?.focus();
+                  item.onClick();
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-2xs uppercase tracking-cyber transition-colors',

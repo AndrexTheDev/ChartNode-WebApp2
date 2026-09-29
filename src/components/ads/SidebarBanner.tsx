@@ -157,11 +157,11 @@ export function SidebarBanner() {
     <aside
       aria-label={t('sponsored')}
       style={{ width: SIDEBAR_BANNER_WIDTH + 16 }}
-      className="relative hidden shrink-0 overflow-hidden border-r border-line/60 bg-surface/20 p-2 xl:block"
+      className="nc-sidebar-rail relative hidden shrink-0 overflow-hidden border-r border-line/60 bg-surface/20 p-2 xl:block"
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute right-1 top-1 z-10 font-mono text-micro-8 uppercase tracking-cyber text-faint/70"
+        className="pointer-events-none absolute right-1 top-1 z-10 font-mono text-micro-8 uppercase tracking-cyber text-faint"
       >
         {t('sponsored')}
       </span>

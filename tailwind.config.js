@@ -48,11 +48,15 @@ module.exports = {
         danger: 'hsl(var(--nc-danger) / <alpha-value>)',
         warning: 'hsl(var(--nc-warning) / <alpha-value>)',
 
-        /* Flat aliases of the fixed neon scale. The whole UI writes
-           `text-bull` / `border-bear/50` – without these top-level entries
-           every such class is dropped from the build. */
-        bull: '#00ff9d',
-        bear: '#ff2e63',
+        /* Flat aliases for the whole UI (`text-bull` / `border-bear/50`).
+           M5-Fix: they resolve to the *theme* variables like every other
+           semantic colour – the previous fixed `#00ff9d` / `#ff2e63` kept
+           neon green/pink text in the light skin at 1.24:1 contrast while
+           the chart canvas (src/lib/chart-theme.ts) already followed the
+           theme, so text and candles disagreed. The brand-fixed neon shades
+           are still available as `neon.bull` / `neon.bear`. */
+        bull: 'hsl(var(--nc-bull) / <alpha-value>)',
+        bear: 'hsl(var(--nc-bear) / <alpha-value>)',
 
         /* ---- fixed neon brand scale (theme independent) ---- */
         neon: {

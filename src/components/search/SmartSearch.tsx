@@ -247,6 +247,8 @@ export function SmartSearch({ className }: { className?: string }) {
         )}
       >
         <ScanSearch className="size-3.5 shrink-0 text-primary" aria-hidden />
+        {/* M5-Fix: hier stand `focus:outline-none` – damit war der globale
+            :focus-visible-Ring des Suchfelds komplett unsichtbar. */}
         <input
           ref={inputRef}
           type="text"
@@ -265,7 +267,7 @@ export function SmartSearch({ className }: { className?: string }) {
           aria-autocomplete="list"
           autoComplete="off"
           spellCheck={false}
-          className="h-full min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+          className="h-full min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-faint"
         />
 
         {kind !== 'text' && query.trim().length > 0 && (

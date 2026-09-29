@@ -10,6 +10,9 @@ import {
   AD_BREAKPOINT,
   ADS_ENABLED,
   isDesktopViewport,
+  NATIVE_DESKTOP_CONTAINER_ID,
+  NATIVE_MOBILE_CONTAINER_ID,
+  NATIVE_SLOTS_SHARE_PLACEMENT,
   nativePlacement,
   socialBarPlacement,
   type AdVariant,
@@ -22,10 +25,25 @@ import { SupportModal } from './SupportModal';
 const SOCIAL_MAX_TRIES = 3;
 
 /**
+ * Läuft der 7-Tage-Cooldown der Soft-Wall?
+ *
+ * M6-Fix: Der Social-Bar-Retry nach dem Wall-Close („Blocker ggf. gerade
+ * deaktiviert") lief auch dann, wenn der Nutzer die Wall mit Escape/X
+ * geschlossen hatte – der fehlgeschlagene Retry setzte `wallOpen` sofort
+ * wieder auf true. Ergebnis: ein Dialog, der sich nicht schließen ließ.
+ * Jetzt gewinnt der Cooldown: wer einmal abgelehnt hat, wird in dieser
+ * Session nicht erneut gefragt.
+ */
+function wallInCooldown(): boolean {
+  const { wallDismissedAt } = useViralStore.getState();
+  return wallDismissedAt !== null && Date.now() - wallDismissedAt < WALL_COOLDOWN_MS;
+}
+
+/**
  * Misst nach dem Load die selbst verankerte Social Bar (fixed, bodennah) und
- * legt ihre Höhe als `--nc-socialbar-h` ab – das Terminal reserviert darunter
- * auf Mobile genau diesen Platz, damit die Bar nie UI verdeckt (Desktop
- * bleibt Overlay, die Bar schwebt dort über der Chart-Fläche).
+ * legt ihre Höhe als `--nc-socialbar-h` ab. Konsumenten: der Terminal-Shell
+ * (reserviert die Höhe unten – Mobile UND Desktop, sonst liegt die Bar über
+ * Toolbar bzw. Chart-Zeitachse) und der Whale-Ticker (setzt sich darüber).
  * Best-Effort mit Retries: Adsterra rendert die Bar teils verzögert nach dem
  * Script-Load; findet sich nichts Fixiertes, bleibt die Variable bei 0.
  */
@@ -128,9 +146,10 @@ function AdManagerInner() {
         void detectAdBlockOnce().then((blocked) => {
           if (blocked) {
             // Transparente Gegenmaßnahme: Soft-Wall statt stiller Verlust.
+            // Nach einem Wall-Close (Cooldown) wird nicht erneut geöffnet.
             socialBlocked.current = true;
             socialDone.current = true;
-            setWallOpen(true);
+            if (!wallInCooldown()) setWallOpen(true);
           } else if (socialTries.current < SOCIAL_MAX_TRIES) {
             inject(src); // Netz-Flake, kein Blocker → stiller Retry
           } else {
@@ -158,6 +177,10 @@ function AdManagerInner() {
 
   const closeWall = useCallback(() => {
     setWallOpen(false);
+    // M6-Fix: Auch Escape/X sind eine Ablehnung – vorher setzte nur der
+    // Dismiss-Button den 7-Tage-Cooldown, die Wall kam also bei jeder
+    // Navigation wieder (und mit ihr der Retry-Sturm).
+    useViralStore.getState().dismissWall();
     // Andere Ad-Flächen (Native Banner) hören auf dieses Event für ihren
     // letzten Retry – Blocker ggf. gerade deaktiviert.
     window.dispatchEvent(new CustomEvent('nc-adwall-closed'));
@@ -187,8 +210,7 @@ function AdManagerInner() {
       };
     }
 
-    const { wallDismissedAt } = useViralStore.getState();
-    if (wallDismissedAt !== null && Date.now() - wallDismissedAt < WALL_COOLDOWN_MS) return;
+    if (wallInCooldown()) return;
 
     const timer = setTimeout(() => {
       void detectAdBlockOnce().then((blocked) => {
@@ -219,7 +241,7 @@ function SlotTag({ label }: { label: string }) {
   return (
     <span
       aria-hidden
-      className="pointer-events-none absolute right-1 top-1 z-10 font-mono text-micro-8 uppercase tracking-cyber text-faint/70"
+      className="pointer-events-none absolute right-1 top-1 z-10 font-mono text-micro-8 uppercase tracking-cyber text-faint"
     >
       {label}
     </span>
@@ -244,24 +266,71 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
   const ref = useRef<HTMLElement | null>(null);
   const t = useTranslations('ads');
   const src = nativePlacement(variant);
+  const containerId = variant === 'desktop' ? NATIVE_DESKTOP_CONTAINER_ID : NATIVE_MOBILE_CONTAINER_ID;
+  // Ein Placement darf pro Seite nur einmal gerendert werden (Adsterra-Limit);
+  // zeigen beide Slots auf denselben Hash, bleibt der mobile aktiv.
+  const active = src !== '' && containerId !== '' && !(variant === 'desktop' && NATIVE_SLOTS_SHARE_PLACEMENT);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
+    if (!active) return;
+    // Gleiche Doctrine wie alle anderen Flächen (Social Bar, Header-Banner,
+    // Sidebar-Rail, Smartlinks): Spender sehen gar nichts, QA bleibt werbefrei.
+    // M6: die Terminal-Slots hatten diesen Guard als einzige nicht – ein
+    // Spender bekam im Terminal weiter Werbung, Puppeteer lud Ad-Skripte.
+    if (donationGraceActive() || navigator.webdriver) {
+      // Deferred: nie synchrones setState im Effect (React-Regel) – und der
+      // SSR-Zustand bleibt bis dahin unverändert (kein Hydration-Mismatch).
+      const timer = window.setTimeout(() => setCollapsed(true), 0);
+      return () => window.clearTimeout(timer);
+    }
     const el = ref.current;
-    if (!el || !src) return;
+    if (!el) return;
     const mq = window.matchMedia(AD_BREAKPOINT);
+    let cancelled = false;
+
+    /** Füllt der Loader den Container? (Nur dann bleibt der Slot reserviert.) */
+    const pollFilled = (left: number) => {
+      window.setTimeout(() => {
+        if (cancelled) return;
+        const host = document.getElementById(containerId);
+        if (host && (host.querySelector('iframe, ins, img') || host.childElementCount > 1)) return;
+        if (left > 0) pollFilled(left - 1);
+        else setCollapsed(true); // kein Fill ⇒ kein toter Streifen (M6)
+      }, 1_500);
+    };
+
     const apply = () => {
-      const active = variant === 'desktop' ? mq.matches : !mq.matches;
-      // Container-bound self-placing script (next/script cannot target a
-      // container) -> async + idle-scheduled so it never fights chart work.
-      if (active) whenIdle(() => void mountNativeBanner(el, variant));
+      const isMine = variant === 'desktop' ? mq.matches : !mq.matches;
+      if (!isMine) return;
+      // Container-gebundenes Self-Placement (next/script kann kein Ziel-Div):
+      // async + idle-geplant, damit Werbung nie mit Chart-Arbeit konkurriert.
+      whenIdle(() => {
+        if (cancelled) return;
+        void mountNativeBanner(el, variant).then(() => pollFilled(4));
+      });
     };
     apply();
     mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
-  }, [variant, src]);
+    return () => {
+      cancelled = true;
+      mq.removeEventListener('change', apply);
+    };
+  }, [active, containerId, variant]);
 
-  if (!src) return null;
+  if (!active || collapsed) return null;
   const label = t('sponsored');
+  // Reservierte Fläche = Widget-Layout des Loaders (4:1) ⇒ Kreativ füllt exakt
+  // hinein: kein CLS beim Fill, kein Clipping (M6).
+  const holder = (
+    <div
+      id={containerId}
+      data-native-banner=""
+      className={variant === 'desktop'
+        ? 'w-full overflow-hidden [aspect-ratio:4/1] max-h-56'
+        : 'w-full overflow-hidden [aspect-ratio:4/1] max-h-36'}
+    />
+  );
 
   if (variant === 'desktop') {
     return (
@@ -271,9 +340,10 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
         }}
         data-ad-slot="desktop"
         aria-label={label}
-        className="relative hidden min-h-[600px] w-44 shrink-0 overflow-hidden border-l border-line/60 bg-surface/20 p-2 lg:block"
+        className="relative mx-auto hidden w-full max-w-4xl shrink-0 px-2 py-2 lg:block"
       >
         <SlotTag label={label} />
+        {holder}
       </aside>
     );
   }
@@ -284,9 +354,10 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
       }}
       data-ad-slot="mobile"
       aria-label={label}
-      className="relative mx-2 mb-2 flex min-h-[110px] items-center justify-center overflow-hidden border border-line/60 bg-surface/30 p-2 lg:hidden"
+      className="relative mx-auto w-full max-w-xl shrink-0 px-2 py-2 lg:hidden"
     >
       <SlotTag label={label} />
+      {holder}
     </div>
   );
 }

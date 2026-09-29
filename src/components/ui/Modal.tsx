@@ -1,9 +1,11 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/cn';
+import { trapTabKey } from '@/lib/focus-trap';
 
 interface ModalProps {
   open: boolean;
@@ -14,7 +16,6 @@ interface ModalProps {
   footer?: ReactNode;
   /** Tailwind max-width class, e.g. `max-w-3xl`. */
   widthClass?: string;
-  labelledBy?: string;
 }
 
 /**
@@ -26,6 +27,8 @@ interface ModalProps {
  * handled by the panel z-index.
  */
 export function Modal({ open, onClose, title, subtitle, children, footer, widthClass = 'max-w-2xl' }: ModalProps) {
+  const t = useTranslations('common');
+  const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
@@ -40,19 +43,10 @@ export function Modal({ open, onClose, title, subtitle, children, footer, widthC
         return;
       }
       if (event.key !== 'Tab' || !panelRef.current) return;
-      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusables.length === 0) return;
-      const first = focusables[0]!;
-      const last = focusables[focusables.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      /* M5-Fix: Tab nur abfangen, wenn der Browser den Dialog verlassen würde –
+         die alte Version hielt tabindex="-1"-Buttons für Tab-Stationen und
+         übersah Chromes tabbare Scroll-Container. */
+      trapTabKey(event, panelRef.current);
     };
 
     document.addEventListener('keydown', onKey, true);
@@ -84,7 +78,9 @@ export function Modal({ open, onClose, title, subtitle, children, footer, widthC
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
+        /* M5-Fix: der Dialog heißt jetzt IMMER nach seiner Überschrift –
+           vorher blieb z. B. das Share-Modal (JSX-Titel) ohne Namen. */
+        aria-labelledby={titleId}
         className={cn(
           'nc-clip my-auto w-full animate-fade-up border border-primary/35 bg-elevated/95 shadow-[0_0_45px_-12px_hsl(var(--nc-primary)/0.55)]',
           '[animation-duration:220ms]',
@@ -93,7 +89,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, widthC
       >
         <header className="flex items-start gap-3 border-b border-line/70 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="min-w-0 font-display text-sm font-extrabold uppercase tracking-cyber text-fg [overflow-wrap:anywhere]">{title}</h2>
+            <h2 id={titleId} className="min-w-0 font-display text-sm font-extrabold uppercase tracking-cyber text-fg [overflow-wrap:anywhere]">{title}</h2>
             {subtitle && <p className="mt-0.5 font-mono text-2xs text-muted">{subtitle}</p>}
           </div>
           <button
@@ -102,7 +98,8 @@ export function Modal({ open, onClose, title, subtitle, children, footer, widthC
             className="nc-clip-sm inline-flex size-8 shrink-0 items-center justify-center border border-line text-muted transition-colors hover:border-danger/60 hover:text-danger"
           >
             <X className="size-4" aria-hidden />
-            <span className="sr-only">close</span>
+            {/* M5-Fix: war hart „close“ – in allen 15 Dialogen unübersetzt. */}
+            <span className="sr-only">{t('close')}</span>
           </button>
         </header>
 

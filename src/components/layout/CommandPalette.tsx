@@ -29,6 +29,7 @@ import { CONTACT, ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/cn';
 import { LOCALE_LIST } from '@/lib/locales';
 import { Kbd } from '@/components/ui/Kbd';
+import { trapTabKey } from '@/lib/focus-trap';
 import { ALL_THEMES } from '@/store/presets';
 import { isPremiumTheme } from '@/lib/theme';
 import { selectShareUnlocked, useViralStore } from '@/store/useViralStore';
@@ -71,6 +72,7 @@ export function CommandPalette() {
 
 function PaletteDialog() {
   const t = useTranslations('palette');
+  const tc = useTranslations('common');
   const tt = useTranslations('theme');
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const setLayout = useAppStore((s) => s.setLayout);
@@ -84,6 +86,7 @@ function PaletteDialog() {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const uid = useId();
 
   const close = () => setOpen(false);
@@ -202,6 +205,31 @@ function PaletteDialog() {
     };
   }, []);
 
+  /*
+   * M5-Fix: Die Palette war kein echter Dialog – Escape wirkte nur, solange
+   * der Fokus im Panel stand, und Tab lief durch die Seite dahinter (Header,
+   * Toolbar, Canvas). Jetzt hängen Escape + Tab-Falle am Dokument (Capture),
+   * wie im Modal, und der Fokus kehrt beim Schließen zum Auslöser zurück.
+   */
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return;
+      trapTabKey(event, panelRef.current);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      opener?.focus();
+    };
+  }, [setOpen]);
+
   function onKeyDown(event: React.KeyboardEvent) {
     switch (event.key) {
       case 'Escape':
@@ -244,6 +272,7 @@ function PaletteDialog() {
       <div aria-hidden className="absolute inset-0 bg-bg/85 backdrop-blur-md" />
 
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={t('title')}
@@ -267,9 +296,9 @@ function PaletteDialog() {
             aria-activedescendant={activeCommand ? `${uid}-${activeCommand.id}` : undefined}
             autoComplete="off"
             spellCheck={false}
-            className="h-14 flex-1 bg-transparent font-mono text-sm text-fg placeholder:text-faint focus:outline-none"
+            className="h-14 flex-1 bg-transparent font-mono text-sm text-fg placeholder:text-faint"
           />
-          <button type="button" onClick={close} aria-label="Close" className="text-faint transition-colors hover:text-fg">
+          <button type="button" onClick={close} aria-label={tc('close')} className="text-faint transition-colors hover:text-fg">
             <X className="size-4" aria-hidden />
           </button>
         </div>

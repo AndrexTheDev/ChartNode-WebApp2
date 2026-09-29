@@ -298,14 +298,20 @@ export function TerminalShell() {
   const connected = status === 'open';
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)))] max-lg:h-[calc(100dvh-var(--nc-header-h))] max-lg:overflow-hidden xl:flex-row">
+    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)),var(--nc-socialbar-h,0px))] max-lg:h-[calc(100dvh-var(--nc-header-h)-var(--nc-socialbar-h,0px))] max-lg:overflow-hidden xl:flex-row">
       {/* linke Sidebar: Banner 160×600, Desktop only (xl-Row-Layout) */}
       <SidebarBanner />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* sponsored strip (Smartlink-Kit) – Header-Zone über der Toolbar:
           auf Mobile sonst hinter der wrappenden Toolbar im Toast-Bereich */}
+      {/* Reserviert dauerhaft eine Zeile (M6): das Kit mountet erst nach dem Idle
+          und schob die Grid-Zeile sonst um bis zu 85 px nach unten (0,28 CLS).
+          Die Chips bleiben einzeilig und scrollen horizontal, damit die Höhe
+          unabhängig von Sprache und Breite konstant 44 px bleibt. Für Spender
+          und Blocker (Cache) blendet das Boot-Skript den Platz vor dem ersten
+          Paint aus – dort entsteht kein Leerraum. */}
       {SMARTLINKS_ENABLED ? (
-        <div id="sponsor-strip" className="mx-2 mt-1 flex flex-wrap items-center gap-2 empty:mx-0 empty:hidden" />
+        <div id="sponsor-strip" className="mx-2 mt-1 flex min-h-11 items-center gap-2 overflow-x-auto" />
       ) : null}
 
       {/* ------------------------------- toolbar ---------------------------- */}
@@ -718,7 +724,7 @@ export function TerminalShell() {
             {t('pct')}
           </Chip>
           <span className="relative shrink-0">
-            <Chip active={hydrated && watchOpen} onClick={() => setWatchOpen((value) => !value)}>
+            <Chip data-watch-trigger active={hydrated && watchOpen} onClick={() => setWatchOpen((value) => !value)}>
               <List className="size-3" aria-hidden />
               {t('watch')}
             </Chip>
@@ -810,8 +816,11 @@ export function TerminalShell() {
         </button>
       </div>
 
-      {/* mobile ad container (Adsterra native strip) – null without config */}
+      {/* ad strips (Adsterra native 4:1, je Geräteklasse eins) – null ohne Config.
+          Bewusst als Streifen über dem Grid: der frühere 176×600-Rail am Ende
+          reservierte 600 px Höhe für ein 4:1-Widget und blieb ohne Fill leer. */}
       <AdSlot variant="mobile" />
+      <AdSlot variant="desktop" />
 
       {/* -------------------------------- grid ------------------------------ */}
       <ChartGrid />
@@ -865,8 +874,6 @@ export function TerminalShell() {
       {/* Smartlink-Kit (Terminal): Sponsored-Strip + Post-Action-Offers */}
       <SmartlinkKit surface="app" />
 
-      {/* desktop ad container (Adsterra native rail) – null without config */}
-      <AdSlot variant="desktop" />
     </div>
   );
 }
@@ -875,16 +882,18 @@ function Chip({
   children,
   active,
   onClick,
+  ...rest
 }: {
   children: React.ReactNode;
   active?: boolean;
   onClick: () => void;
-}) {
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'children'>) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      {...rest}
       className={cn(
         'nc-clip-sm inline-flex h-7 items-center gap-1.5 border px-2 font-mono text-2xs uppercase tracking-cyber transition-colors duration-150',
         active

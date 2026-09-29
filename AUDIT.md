@@ -20,8 +20,8 @@ was bereits behoben ist und was als Nächstes dran ist.**
 | M2b | **Mobile Terminal-Layout (Prio 1)** | ✅ umgebaut | Chartfläche im First-View: **47 px → 625 px** (74 % des Viewports) |
 | M3 | Chart-Engine / Canvas (Indikatoren, Zeichnungen, Pane-Sync, Replay, Export) | ✅ geprüft | Fixture-Feed: 300 Candles, 36 Indikatoren, Zeichnungen, Pane-Sync, Bar-Replay, Backtest-Marker, PNG **mit** Wasserzeichen – 0 Page-Errors |
 | M4 | i18n-Layout-Stresstest (RU/ZH, lange Strings, 15 Modals) | ✅ geprüft | 120/120 Seiten-Kombis · 132/170 Modal-Läufe (Rest = Toggles) · **7 echte Layout-Bugs behoben** |
-| M5 | A11y vertieft (Tastatur, Fokus, Screenreader, Kontrast) | ⏳ offen | – |
-| M6 | Werbung/Monetarisierung im echten Fill-Fall | ⏳ offen | – |
+| M5 | A11y-Deep-Dive (Fokusringe, Tab-Ordnung in 19 Overlays, Light-Kontrast, Icon-Namen) | ✅ geprüft | **175/175 Checks · 0 Befunde** · 11 echte Fixes (u. a. bull/bear folgten dem Theme nicht) |
+| M6 | Werbung/Monetarisierung im Fill-Fall (CLS, Kollaps, Social Bar, Ad-Block-Wall, Spender) | ✅ geprüft | **64/64 Checks · 0 Befunde** · 9 echte Fixes (u. a. Doppel-Id auf dem Terminal, unsichtbare Social Bar) |
 | M7 | Performance / Core Web Vitals | ⏳ offen | – |
 | M8 | Robustheit (Netzabbruch, Rate-Limit, Speicher) | ⏳ offen | – |
 | M9 | Deploy-Pfad Cloudflare / Domain | ⏳ offen | – |
@@ -282,35 +282,185 @@ und in der Quellsprache unsichtbar bleibt.
 
 ---
 
-## 7. Vorschlag für die nächsten Schritte
+## 7. ✅ Modul M5 — A11y-Deep-Dive
+
+Barrierefreiheit ist der Bereich, in dem sich „fertig" und **„besser als alle
+Alternativen"** trennen: TradingView & Co. haben in ihren Dialogen reihenweise
+fehlende Fokusringe, Fokusverlust nach dem Schließen und unbenannte Icon-Buttons.
+Dieses Modul prüft die Achsen aus dem Auftrag **messend**, nicht nach Gefühl.
+
+| Achse | Was gemessen wird | Umfang |
+|---|---|---|
+| **S1** Fokus-Sichtbarkeit | jeder per Tab erreichte Control: sichtbarer Ring? Kontrast ≥ 3:1 (WCAG 1.4.11), dunkel **und** hell | 26 Controls + Light-Skin |
+| **S2** Tab-Ordnung & Fokus | 19 Dialog-/Overlay-Flächen: Anfangsfokus, Tab-Zyklus ohne Ausbruch, Tab-Reihenfolge ≡ DOM-Reihenfolge (zyklisch), Shift+Tab-Wrap, Escape schließt, Fokus kehrt zum Auslöser zurück, 0 Konsolenfehler | 19 × 7 Checks, de |
+| **S2b** Menü-Tastatur | 4 ToolMenüs: ArrowDown öffnet + fokussiert Eintrag 1, Pfeile/Home/End wandern, Escape schließt + Fokus zurück auf den Trigger | 16 Checks, de |
+| **S3** Light-Theme-Kontrast | jedes Textknoten-Paar auf `/` und `/terminal` + Dialog, WCAG AA (4.5:1 / 3:1 large) | de, Gradient-Flächen markiert |
+| **S3b** Token-Matrix | jedes Text-Token gegen jede Fläche in **allen 5 Skins** (erwischt Kombinationen, die nie gleichzeitig sichtbar sind) | 5 Skins × 30 Paare |
+| **S4** Icon-Namen | zugänglicher Name vorhanden **und** lokalisiert (de ≠ en als Detektor für hart kodierte Labels) | de + en, inkl. aller 15 Dialog-Schließen-Buttons |
+| **S5** Semantik | `<html lang>`, doppelte Ids, `img alt` | 3 Routen |
+
+**Ergebnis:** Erster Lauf **102 ok / 33 Befunde** → nach den Fixes **175 ok / 0 Befunde**
+(262 s; S1 4 · S2 133 · S2b 16 · S3 5 · S3b 5 · S4 3 · S5 9; `--locale`/`--quick` als Schalter, Report unter `/tmp/nc-shots/m5-report.json`).
+Der Screenshot-Satz entsteht nebenbei (`m5-light-*.png`, `m5-cta-*.png`).
+
+### 🔧 Elf echte Befunde gefunden und behoben
+
+| # | Stelle | Befund (gemessen) | Fix |
+|---|---|---|---|
+| 1 | `tailwind.config.js` (`bull`/`bear`) | Die Utilities waren **feste Hex-Werte** (`#00ff9d`, `#ff2e63`) statt Theme-Variablen. Im hellen Skin ergab das **1.24:1** für Ticker, Mock-Chart und Session-Werte — während der Canvas über `src/lib/chart-theme.ts` schon `--nc-bull` las: **Text und Kerzen widersprachen sich im selben Bild.** | `bull`/`bear` → `hsl(var(--nc-bull) / <alpha>)`; das markenfeste Neon bleibt als `neon.bull`/`neon.bear` erhalten. Hell jetzt 5.11:1 / 5.64:1 |
+| 2 | `ui/ToolMenu.tsx` | Nach dem Schließen **jedes** über ein Menü geöffneten Dialogs lag der Fokus auf `<body>` (15 von 19 Flächen): das angeklickte Menü-Item fällt beim Öffnen aus dem DOM und war damit das Ziel der Fokus-Rückgabe. Tastaturnutzer landeten nach jedem Dialog wieder am Seitenanfang. | Fokus wird **vor** `item.onClick()` an den Trigger zurückgegeben (gleiches Muster wie `Dropdown.selectItem`) → „→ Tools/Edge/Analyse/Mehr" |
+| 3 | `layout/CommandPalette.tsx` | Die Palette war kein echter Dialog: Escape wirkte nur, solange der Fokus im Panel stand, und **Tab lief durch die Seite dahinter** (Header, Toolbar, Canvas). | Dokumentweites Escape (Capture) + Tab-Falle über die neue `focus-trap`-Hilfe |
+| 4 | neue Datei `src/lib/focus-trap.ts` | Beide Fokusfallen (Modal, Palette) hielten `tabindex="-1"`-Buttons für Tab-Stationen — **und `disabled`-Buttons ebenfalls**, weil `disabled` den `tabIndex` nicht ändert. Folge: „letztes Element" war falsch, der Fokus blieb am Dialogrand stehen. | Gemeinsame Hilfe mit der einzig korrekten Regel (`tabIndex >= 0`, `:disabled` raus, `aria-hidden` raus); Tab wird nur abgefangen, wenn der Dialog sonst verlassen würde (Radiogruppen behalten ihren einen Tab-Stop). Eigenständig geprüft: `journal` übersprang vorher Index 11, `backtest` Index 5 |
+| 5 | `ui/Modal.tsx` | Dialoge mit JSX-Titel hatten **keinen zugänglichen Namen** (das Share-Modal heißt für Screenreader nur „dialog"); die Prop `labelledBy` war deklariert, aber nie gelesen. | `useId()` + `aria-labelledby` auf die Überschrift → „Dieses Setup teilen"; tote Prop entfernt |
+| 6 | `ui/Modal.tsx`, `CommandPalette.tsx`, `support/SupportNudge.tsx` | **Hart kodierte englische Labels**: `close` in allen 15 Dialogen, `Close` in der Palette, `dismiss` ×2 im Support-Nudge — in jeder Sprache gleich (S4-Detektor: de == en). | `common.close` / `support.dismiss` (Keys existierten bereits in allen 5 Locales) |
+| 7 | `search/SmartSearch.tsx` | `focus:outline-none` auf dem Suchfeld **killte den globalen `:focus-visible`-Ring** — das Feld war per Tastatur fokussierbar, aber unsichtbar markiert. | Klasse entfernt (Ring: 2 px + 4 px Halo) |
+| 8 | `styles/globals.css` (alle 5 Skins) + `SiteFooter` | Token-Matrix: `--nc-faint` lag **in allen fünf Skins** unter AA (3.16–3.96:1), `--nc-warning` 3.20:1 (light), `--nc-secondary` 3.81:1 (acid), `--nc-primary` 4.26:1 (violet). Zusätzlich: `text-faint/80` im Footer = 2.56:1 und `text-faint/70` an den Ad-Slot-Ecken (8 px, `AdManager`/`SidebarBanner`). | Neue Lightness-Werte (faint 42→50 / 45→55 / 54→43 / 38→48 / 46→56 %, light warning 40→32 %, acid secondary 57→65 % + dunkle Ink, violet primary 62→65 %) → **alle 30 Token-Paare × 5 Skins ≥ 4.5:1**; sämtliche Deckkraft-Varianten auf Text (`/80`, `/70`) entfernt — **kein Text-Token mehr unter AA, in keinem Skin** |
+| 9 | `tools/WatchlistPopover.tsx` | Der Popover ließ sich **nur über den Chip selbst** schließen (kein Escape, kein Klick daneben); die Zeilen mit `role="button"` reagierten auf Enter, aber nicht auf Space; das Panel hatte keinen Rollennamen. | Escape + Outside-Click, `role="dialog"` + `aria-label`, Space-Handling |
+| 10 | `tools/HeatmapModal.tsx` | Der OKX-Fallback-Promise bekam seinen `.catch()` erst **im** Fehlerpfad von Binance — fallen beide Börsen aus, meldet der Browser eine unbehandelte Rejection („Failed to fetch"). | Fallback-Promise sofort behandeln (`null` läuft in den bestehenden Fehlerzustand) |
+| 11 | `ui/ToolMenu.tsx` | Die vier Toolbar-Menüs trugen `role="menu"`, hatten aber **keine Pfeiltasten-Navigation** — das Chart-Typ-Dropdown daneben konnte sie (Inkonsistenz im selben Balken). | ArrowDown öffnet + fokussiert den ersten Eintrag; Pfeil/Home/End wandern zyklisch, Escape schließt und setzt den Fokus auf den Trigger, Tab schließt das Menü (S2b prüft alle vier) |
+
+### ✅ Aufgeklärt, **nicht** geändert (kein Defekt)
+
+- **Der „3 px dunkle Fokusring" der Header-CTA** (Kontrast 1.05:1) war ein
+  **Messartefakt**: `getComputedStyle` direkt nach dem Fokus liefert den
+  Startwert der `transition-all`-Animation (Outline-Breite und -Farbe
+  interpolieren von Browsergrundwerten auf den Ring). Keine CSS-Regel im Build
+  setzt 3 px oder eine Outline-Farbe; nach 260 ms Wartezeit messen alle Controls
+  den korrekten Ring (2 px + 4 px Halo, 14:1). Die Suite wartet jetzt.
+- **Gradient-Flächen** (gesponserte Chips der Smartlink-Leiste, Neon-Trägerflächen)
+  lassen sich aus `background-color` nicht berechnen; sie werden gezählt und
+  ausgewiesen (6–8 pro Seite) statt falsch-negativ gemeldet. Sichtprüfung im
+  hellen Skin: dunkle Navy-Chips mit heller Schrift.
+- **`BTC/USDT` als Name eines Icon-Buttons** im Indikator-Modal ist korrekt: Ticker
+  sind sprachneutral (die Suite klassifiziert sie als solche).
+- **Per Shortcut geöffnete Palette:** Der Fokus kehrt zu `<body>` zurück — das ist
+  der Zustand *vor* dem Öffnen (es gab keinen Auslöser-Element-Fokus), also korrekt.
+- Der Popover der Watchlist ist **bewusst nicht-modal**: Anfangsfokus bleibt beim
+  Chip, geprüft werden Name, Escape, Fokus-Rückkehr (Trap wäre hier falsch).
+
+### 📋 Umgebungshinweise
+
+- Die A11y-Suiten laufen **ohne** Fixture-Feed (Werkzeuge zeigen ihre leeren
+  Zustände) — das ist Absicht: geprüft werden Struktur, Fokus und Kontrast, nicht
+  Daten. Die Fehlerachse („0 Konsolenfehler pro Fläche") läuft trotzdem mit und
+  deckt genau solche Fälle wie Befund 10 auf.
+- Das Projekt-Gate `scripts/release-audit/m4-a11y.mjs` bleibt grün: **48/48**.
+  Der Layout-Stresstest aus M4 (`qa:i18n-layout`) wurde als Regressionsnetz erneut
+  gefahren (5 Sprachen × 6 Viewports).
+
+---
+
+## 8. ✅ Modul M6 — Werbung/Monetarisierung im Fill-Fall
+
+Bis hierher war jede Prüfung **werbefrei** (Puppeteer schaltet die Ad-Schicht ab).
+Genau das ist das Risiko: die interessanten Zustände — *Kreativ füllt*, *kein Fill*,
+*echter Blocker*, *Spender* — waren nie gemessen. M6 holt das nach, mit
+**Ad-Fixtures**: die Delivery-Skripte werden im Browser abgefangen und durch Stubs
+ersetzt, die sich wie die echten verhalten (Native-Banner füllt sein Container-Div,
+Social Bar verankert sich am Boden, Popunder armiert sich, Smartlink-Ziel antwortet).
+Damit sind alle Zustände deterministisch und beliebig oft prüfbar.
+
+| Stufe | Was gemessen wird | Umfang |
+|---|---|---|
+| **S0** Grundrauschen | CLS der App **ohne** jede Werbung (3 Kombis: Landing 1440, Terminal 390/1440) — Vergleichsbasis für jede Ad-Messung | 6 Checks |
+| **S1** QA-Guard | `navigator.webdriver` ⇒ keine Ad-Requests, keine Slots | 2 |
+| **S2** Social Bar | lädt, Höhe in `--nc-socialbar-h`, überdeckt **keine feste/sticky UI**, Terminal reserviert sie, Pause unter Dialogen | 9 |
+| **S4** Sidebar-Rail 160×600 | Fill ohne Clipping/Überhang, Kollaps ohne Fill, kein Sprung | 7 |
+| **S5** Header-Native-Banner | Fill exakt in der Reserve, **kein Beschnitt**, Kollaps ohne Fill, kein Sprung | 6 |
+| **S6** Terminal-Slots | Container-Div je Placement, Fill, kein Clipping, keine doppelte Id, Kollaps ohne Fill | 10 |
+| **S7** Ad-Block-Wall | Erkennung, Öffnung, Escape, Cooldown, **kein Wiederauftauchen**, Pre-Paint-Unterdrückung | 8 |
+| **S8** Spender-Grace | 48 h/5 Tage: keine Requests, keine Bar, kein `?adwall=1`, kollabierte Slots | 4 |
+| **S9** Popunder | genau ein Popunder pro Session, feuert auf den Folge-Klick, Cap hält über Reload | 3 |
+| **S10** Smartlinks | Kit-CSS/Skript, `rel="noopener"`, Konsolenfehler, CLS-Delta | 8 |
+| **S11** Fehler-Sweep | keine App-/Seitenfehler in der ganzen Suite (erwartete Abbruch-Meldungen der No-Fill-/Blocker-Modi gefiltert) | 1 |
+
+**Ergebnis:** Erstlauf **29 ok / 16 Befunde** → nach den Fixes **64 ok / 0 Befunde**
+(158 s). Zusätzlich auf dem **Auslieferungs-Build** (ohne `NEXT_PUBLIC_ADSTERRA_NATIVE*`,
+also ohne Terminal-Slots) gefahren: **57/57 Checks, 0 Befunde**.
+
+### 🔧 Neun echte Befunde gefunden und behoben
+
+| # | Stelle | Befund (gemessen) | Fix |
+|---|---|---|---|
+| 1 | `ads/AdManager.tsx` (`SlotTag`) | Der „Gesponsert"-Eck-Tag stand **absolut positioniert mitten im Widget**: der Social-Bar-Scan hielt ihn für ein Bottom-verankertes Overlay und setzte `--nc-socialbar-h`, wodurch das Terminal 44 px Leerraum reservierte. | Tag ist jetzt `sticky` statt `absolute` — In-Flow, ohne die Reserve-Geometrie zu stören |
+| 2 | `ads/AdManager.tsx` (`AdSlot`) | Die Terminal-Slots waren die **einzigen** Werbeflächen ohne Spender-/QA-Guard (Social Bar, Header-Banner, Rail, Smartlinks haben ihn): ein Spender bekam im Terminal weiter Werbung, Puppeteer lud Ad-Skripte. | gleiche Doctrine in `AdSlot` |
+| 3 | `ads/AdManager.tsx` (`AdSlot`) | **Inkonsistente Slot-Maße**: Desktop-Rail reservierte 176×600 für ein 4:1-Widget, mobil 110 px Mindesthöhe für ~94 px, **keine** Kollaps-Logik (toter Streifen ohne Fill) und **kein Container-Div** für `invoke.js` — der Loader lädt fehlerfrei und rendert nichts. | Container-Id wird aus der Placement-URL abgeleitet, Reserve = Widget-Format (4:1, geklammert), Poll-Kollaps ohne Fill, doppelte Placement-Ids dedupliziert |
+| 4 | `ads/AdManager.tsx` (Social-Bar-Messung) | Die gemessene Höhe reservierte nur der Whale-Ticker: die Bar lag **über** der mobilen Werkzeugleiste und der Chart-Zeitachse (Screenshot: „Trotzdem aktivieren" war halb verdeckt). | Terminal reserviert die Höhe (Mobile unten **und** Desktop-Grid), Fokusring-Kontrast der Werkzeugleiste bleibt unberührt |
+| 5 | `styles/globals.css` + `TerminalShell` + `SidebarBanner` | **Drei gemessene CLS-Quellen in der Werbe-Schicht**: Header-Banner beschnitt 352 px Kreativ auf 160 px (`max-height`), die Terminal-Slots quetschten die Chart-Zeile auf **0 px**, und die Sidebar-Rail reserveierte beim Blocker eine tote 176-px-Spalte (0,109 CLS im Erstbesuch). | breitenbegrenzte 4:1-Reserve (kein Beschnitt), Klammerung + Mindesthöhe des Grids, Rail-Wrapper unter der Pre-Paint-Unterdrückung |
+| 6 | `layout/ThemeBootScript.tsx` | Spender/Blocker erfuhren die *Unterdrückung* erst nach der Hydration — die reservierten Flächen verschwanden im ersten Frame ⇒ gemessen **0,109 CLS** für Spender. | Boot-Skript setzt `data-nc-adsuppressed` **vor dem ersten Paint** (Spender-Grace aus dem Store-Payload, `nc-adcheck`-Cache, webdriver); CSS blendet die Flächen aus, React-Baum und Hydration bleiben identisch |
+| 7 | `ads/AdManager.tsx` (Wall + Retry) | Nach Escape/X setzte nur der Dismiss-Button den 7-Tage-Cooldown. Der Retry-after-Wall-Close lief trotzdem und **riss die Wall wieder auf** ⇒ Dialog ließ sich nicht schließen (2 Checks). | Cooldown prüft jetzt jeder Pfad; der Retry unterbleibt, solange der Cooldown gilt |
+| 8 | `TerminalShell` + `ads-kit/smartlinks.css` | Der Sponsor-Streifen war `empty:hidden`; das Kit mountet erst im Idle und schob die Grid-Zeile beim Terminal um **85 px** nach unten (0,28 CLS). | Streifen reserviert dauerhaft eine 44-px-Zeile; die Chips bleiben einzeilig und scrollen horizontal (Höhe wird sprach-/breitenunabhängig) |
+| 9 | `layout/LocaleDetectBanner.tsx` | Kein Ad-Befund, aber vom CLS-Vergleich aufgedeckt: der client-only Sprachhinweis stand **in-flow** in der Header-Zone und verschob beim ersten Besuch mit abweichender Browsersprache die ganze Seite (0,056 Terminal mobil / 0,073 Landing / 0,239 Terminal Desktop). | aus dem Fluss genommen (`absolute` in der Header-Zone, 0 CLS) — Kopf-Leiste bleibt sichtbar, der Sticky-Header legt sich beim Scrollen darüber |
+
+### ✅ Aufgeklärt, **nicht** geändert (kein Defekt)
+
+- **Transiente Überdeckung durch die Social Bar:** Eine bodenverankerte Bar liegt
+  zwangsläufig über dem, was gerade am Seitenende einer *scrollenden* Seite steht.
+  Die Suite unterscheidet deshalb fest/sticky verankerte UI (Dock, Leisten,
+  Footer-Ticker → **immer** 0 Treffer) von transienter Überdeckung (≤ 6, wie ein
+  Sticky-Header oben) und die Reservierung wird separat belegt.
+- **Popunder zählt 3 Skript-Tags** statt einem: der Publisher-Code ist ein
+  Loader-Pärchen mit Domain-Fallback (2 Tags) plus einmalige Session-Injection —
+  die Suite zählt die ausgelösten Skripte am Netz, die Session-Logik separat.
+- **Einmalige Sprünge beim Blocker-Erstbesuch** (≤ 0,11 CLS): Ein Blocker wird erst
+  *nach* dem Fehlschlag erkannt (detect-on-failure). Der Cache greift ab dem
+  zweiten Dokumentaufbau pre-paint — beides wird als eigene Checks ausgewiesen.
+- **Gradient-Flächen** in der Smartlink-Leiste bleiben „nicht messbar" (siehe M5).
+- **`navigator.webdriver`** schaltet die ganze Ad-Schicht ab (QA/CI) — M6 prüft
+  beides: den Guard selbst **und** die Stubs mit gespooftem `webdriver=false`.
+
+### 📋 Umgebungshinweise
+
+- Die Ad-Fixtures liegen im Repo (`scripts/audit-sandbox/ad-fixtures.mjs`), die
+  Suite heißt `run-m6-ads.mjs`. Der **Full-Fill-Build** für die Slot-Stufen:
+  `NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE=… MOBILE/DESKTOP=<invoke.js-URLs> npx next build`.
+  Ohne diese Variablen überspringt die Suite die Slot-Stufen bewusst
+  (`S6: 3 ok / 0`) — ein *kollabierter* Slot wird dabei nicht mit einem *nicht
+  konfigurierten* verwechselt.
+- Stub-Container-Ids werden wie im echten `invoke.js` aus dem URL-Hash abgeleitet;
+  ein fest verdrahtetes Div hätte ein fremdes Placement nie gefüllt (Fehlmessung).
+- `Session-Cap` des Popunders hängt an `sessionStorage`; S9 arbeitet daher in einem
+  eigenen Browser-Context wie alle Stufen.
+
+---
+
+## 9. Vorschlag für die nächsten Schritte
 
 | Reihenfolge | Modul | Inhalt | Warum jetzt |
 |---|---|---|---|
 | 1 | ~~**M3a**~~ | ~~mobiler Terminal-Umbau~~ | ✅ **erledigt** (Abschnitt 4) |
 | 2 | ~~**M3b**~~ | ~~Chart-Engine-Prüfung~~ | ✅ **erledigt** (Abschnitt 5, inkl. Fixture-Feed statt Netzzwang) |
 | 3 | ~~**M4**~~ | ~~i18n-Layout-Stresstest~~ | ✅ **erledigt** (Abschnitt 6, 10 Fixes) |
-| 4 | **M5** | A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons | Barrierefreiheit + SEO-Nebenwirkung |
-| 5 | **M6** | Werbung/Monetarisierung im Fill-Fall (CLS, „kollabiert ohne Fill", Social Bar, Ad-Block-Wall) | Einnahmen, ohne die UX zu beschädigen |
+| 4 | ~~**M5**~~ | ~~A11y: Fokusringe, Tab-Reihenfolge in Modals, Kontrast im Light-Theme, Screenreader-Namen der Icon-Buttons~~ | ✅ **erledigt** (Abschnitt 7, 175/175 Checks, 11 Fixes) |
+| 5 | ~~**M6**~~ | ~~Werbung/Monetarisierung im Fill-Fall~~ | ✅ **erledigt** (Abschnitt 8, 64/64 Checks, 9 Fixes) |
 | 6 | **M7** | Performance: Bundle, LCP/INP/CLS auf Mid-Range-Mobile, `next/font`-Subsets | Ranking + subjektive Geschwindigkeit |
 | 7 | **M8** | Robustheit: Netzabbruch, 429-Overlay, Speicher-voll, Sekundär-Fetch-Härtung (O3) | „läuft einfach" auf echten Geräten |
 | 8 | **M9** | Deploy-Pfad Cloudflare, Domain, Sitemap-Einreichung, Endkontrolle | Abschluss |
 
 ---
 
-## 8. Arbeitsumgebung / Reproduktion
+## 10. Arbeitsumgebung / Reproduktion
 
 Die Prüfungen liefen in einer Sandbox ohne Zugang zu Börsen/DEX/Fonts (nur npm + GitHub).
 Damit der Produktionsbuild trotzdem echt geprüft werden kann:
 
 ```bash
-# Build (offline-fähig: echte Fonts über fontsource gemockt)
-NEXT_FONT_GOOGLE_MOCKED_RESPONSES=<mock.cjs> \
+# 1) Sandbox einrichten (Chromium, AL2023-Libs, CJK-Schrift, Font-Mock)
+node scripts/audit-sandbox/bootstrap.mjs
+
+# 2) Build (offline-fähig: echte Fonts über fontsource gemockt)
+#    Achtung: ABSOLUTER Pfad – next/font löst relativ zu seinem eigenen Modul auf
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES="$PWD/scripts/audit-sandbox/font-mock.cjs" \
 NEXT_PUBLIC_SITE_URL=https://nodechart.cc npx next build --webpack
 
-# Server + Headless-Chrome
+# 3) Server + Suite
 npx next start -H 0.0.0.0 -p 3000
-LD_LIBRARY_PATH=<nss-libs> PUPPETEER_EXECUTABLE_PATH=<chromium> node <harness.mjs>
+LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts \
+  node scripts/audit-sandbox/run-m5-a11y.mjs [--locale de] [--quick]
 ```
+
+Der Harness samt Fixture-Feed (12 Venues) liegt seit M4 **im Repo**
+(`scripts/audit-sandbox/`, siehe dessen `README.md`) und übersteht Snapshots.
 
 Auf einem Rechner mit normalem Internetzugang entfällt der Font-Mock; `npm run build`
 funktioniert dort unverändert. Die Projekt-Skripte `qa:features`, `qa:modules`,
@@ -319,7 +469,7 @@ installiertes Chrome for Testing.
 
 ---
 
-## 9. Fixes dieses Durchgangs (Diff-Übersicht)
+## 11. Fixes dieses Durchgangs (Diff-Übersicht)
 
 | Datei | Änderung |
 |---|---|
@@ -359,4 +509,39 @@ installiertes Chrome for Testing.
 | `public/ads/smartlinks.css` | via `npm run ads:sync` gespiegelt |
 | `src/components/ads/SmartlinkCta.tsx` | `max-w-full` + umbruchfähiges Label (CTA lief auf 320 px über den Rand) |
 
-Alle Änderungen sind typgeprüft (`tsc`), lint-frei, gebaut und im Browser nachgemessen.
+**Nachtrag Durchgang 4 (M5 · A11y):**
+
+| Datei | Änderung |
+|---|---|
+| `tailwind.config.js` | `bull`/`bear` folgen jetzt den Theme-Variablen (`hsl(var(--nc-bull)/…`) statt fester Hex-Werte – Neon im hellen Skin war 1.24:1. Markenfixes Neon bleibt als `neon.bull`/`neon.bear` |
+| `src/lib/focus-trap.ts` | **neu**: gemeinsame Fokusfallen-Hilfe (echte Tab-Stationen: `tabIndex >= 0`, `:disabled` und `aria-hidden` raus; Tab nur abfangen, wenn der Dialog sonst verlassen würde) |
+| `src/components/ui/Modal.tsx` | `aria-labelledby` via `useId()` (Dialoge mit JSX-Titel waren namenlos), lokalisierter Schließen-Name (`common.close`), tote `labelledBy`-Prop entfernt, Falle über die neue Hilfe |
+| `src/components/ui/ToolMenu.tsx` | Fokus kehrt **vor** dem Öffnen eines Dialogs zum Trigger zurück (vorher landete er nach jedem Menü-Dialog auf `<body>`); zusätzlich vollständige Pfeiltasten-Navigation wie im Dropdown |
+| `src/components/layout/CommandPalette.tsx` | dokumentweites Escape + Tab-Falle, lokalisierter Schließen-Name, Suchfeld-Aussehen unverändert |
+| `src/components/search/SmartSearch.tsx` | `focus:outline-none` entfernt (Fokusring war unsichtbar) |
+| `src/components/support/SupportNudge.tsx` | `aria-label={t('dismiss')}` statt hartem „dismiss" |
+| `src/components/tools/WatchlistPopover.tsx` | Escape + Outside-Click schließen, `role="dialog"` + Label, Space-Taste auf den Zeilen |
+| `src/components/tools/HeatmapModal.tsx` | Fallback-Fetch sofort behandelt (unbehandelte Rejection, wenn beide Börsen ausfallen) |
+| `src/components/terminal/TerminalShell.tsx` | `Chip` reicht zusätzliche Attribute durch (`data-watch-trigger`) |
+| `src/components/layout/SiteFooter.tsx` | `text-faint/80` → `text-faint` (2.56:1 → 5.06:1 im hellen Skin) |
+| `src/styles/globals.css` | Kontrast-Token aller 5 Skins: `--nc-faint` (alle), `--nc-warning` (light), `--nc-secondary` + Ink (acid), `--nc-primary` (violet) – Token-Matrix jetzt durchgängig ≥ 4.5:1 |
+| `scripts/audit-sandbox/*` | M5-Runner `run-m5-a11y.mjs` + Lizenz-Header auf allen Harness-Dateien |
+
+Alle Änderungen sind typgeprüft (`tsc`), lint-frei (`0 Fehler / 2 Alt-Warnungen`), gebaut und im Browser nachgemessen.
+
+**Nachtrag Durchgang 5 (M6 · Werbung im Fill-Fall):**
+
+| Datei | Änderung |
+|---|---|
+| `src/components/ads/AdManager.tsx` | `SlotTag` ist `sticky` statt `absolute` (der Tag wurde als Bottom-Overlay fehlgemessen und reservierte 44 px Leerraum); `AdSlot` bekommt Spender-/QA-Guard, Container-Div je Placement, 4:1-Reserve mit Klammerung, Poll-Kollaps ohne Fill, `shrink-0`; Wall-Cooldown gilt für **alle** Schließwege (Escape/X öffneten den Dialog sonst sofort wieder) |
+| `src/lib/ads/config.ts` | `nativeContainerId()` leitet die Container-Id aus der Placement-URL ab (`…$hash/invoke.js` → `container-$hash`), plus `NATIVE_*_CONTAINER_ID` und Dedupe, wenn beide Slots dasselbe Placement zeigen |
+| `src/components/terminal/TerminalShell.tsx` | reserviert die Social-Bar-Höhe (unten **und** am Mobile-Viewport), Desktop-Slot als Streifen über dem Grid (statt 176×600-Rail mit 600 px Reserve), Sponsor-Streifen mit fester 44-px-Zeile |
+| `src/components/layout/ThemeBootScript.tsx` | markiert Spender/Blocker-Cache/QA **vor dem ersten Paint** (`data-nc-adsuppressed`) – Ad-Flächen verschwinden ohne Layout-Sprung |
+| `src/styles/globals.css` | Unterdrückungs-Regeln für Header-Banner, Terminal-Slots, Sidebar-Rail und Sponsor-Streifen; `.nc-header-ad` mit Breitenbegrenzung (Kreativ wurde auf 160 px beschnitten) |
+| `src/components/ads/SidebarBanner.tsx` | Rail-Wrapper `nc-sidebar-rail` (unter der Pre-Paint-Unterdrückung) |
+| `src/components/chart/ChartGrid.tsx` | Grid-Wrapper mit `lg:min-h-[20rem]` – ein ausscherendes Kreativ quetschte die Chart-Zeile auf 0 px |
+| `src/components/layout/LocaleDetectBanner.tsx` | Sprachhinweis aus dem Fluss genommen (0,056–0,239 CLS beim ersten Besuch) |
+| `ads-kit/smartlinks.css` | Strip und Buttons einzeilig (`nowrap`) + horizontales Scrollen ⇒ konstante Zeilenhöhe |
+| `public/ads/smartlinks.css` | via `npm run ads:sync` gespiegelt |
+| `scripts/audit-sandbox/ad-fixtures.mjs` | **neu**: Ad-Stubs (Native 4:1, Rail 160×600, Social Bar, Popunder, Direct-Link) + CLS-Zeitachse mit Quell-Rechtecken |
+| `scripts/audit-sandbox/run-m6-ads.mjs` | **neu**: M6-Suite S0–S11 (64 Checks) |

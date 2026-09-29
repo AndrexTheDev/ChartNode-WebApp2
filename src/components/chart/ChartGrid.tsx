@@ -84,7 +84,10 @@ export function ChartGrid() {
   const visible = useMemo(() => panes.slice(0, preset.panes), [panes, preset.panes]);
 
   return (
-    <div className="relative min-h-0 flex-1">
+    /* M6: Auf Desktop darf ein (fehl)füllender Werbeplatz die Chart-Fläche
+       nicht auf 0 quetschen – ein ausscherendes Kreativ tat genau das
+       (gemessen: Wrapper 8 s lang 0 px hoch, Panes unsichtbar). */
+    <div className="relative min-h-0 flex-1 lg:min-h-[20rem]">
       <div
         className={cn('grid h-full gap-2 p-2', preset.gridClass)}
         style={{ minHeight: preset.rows * preset.rowMinHeight }}

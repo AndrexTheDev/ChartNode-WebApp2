@@ -81,7 +81,14 @@ export function LocaleDetectBanner() {
   return (
     <div
       role="status"
-      className="container flex justify-center px-4 pt-3"
+      /* M6-Fix: Der Hinweis entsteht erst nach der Hydration (navigator)
+         und stand vorher IN-FLOW in der Header-Zone – jeder erste Besuch mit
+         abweichender Browsersprache verschob damit die ganze Seite
+         (gemessen 0,056 CLS auf /terminal, 0,073 auf der Landingpage,
+         0,239 auf /terminal @1440). Aus dem Fluss genommen kostet er 0 CLS,
+         bleibt optisch in der Header-Zone und scrollt mit der Seite weg
+         (der Sticky-Header legt sich beim Scrollen darüber). */
+      className="pointer-events-none absolute inset-x-0 top-[calc(var(--nc-header-h,3.75rem)+0.75rem)] z-30 flex justify-center px-4"
     >
       <div className="nc-clip pointer-events-auto flex w-full max-w-lg animate-fade-up flex-col gap-3 border border-primary/45 bg-elevated/95 p-4 shadow-neon-lg backdrop-blur-md sm:flex-row sm:items-center">
         <span className="flex size-9 shrink-0 items-center justify-center border border-primary/40 bg-primary/10 text-primary">
