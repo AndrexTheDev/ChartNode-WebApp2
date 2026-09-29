@@ -55,7 +55,16 @@ for (const url of UPSTREAM_PROBES) {
     /* nicht erreichbar – nächste Sonde */
   }
 }
+/* Fixture-Modus (`npm run verify:offline`): Klines UND Ticker kommen aus dem
+   Harness – Markt-Checks sind damit auch ohne Internet echte Prüfungen. */
+const FIXTURES = process.env.NC_FIXTURES === '1';
+const marketData = LIVE || FIXTURES;
 let skips = 0;
+function skipped(name, why) {
+  skips += 1;
+  checks.push({ name, skipped: true, ok: true, detail: why });
+  console.log(`  SKIP  ${name} — ${why}`);
+}
 function liveCheck(name, condition, detail = '') {
   if (LIVE) return check(name, condition, detail);
   skips += 1;
@@ -1091,13 +1100,37 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
     })
     .then(() => true)
     .catch(() => false);
-  liveCheck('heatmap renders 10+ volume tiles', tiles);
-  const tileBase = await w4.evaluate(() => document.querySelector('[role="dialog"] button[title*="/USDT ·"]')?.title.split('/')[0] ?? null);
-  if (tileBase) {
-    await w4.evaluate(() => document.querySelector('[role="dialog"] button[title*="/USDT ·"]')?.click());
-    await wait(600);
-    const header = await w4.evaluate(() => document.body.textContent ?? '');
-    check('heatmap tile click loads the pair', header.includes(`${tileBase}/USDT`) && !(await dialogText()).includes('Markt-Heatmap'));
+  const marketCheck = (name, condition, detail = '') =>
+    marketData ? check(name, condition, detail) : skipped(name, 'offline: Live-Provider nicht erreichbar');
+  marketCheck('heatmap renders 10+ volume tiles', tiles);
+  if (marketData) {
+    /* Kachel-Klick braucht echte Marktdaten (Paare außerhalb der Seed-Liste).
+       Vorher stand hier eine feste 600-ms-Wartezeit – seit die Auflösung über
+       den lazy geladenen CEX-Katalog läuft, wird gepollt statt geraten. */
+    /* Bewusst eine Kachel AUSSERHALB der Seed-Tokens (BTC/ETH/SOL) wählen: nur
+       dort greift die Auflösung über den CEX-Katalog. Mit BTC als Testfall
+       wäre die Prüfung auch mit dem alten Fehler grün gewesen (Negativ-
+       Kontrolle in AUDIT.md §15). */
+    const tileBase = await w4.evaluate(() => {
+      const nodes = [...document.querySelectorAll('[role="dialog"] button[title*="/USDT ·"]')];
+      const seeds = new Set(['BTC', 'ETH', 'SOL']);
+      const node = nodes.find((n) => !seeds.has(n.title.split('/')[0])) ?? nodes[0];
+      if (!node) return null;
+      node.click();
+      return node.title.split('/')[0];
+    });
+    if (tileBase) {
+      const loaded = await w4
+        .waitForFunction((base) => (document.body.textContent ?? '').includes(`${base}/USDT`), { timeout: 15000, polling: 250 }, tileBase)
+        .then(() => true)
+        .catch(() => false);
+      const closed = !(await dialogText()).includes('Markt-Heatmap');
+      marketCheck('heatmap tile click loads the pair', loaded && closed, `${tileBase}/USDT · Dialog zu: ${closed}`);
+    } else {
+      marketCheck('heatmap tile click loads the pair', false, 'keine Kachel gefunden');
+    }
+  } else {
+    skipped('heatmap tile click loads the pair', 'offline: Live-Provider nicht erreichbar');
   }
 
   // journal

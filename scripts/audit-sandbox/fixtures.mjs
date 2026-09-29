@@ -82,6 +82,64 @@ const PATTERNS = [
   [/api\.crypto\.com\/public\/get-candlestick/, 'cryptocom'],
 ];
 
+/*
+ * Ticker-Fixtures (24-h-Übersicht).
+ *
+ * Ohne sie beantwortet dieser Harness JEDEN Nicht-Kline-Aufruf mit 503 – die
+ * Heatmap blieb dadurch leer und ihre Prüfungen galten offline als „nicht
+ * messbar". Genau so blieb ein echter Fehler unsichtbar: der Klick auf eine
+ * Heatmap-Kachel wechselte das Paar nicht (`pickSymbol` kannte nur die fünf
+ * Seed-Tokens), die CI mit Internet fand ihn, die Offline-Kette nicht.
+ * Diese Fixtures liefern dieselben Formate wie die Börsen (Binance-Array,
+ * OKX-`data`-Hülle, Gate-Array), damit der echte Parser-/Render-Pfad läuft.
+ */
+const TICKER_PATTERNS = [
+  [/api\.binance\.com\/api\/v3\/ticker\/24hr/i, 'binance'],
+  [/okx\.com\/api\/v5\/market\/tickers/i, 'okx'],
+  [/api\.gateio\.ws\/api\/v4\/spot\/tickers/i, 'gate'],
+];
+/** Paare mit Volumen, damit Treemap/Sortierung realistisch arbeiten. */
+const TICKER_PAIRS = [
+  ['BTC', 61_000_000_000, 1.8], ['ETH', 24_000_000_000, -0.9], ['SOL', 9_000_000_000, 4.2],
+  ['XRP', 4_100_000_000, -1.6], ['DOGE', 3_400_000_000, 6.1], ['ADA', 1_900_000_000, 0.4],
+  ['AVAX', 1_500_000_000, -2.3], ['LINK', 1_300_000_000, 2.9], ['TON', 1_100_000_000, 1.1],
+  ['DOT', 980_000_000, -0.6], ['MATIC', 900_000_000, 3.3], ['NEAR', 700_000_000, -4.1],
+  ['ATOM', 620_000_000, 0.9], ['APT', 540_000_000, 5.2], ['ARB', 500_000_000, -1.2],
+  ['OP', 460_000_000, 2.0], ['INJ', 420_000_000, 7.4], ['SUI', 380_000_000, -3.5],
+  ['SEI', 320_000_000, 1.4], ['TIA', 300_000_000, -0.3], ['FIL', 280_000_000, 0.7],
+  ['LTC', 260_000_000, -1.9], ['BCH', 240_000_000, 3.8], ['ETC', 200_000_000, 0.2],
+  ['XLM', 180_000_000, -2.7], ['HBAR', 160_000_000, 4.6], ['RNDR', 150_000_000, 8.1],
+  ['GRT', 140_000_000, -1.1], ['AAVE', 130_000_000, 2.4], ['UNI', 120_000_000, -0.8],
+  ['MKR', 110_000_000, 1.6], ['CRV', 100_000_000, -5.2], ['ALGO', 95_000_000, 0.5],
+  ['FTM', 90_000_000, 3.1], ['SAND', 85_000_000, -2.2], ['MANA', 80_000_000, 1.9],
+  ['AXS', 75_000_000, -3.9], ['ROSE', 70_000_000, 6.7], ['KAVA', 65_000_000, -0.4],
+  ['ZEC', 60_000_000, 2.6], ['DASH', 55_000_000, -1.5], ['IOTA', 50_000_000, 0.8],
+];
+const TICKER_PRICES = {
+  BTC: 64_000, ETH: 3_100, SOL: 148, XRP: 0.62, DOGE: 0.158, ADA: 0.48, AVAX: 34.2,
+  LINK: 17.4, TON: 7.2, DOT: 6.9, MATIC: 0.71, NEAR: 5.4, ATOM: 8.6, APT: 9.1, ARB: 1.12,
+  OP: 2.35, INJ: 26.5, SUI: 1.62, SEI: 0.58, TIA: 9.8, FIL: 5.9, LTC: 82.4, BCH: 412,
+  ETC: 26.8, XLM: 0.108, HBAR: 0.082, RNDR: 7.1, GRT: 0.26, AAVE: 92.5, UNI: 9.4,
+  MKR: 2_460, CRV: 0.44, ALGO: 0.19, FTM: 0.72, SAND: 0.39, MANA: 0.44, AXS: 7.6,
+  ROSE: 0.11, KAVA: 0.82, ZEC: 29.4, DASH: 31.2, IOTA: 0.22,
+};
+const tickerPrice = (base, changePct) => Number((TICKER_PRICES[base] ?? 1).toFixed(base === 'XLM' || base === 'HBAR' || base === 'ALGO' || base === 'IOTA' ? 3 : 2)) * (1 + changePct / 100);
+function makeTickers(venue) {
+  if (venue === 'okx') {
+    return { code: '0', data: TICKER_PAIRS.map(([base, volume, change]) => ({
+      instId: `${base}-USDT`,
+      last: s(tickerPrice(base, change), 6),
+      open24h: s(tickerPrice(base, 0), 6),
+      volCcy24h: s(volume),
+    })) };
+  }
+  return TICKER_PAIRS.map(([base, volume, change]) => ({
+    symbol: `${base}USDT`,
+    lastPrice: s(tickerPrice(base, change)),
+    priceChangePercent: s(change),
+    quoteVolume: s(volume),
+  }));
+}
 const VENUE_HOST = /(binance|bybit|okx|kraken|coinbase|gateio|bitfinex|huobi|htx|bitget|kucoin|coinex|crypto\.com|dexscreener|geckoterminal)/i;
 
 /** Timeframe-Hinweis aus der URL – grob an den Live-Response-Größen orientiert. */
@@ -162,6 +220,15 @@ export async function installFixtures(page, opts = {}) {
     const routed = route?.({ url, venue, counters, req });
     if (routed) {
       respondInjected(req, routed, counters);
+      return;
+    }
+    const tickerHit = TICKER_PATTERNS.find(([re]) => re.test(url));
+    if (!hit && tickerHit) {
+      counters.served += 1;
+      counters.byVenue[tickerHit[1]] = (counters.byVenue[tickerHit[1]] ?? 0) + 1;
+      req
+        .respond({ status: 200, headers: CORS, body: JSON.stringify(makeTickers(tickerHit[1])) })
+        .catch(() => {});
       return;
     }
     if (!hit) {

@@ -161,6 +161,7 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
 | `https://nodechart.cc/de/terminal?ticker=SOL` | Social-Card-Vorschau (Telegram/Web) zeigt `$SOL`-Karte in Link-Sprache |
 | `https://nodechart.cc/de/legal/nope` | 404 (keine Soft-404s); `/xx` wird erst auf `/en/xx` geleitet und endet dann ebenfalls 404 |
 | Browser-Konsole (F12) | 0 Fehler, 0 Warnungen |
+| **Alles auf einmal** | `npm run check:live` — prüft Sitemap, Sprachen, Canonicals, robots/googlebot, JSON-LD, OG-Karte, 404-Verhalten, Header und (auf nodechart.cc) Always HTTPS + www-Weiterleitung. Erwartung: **42 PASS / 0 FAIL** |
 
 ## 6. Sitemap einreichen (Google & Bing, 4 Minuten)
 

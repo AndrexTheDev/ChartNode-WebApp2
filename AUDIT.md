@@ -931,15 +931,48 @@ Erwartungen sind auf den Auslieferungsstand gezogen (jetzt **90/90**).
 `VEROEFFENTLICHEN.md` trägt neue Zahlen (463/0) und einen neuen **§6 Sitemap
 einreichen** (Google Search Console + Bing Webmaster Tools, Rich-Results-Test).
 
+**9. Der Deploy ist bisher NIE durchgelaufen – und der Fehler war offline unsichtbar.**
+Zwei Punkte, beide erst nach dem Push sichtbar geworden:
+* Der Deploy-Workflow auf `main` ist am **2026-09-15** und erneut am
+  **2026-09-29** in der Guard-Suite gescheitert. Vorher lief am Pull Request
+  **keine** Prüfung, es gab also keine Vorwarnung; die Logs der Actions-Ergebnisse
+  sind aus dieser Umgebung nicht abrufbar (Blob-Storage). Maßnahmen:
+  `.github/workflows/verify.yml` als PR-Gate, `deploy.yml` ruft es als eigenen
+  Job auf (`needs:` – kein halber Deploy), und `scripts/ci-gate.sh` prüft mit
+  `pipefail`, schreibt `verify.log`, setzt jede FAIL-Zeile als `::error::`-
+  Annotation ab (per Checks-API lesbar) und legt das Protokoll als Artefakt ab.
+* Der erste CI-Lauf mit Annotationen meldete genau **einen** Fehler:
+  `FAIL heatmap tile click loads the pair`. Ursache in der App: `pickSymbol`
+  löste das angeklickte Paar nur gegen `TOKEN_INDEX` auf – und das sind die
+  **fünf Seed-Tokens**. Klicks auf Kacheln anderer Paare (XRP, DOGE …) kehrten
+  `false` zurück: der Dialog blieb offen, das Paar wechselte nicht. Der
+  SmartSearch löst dasselbe Problem längst über den CEX-Katalog; `pickSymbol`
+  nutzt diesen Weg jetzt ebenfalls (weiterhin per dynamischem Import, damit das
+  Universum nicht im Start-Bundle landet). Belegt mit **Negativ-Kontrolle**:
+  alter Code ⇒ `loaded=false`, Dialog offen, aktives Paar bleibt BTC/USDT;
+  Fix ⇒ `XRP/USDT` geladen, Dialog zu (`activeSymbol=XRP/USDT`).
+* Warum die Offline-Kette das nicht fand: der Fixture-Harness beantwortete jeden
+  Nicht-Kline-Aufruf mit 503, die Heatmap blieb leer und ihre Prüfungen galten
+  als „nicht messbar" (SKIP). Neu: **Ticker-Fixtures** für Binance/OKX/Gate
+  (`ticker/24hr`, `market/tickers`, `spot/tickers`) im Original-Format, und ein
+  `NC_FIXTURES`-Signal: marktdatenabhängige Checks laufen im Fixture-Modus
+  **echt** statt als SKIP. Die Kachel-Prüfung wählt gezielt ein Paar
+  außerhalb der Seed-Liste – mit BTC als Testfall wäre sie auch mit dem alten
+  Fehler grün gewesen.
+
 ### Endkontrolle (Auslieferungs-Build)
 
 * `npm run qa:full` → **463 PASS / 0 FAIL**, Exitcode 0 (10 Module).
-* `npm run verify:offline` → **867 PASS / 0 FAIL**, 19 Live-Prüfungen `SKIP`,
+* `npm run verify:offline` → **869 PASS / 0 FAIL**, 18 Live-Prüfungen `SKIP`,
   Exitcode 0 (typecheck · lint · i18n × 5 · SEO · CWV · Fit · qa-features ·
-  browser-check).
+  browser-check). Mit den Ticker-Fixtures laufen Heatmap-Kachelzahl und
+  Kachel-Klick offline **echt** mit.
 * `npm run cf:build` + `wrangler deploy --dry-run` → Exitcode 0 (Bundle und
   Bindings siehe Tabelle).
 * `seo-audit.mjs` (zweite, fetch-basierte Sicht) → **90/90**.
+* `npm run check:live` (neue Domain-Endkontrolle, §5 als Befehl) → lokal
+  **42 PASS / 0 FAIL** (2 SKIP: Always HTTPS und www → apex gelten nur auf der
+  echten Domain; auf nodechart.cc werden sie mitgeprüft).
 * Einzelsuiten auf **demselben** Build: `qa:i18n` **110/110** ·
   `qa:a11y` **175/0** (257 s) · `qa:ads` **57/0** · `qa:perf` **41/0** ·
   `qa:monetization` **78/0** · `qa:smartlinks` **14/0** · `qa:release` **44/44**.

@@ -299,10 +299,29 @@ export function TerminalShell() {
   const alertsCount = useChartStore((state) => state.alerts.length);
   const TF_MINUTES: Record<string, number> = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080 };
   const barMs = (customAgg ?? TF_MINUTES[timeframe] ?? 60) * 60_000;
+  /**
+   * Symbol aus einem Werkzeug (Heatmap, Screener …) übernehmen.
+   *
+   * Vorher wurde nur in `TOKEN_INDEX` gesucht – und das sind die fünf
+   * Seed-Tokens. Ein Klick auf eine Heatmap-Kachel (z. B. XRP/USDT) lief
+   * deshalb ins Leere: `false` ⇒ der Dialog blieb offen, der Chart wechselte
+   * nicht. Gefunden in der CI (Endkontrolle M9, `heatmap tile click loads the
+   * pair`). Jetzt löst derselbe Weg wie im SmartSearch das Paar über den
+   * CEX-Katalog auf – weiterhin per dynamischem Import, damit das Universum
+   * nicht im Start-Bundle landet (M7-Performance).
+   */
   const pickSymbol = (symbol: string): boolean => {
-    const token = Object.values(TOKEN_INDEX).find((entry) => entry.symbol === symbol);
-    if (!token) return false;
-    useAppStore.getState().setActiveToken(token);
+    const seed = Object.values(TOKEN_INDEX).find((entry) => entry.symbol === symbol);
+    if (seed) {
+      useAppStore.getState().setActiveToken(seed);
+      return true;
+    }
+    void import('@/lib/cex-universe').then(({ CEX_UNIVERSE, cexToToken }) => {
+      const instrument = CEX_UNIVERSE.find((entry) => `${entry.base}/${entry.quote}` === symbol);
+      if (!instrument) return;
+      useAppStore.getState().setActiveToken(cexToToken(instrument, instrument.exchanges[0] ?? 'binance'));
+    });
+    /* `true`: Der Dialog darf schließen – die Auflösung läuft asynchron nach. */
     return true;
   };
   const session = useMemo(() => sessionStats(sessionCandles), [sessionCandles]);

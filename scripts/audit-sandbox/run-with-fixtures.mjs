@@ -17,6 +17,12 @@
 import puppeteer from 'puppeteer';
 import { installFixtures } from './fixtures.mjs';
 
+/* Signalisiert dem Zielskript, dass Börsendaten (Klines UND Ticker) gefixt
+   vorliegen: Checks, die nur Marktdaten brauchen, laufen dadurch offline
+   wirklich – statt als SKIP zu verschwinden. Provider, die dieser Harness
+   nicht abdeckt (mempool.space, Deribit, GoPlus …), bleiben SKIP. */
+process.env.NC_FIXTURES = '1';
+
 const target = process.argv[2];
 if (!target) {
   console.error('Aufruf: node scripts/audit-sandbox/run-with-fixtures.mjs <skript.mjs> [args…]');
