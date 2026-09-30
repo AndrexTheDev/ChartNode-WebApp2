@@ -41,6 +41,9 @@ jobs:
         env:
           SITE_URL: ${{ inputs.site || 'https://nodechart.cc' }}
         run: |
+          # pipefail: ohne ihn ist der Exitcode der von `tee` – die Step wäre
+          # auch bei FAIL-Zählern grün und der Artefakt-Schritt liefe nie.
+          set -o pipefail
           node scripts/live-check.mjs 2>&1 | tee live-check.log
           {
             echo "### Live-Endkontrolle \`$SITE_URL\`"
