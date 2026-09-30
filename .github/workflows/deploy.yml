@@ -43,8 +43,11 @@ jobs:
       - name: OpenNext Cloudflare build
         run: npm run cf:build
 
+      # Fehlt eines der Secrets, bricht der Job mit einer klaren Anleitung ab
+      # (statt mit der kryptischen Wrangler-Meldung) – als Annotation am Check,
+      # damit die Ursache auch ohne Log-Download sichtbar ist.
       - name: Deploy Worker
-        run: npx wrangler deploy
+        run: bash scripts/ci-deploy.sh
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
