@@ -48,3 +48,25 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Der Deploy ist erst fertig, wenn die Domain ihn auch ausliefert.
+      # Prüft genau die §5-Checkliste aus VEROEFFENTLICHEN.md – als Befehl:
+      # Sitemap (30 URLs), hreflang, Canonicals, robots/googlebot, JSON-LD,
+      # OG-Karte, 404-Verhalten, Header, alle fünf Sprachen und die
+      # Domain-Regeln (Always HTTPS, www → apex).
+      - name: Auf die Domain warten (Deploy-Propagation)
+        run: |
+          for attempt in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L https://nodechart.cc/de || true)
+            if [ "$code" = "200" ]; then
+              echo "nodechart.cc liefert 200 nach ${attempt}s"
+              exit 0
+            fi
+            echo "Versuch ${attempt}: HTTP ${code}"
+            sleep 5
+          done
+          echo "::error::nodechart.cc antwortet nach 5 Minuten nicht mit 200"
+          exit 1
+
+      - name: Live-Endkontrolle (npm run check:live)
+        run: npm run check:live
