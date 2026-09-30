@@ -104,10 +104,10 @@ console.log('\n— 2: Blocker-Simulation (CDP blockt /ads.js) —');
   // Terminal dahinter bleibt lebendig
   const alive = await page.evaluate(() => ({
     canvases: document.querySelectorAll('canvas').length,
-    legend: document.querySelector('.font-mono.text-micro-10')?.textContent ?? '',
+    legend: document.querySelector('[data-nc-legend]')?.textContent ?? '',
   }));
   await wait(3000);
-  const alive2 = await page.evaluate(() => document.querySelector('.font-mono.text-micro-10')?.textContent ?? '');
+  const alive2 = await page.evaluate(() => document.querySelector('[data-nc-legend]')?.textContent ?? '');
   check('Terminal hinter dem Modal crasht nicht (Canvas + OHLC-Legende)', alive.canvases >= 1 && /O\s*[\d.]+/.test(alive.legend), JSON.stringify(alive).slice(0, 100));
   check('Legende updated weiter (LiveData hinter dem Modal)', alive2 !== alive.legend || alive2.length > 0);
   check('Sektion 2a: keine Page-Errors', errors.length === 0, errors[0] ?? '');

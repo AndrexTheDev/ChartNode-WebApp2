@@ -58,8 +58,8 @@ export function RatingsModal({ exchange, symbol, open, onClose }: RatingsModalPr
   return (
     <Modal open={open} onClose={onClose} title={t('ratings.title')} subtitle={`${symbol} · ${t('ratings.sub')}`}>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-5">
-          <svg viewBox="0 0 200 110" className="h-24 w-40 shrink-0" role="img" aria-label={t('ratings.sub')}>
+        <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+          <svg viewBox="0 0 200 110" className="h-20 w-32 shrink-0 sm:h-24 sm:w-40" role="img" aria-label={t('ratings.sub')}>
             <path d="M10 100 A 90 90 0 0 1 190 100" fill="none" strokeWidth="10" strokeDasharray="141 283" opacity="0.7" style={{ stroke: 'hsl(var(--nc-bear))' }} />
             <path d="M100 10 A 90 90 0 0 1 190 100" fill="none" strokeWidth="10" strokeDasharray="141 283" opacity="0.7" style={{ stroke: 'hsl(var(--nc-bull))' }} />
             <line
@@ -72,7 +72,7 @@ export function RatingsModal({ exchange, symbol, open, onClose }: RatingsModalPr
             />
             <circle cx="100" cy="100" r="5" style={{ fill: 'hsl(var(--nc-fg))' }} />
           </svg>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[9rem] flex-1">
             <p className={cn('border px-2 py-1 font-mono text-xs uppercase tracking-cyber', rows ? SUMMARY_STYLE[overall >= 1.5 ? 'strongBuy' : overall >= 0.5 ? 'buy' : overall <= -1.5 ? 'strongSell' : overall <= -0.5 ? 'sell' : 'neutral'] : 'text-muted border-line')}>
               {rows ? t(`ratings.gauge.${overall >= 1.5 ? 'strongBuy' : overall >= 0.5 ? 'buy' : overall <= -1.5 ? 'strongSell' : overall <= -0.5 ? 'sell' : 'neutral'}`) : '—'}
             </p>

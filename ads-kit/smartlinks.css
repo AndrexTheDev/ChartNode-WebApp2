@@ -15,6 +15,13 @@
 /* ---------- Disclosure-Badge (Pflicht-Label, immer sichtbar) ---------- */
 .nc-sl-badge {
   display: inline-block;
+  /* Kein Umbruch innerhalb des Werbe-Labels: ohne nowrap/Verbotsregel bricht die
+     Phrase in schmalen Slots mitten im Wort („Patrocinad/o", 13 px Überhang) und
+     wirkt wie ein Rendering-Fehler. */
+  white-space: nowrap;
+  /* Der Strip-Button ist ein Flex-Container: ohne flex-shrink:0 quetscht er das
+     Badge unter seine Inhaltsbreite (min-width:0), der Text wird abgeschnitten. */
+  flex: 0 0 auto;
   margin-left: 8px;
   padding: 1px 6px;
   font: 700 9px/1.5 'JetBrains Mono', ui-monospace, monospace;
@@ -80,11 +87,25 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  /* M6: einzeilig bleiben. Umbrüche machten die Höhe sprach- und
+     breitenabhängig (3 Chips = bis zu 85 px) – der Slot reserviert aber genau
+     eine Zeile, damit das Nachmounten des Kits keinen Layout-Sprung erzeugt.
+     Die Chips scrollen stattdessen horizontal. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .nc-sl-strip-btn {
   display: inline-flex;
   align-items: center;
+  /* Der Button ist selbst ein Flex-Container (Icon + Label + Badge). Ohne
+     flex-wrap war er auf 320-px-Geräten breiter als sein Container (es/ru
+     +20…23 px), weil Label und Badge zusammen nicht mehr passten.
+     M6: Statt umzubrechen bleibt der Button einzeilig – die Leiste scrollt
+     horizontal (siehe .nc-sl-strip). Nur so ist die Zeilenhöhe sprach- und
+     breitenunabhängig, und der reservierte Platz stimmt exakt. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
   gap: 6px;
   padding: 6px 12px;
   font: 600 12px/1 'Manrope', system-ui, sans-serif;
@@ -103,6 +124,9 @@
 }
 .nc-sl-strip-icon {
   font-size: 14px;
+  /* Wie das Badge ein Flex-Item: Emoji-Glyphen sind breiter als ihr Box-Modell,
+     ohne flex-shrink:0 schneidet der Button 3–4 px der Grafik ab. */
+  flex: 0 0 auto;
 }
 
 /* ---------- Offer-Toast (rechts unten, unaufdringlich) ---------- */

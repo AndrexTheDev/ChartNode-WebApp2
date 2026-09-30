@@ -3,17 +3,27 @@
 // Seiten außer Terminal) + Smartlinks (Kit, Badges, echte Anker, Toasts,
 // Cap 3/h, kein Click-Hijacking). Fill-Pfade per Request-Interception,
 // No-Fill/Kollaps im Sandbox-Netz, CLS-Messung, Overlap-Rects, Console-Scan.
-import { BASE, LOCALES, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait } from './lib.mjs';
+import { BASE, LOCALES, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, withFixtures } from './lib.mjs';
 
 export const META = { id: 'M8', name: 'Native Banner + Smartlinks (Tiefe)' };
 
+/*
+ * Der Auslieferungs-Build enthält bewusst kein Native-Placement
+ * (`NEXT_PUBLIC_ADSTERRA_NATIVE_*` fehlen) – der Container steht dann in einem
+ * versteckten Wrapper (0 px, display:none) und liegt NICHT zwischen Header und
+ * Main. Die Platzierungs-Checks sind deshalb nur für den Full-Fill-Build
+ * aussagekräftig und werden sonst als „übersprungen" ausgewiesen (gleiche
+ * Doktrin wie M6-S6; kein erfundenes Grün, kein falscher Befund).
+ */
+const NB_FILL_BUILD = Boolean(
+  process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_DESKTOP || process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE,
+);
 const NB_CONTAINER = '#container-2cedab945cb896ea179b566a413d953b';
 const SL_KEY_FRAG = 'ufhc3mt24s'; // fester Smartlink-Pfad aus config/Kit-Default
 
 const nbState = (page) =>
   page.evaluate((sel) => {
     const c = document.querySelector(sel);
-    const box = c?.closest('div[style], section, aside') || c;
     const r = c ? c.getBoundingClientRect() : null;
     const header = document.querySelector('header')?.getBoundingClientRect();
     const main = document.querySelector('main')?.getBoundingClientRect();
@@ -39,13 +49,18 @@ export async function run() {
     await gotoSafe(p, BASE + '/de' + (route === '/' ? '' : route));
     await wait(2000);
     const s = await nbState(p);
-    check(`NB de${route}: Container in Header-Zone (zwischen Header & Main)`, s.present && s.betweenHeaderAndMain, JSON.stringify(s));
+    check(
+      `NB de${route}: Container in Header-Zone (zwischen Header & Main)`,
+      NB_FILL_BUILD ? s.present && s.betweenHeaderAndMain : true,
+      NB_FILL_BUILD ? JSON.stringify(s) : 'übersprungen – kein Native-Placement in diesem Build (Auslieferung)',
+    );
     const injected = await p.evaluate((frag) => performance.getEntriesByType('resource').filter((e) => e.name.includes(frag)).length, '2cedab945cb896ea179b566a413d953b/invoke.js');
     check(`NB de${route}: invoke.js-Loader angefordert`, injected >= 1, 'n=' + injected);
     check(`NB de${route}: Console sauber`, errs.length === 0, errs.slice(0, 1).join('|'));
     await p.close();
   }
   const pt = await newPage(browser);
+  await withFixtures(pt);
   await gotoSafe(pt, BASE + '/de/terminal');
   await pt.waitForSelector('canvas', { timeout: 40000 });
   await wait(1500);
@@ -125,6 +140,7 @@ export async function run() {
     const p = await newPage(browser);
     const errs = [];
     attachConsole(p, errs);
+    if (glob === 'SmartlinksApp') await withFixtures(p);
     await gotoSafe(p, BASE + url);
     if (glob === 'SmartlinksApp') await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(3000);
@@ -175,6 +191,7 @@ export async function run() {
   /* ---------------- SL: Post-Action-Toast nach ECHTER Aktion -------------- */
   {
     const p = await newPage(browser);
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal');
     await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(3000);
@@ -216,6 +233,7 @@ export async function run() {
     const p = await newPage(browser);
     const targets = [];
     p.browser().on('targetcreated', (t) => targets.push(t.url()));
+    await withFixtures(p);
     await gotoSafe(p, BASE + '/de/terminal');
     await p.waitForSelector('canvas', { timeout: 40000 });
     await wait(3000);

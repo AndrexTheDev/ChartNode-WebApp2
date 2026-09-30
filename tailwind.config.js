@@ -48,11 +48,15 @@ module.exports = {
         danger: 'hsl(var(--nc-danger) / <alpha-value>)',
         warning: 'hsl(var(--nc-warning) / <alpha-value>)',
 
-        /* Flat aliases of the fixed neon scale. The whole UI writes
-           `text-bull` / `border-bear/50` – without these top-level entries
-           every such class is dropped from the build. */
-        bull: '#00ff9d',
-        bear: '#ff2e63',
+        /* Flat aliases for the whole UI (`text-bull` / `border-bear/50`).
+           M5-Fix: they resolve to the *theme* variables like every other
+           semantic colour – the previous fixed `#00ff9d` / `#ff2e63` kept
+           neon green/pink text in the light skin at 1.24:1 contrast while
+           the chart canvas (src/lib/chart-theme.ts) already followed the
+           theme, so text and candles disagreed. The brand-fixed neon shades
+           are still available as `neon.bull` / `neon.bear`. */
+        bull: 'hsl(var(--nc-bull) / <alpha-value>)',
+        bear: 'hsl(var(--nc-bear) / <alpha-value>)',
 
         /* ---- fixed neon brand scale (theme independent) ---- */
         neon: {
@@ -73,10 +77,14 @@ module.exports = {
       },
 
       fontFamily: {
+        // M7: Die kyrillische Datei steht direkt hinter der lateinischen –
+        // beide sind dasselbe Schriftbild, nur mit getrenntem `unicode-range`.
+        // So lädt /ru sie beim ersten kyrillischen Glyph nach, während de/en/
+        // es/zh sie gar nicht erst anfassen (vorher: 8 Preload-Dateien für alle).
         brand: ['var(--font-brand)', 'Orbitron', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        display: ['var(--font-display)', 'var(--font-display-cyr)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'var(--font-sans-cyr)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'var(--font-mono-cyr)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
 
       fontSize: {

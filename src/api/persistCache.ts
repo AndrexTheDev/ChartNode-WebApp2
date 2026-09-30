@@ -20,7 +20,13 @@
  *    an L2 hit older than that is treated as a miss.
  */
 
-const NS = 'nc-l2-v1';
+/**
+ * Namespace-Präfix des L2-Caches. Exportiert, damit die Speicher-Schicht der
+ * Stores (store/storage.ts) bei voller Quote genau diese Einträge verdrängen
+ * kann – der Zwischenspeicher ist die unterste Ebene der Rangfolge.
+ */
+export const L2_NAMESPACE = 'nc-l2-v1';
+const NS = L2_NAMESPACE;
 const INDEX_KEY = `${NS}:index`;
 const MAX_ENTRIES = 60;
 const MAX_VALUE_BYTES = 512 * 1024;

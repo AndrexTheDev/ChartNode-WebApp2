@@ -95,6 +95,37 @@ export function nativePlacement(variant: AdVariant): string {
   return variant === 'desktop' ? ADSTERRA.nativeDesktop : ADSTERRA.nativeMobile;
 }
 
+/**
+ * Container-Div, das der Native-Banner-Loader erwartet.
+ *
+ * Adsterra-Native-Banner sind Container-gebunden: `…/<hash>/invoke.js` füllt
+ * ausschließlich `#container-<hash>`. Ohne dieses Div lädt das Skript fehlerfrei
+ * (onload!) und rendert **nichts** – der Slot bliebe trotz konfiguriertem
+ * Placement leer. Die Id wird deshalb aus der Placement-URL abgeleitet, statt
+ * fest verdrahtet zu sein: damit funktioniert sie auch für die vom Publisher
+ * eingetragenen Desktop-/Mobile-Platzierungen.
+ *
+ * Nicht-Standard-URLs (z. B. `<script src="//pl…/invoke.js" data-key="…">`)
+ * liefern `''` ⇒ der Slot rendert dann keinen Container und injiziert nichts.
+ */
+export function nativeContainerId(src: string): string {
+  const hash = /([0-9a-f]{16,64})\/invoke\.js/i.exec(src)?.[1];
+  return hash ? `container-${hash}` : '';
+}
+
+/** Container-Ids der beiden Terminal-Slots (build-time konstant). */
+export const NATIVE_MOBILE_CONTAINER_ID = nativeContainerId(ADSTERRA.nativeMobile);
+export const NATIVE_DESKTOP_CONTAINER_ID = nativeContainerId(ADSTERRA.nativeDesktop);
+
+/**
+ * Adsterra liefert pro Platzierung genau ein Kreativ und pro Seite genau eine
+ * Instanz. Zeigen Desktop- und Mobile-Placement auf denselben Hash (Publisher
+ * hat nur eine URL eingetragen), würde der zweite Slot eine **doppelte Id**
+ * rendern und nie füllen ⇒ dann bleibt nur der mobile Slot aktiv.
+ */
+export const NATIVE_SLOTS_SHARE_PLACEMENT =
+  NATIVE_MOBILE_CONTAINER_ID !== '' && NATIVE_MOBILE_CONTAINER_ID === NATIVE_DESKTOP_CONTAINER_ID;
+
 export function socialBarPlacement(variant: AdVariant): string {
   return variant === 'desktop' ? ADSTERRA.socialBarDesktop : ADSTERRA.socialBarMobile;
 }

@@ -87,7 +87,7 @@ async function canvasMetrics(page) {
 
 async function waitForCandles(page) {
   for (let i = 0; i < 40; i += 1) {
-    const legend = await page.$eval('.font-mono.text-micro-10', (el) => el.textContent ?? '').catch(() => '');
+    const legend = await page.$eval('[data-nc-legend]', (el) => el.textContent ?? '').catch(() => '');
     if (/O\s*[\d.]+/.test(legend)) return true;
     await wait(1000);
   }
@@ -978,7 +978,7 @@ async function mobileFlow(browser) {
   // REST seeds are dead; live sockets can only deliver the current partial
   // candle – every engine guard (<30/<60/<80/<100 bars) must kick in
   const thin = await dead.evaluate(() => {
-    const legend = document.querySelector('.font-mono.text-micro-10')?.textContent ?? '';
+    const legend = document.querySelector('[data-nc-legend]')?.textContent ?? '';
     return legend.length < 200;
   });
   check('terminal boots on a seed-less, thin feed', thin);

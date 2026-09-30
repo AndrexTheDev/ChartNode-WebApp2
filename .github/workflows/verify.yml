@@ -1,0 +1,55 @@
+# © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
+# Gate bei jedem Pull Request: dieselben Prüfungen, die der Deploy-Workflow
+# (.github/workflows/deploy.yml) vor dem Ausrollen fährt.
+#
+# Warum als eigener Workflow: Am 2026-09-15 lief der Deploy auf `main` in der
+# Guard-Suite auf und riss den Job mit; vorher gab es keine Prüfung am Pull
+# Request, also war der Fehlschlag erst auf main sichtbar. Jetzt ist die Kette
+# für jeden PR sichtbar, BEVOR gemergt wird; deploy.yml ruft exakt diese Datei
+# auf (workflow_call), damit Gate und Deploy nicht auseinanderlaufen können.
+#
+# Kein Deploy, keine Secrets: dieser Workflow prüft nur. Scheitert das Gate,
+# stehen die FAIL-Zeilen als Annotation am Check (und in der Job-Zusammenfassung)
+# plus das vollständige Protokoll als Artefakt.
+name: Verify (Gate)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+  workflow_call: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (Produktionsbuild wie beim Deploy)
+        run: bash scripts/ci-build.sh
+
+      - name: Guard-Suite (SEO/CWV/Fit/QA) – Deploy nur grün
+        run: bash scripts/ci-gate.sh
+
+      - name: Protokoll sichern (nur bei Fehlschlag)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-log
+          path: |
+            verify.log
+            server.log
+            build.log
+          retention-days: 14
+          if-no-files-found: ignore

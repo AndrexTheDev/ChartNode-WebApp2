@@ -35,6 +35,7 @@ import {
   Magnet,
   Compass,
   Clock3,
+  ChevronUp,
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
@@ -43,8 +44,6 @@ import { ToolMenu } from '@/components/ui/ToolMenu';
 import { AdSlot } from '@/components/ads/AdManager';
 import { SmartlinkKit } from '@/components/ads/SmartlinkKit';
 import { SidebarBanner } from '@/components/ads/SidebarBanner';
-import { OnChainPanel } from '@/components/onchain/OnChainPanel';
-import { ProMetricsPanel } from '@/components/pro/ProMetricsPanel';
 import { requestPopunder } from '@/lib/ads/adsterra';
 import { offerToast, SMARTLINKS_ENABLED } from '@/lib/ads/smartlinks';
 import { ExchangePicker } from './ExchangePicker';
@@ -74,18 +73,32 @@ import {
   useChartStore,
 } from '@/store/useChartStore';
 import { ToastHost } from '@/components/ui/ToastHost';
-import { BacktestModal } from '@/components/tools/BacktestModal';
-import { RiskModal } from '@/components/tools/RiskModal';
-import { ScreenerModal } from '@/components/tools/ScreenerModal';
-import { WatchlistPopover } from '@/components/tools/WatchlistPopover';
-import { RatingsModal } from '@/components/tools/RatingsModal';
-import { HeatmapModal } from '@/components/tools/HeatmapModal';
-import { JournalModal } from '@/components/tools/JournalModal';
-import { MagnifierModal } from '@/components/tools/MagnifierModal';
-import { AlertsPanelModal } from '@/components/tools/AlertsPanelModal';
-import { PatternsModal } from '@/components/tools/PatternsModal';
-import { ScriptLabModal } from '@/components/tools/ScriptLabModal';
-import { EdgeLiqModal, EdgeLagModal, EdgeRegimeModal, EdgeClockModal } from '@/components/tools/EdgeModals';
+import { LazyGate, warmToolChunks } from '@/components/ui/LazyGate';
+import dynamic from 'next/dynamic';
+
+/*
+ * M7: Alle Werkzeuge werden erst beim ersten Öffnen geladen (siehe LazyGate).
+ * `ssr: false` ist hier korrekt: die Dialoge rendern geschlossen ohnehin
+ * `null`, und ohne Server-Render bleibt das Markup vor der Hydration identisch.
+ * `EdgeModals` bündelt vier Dialoge in einem Modul – ein Chunk für alle vier.
+ */
+const BacktestModal = dynamic(() => import('@/components/tools/BacktestModal').then((m) => m.BacktestModal), { ssr: false });
+const RiskModal = dynamic(() => import('@/components/tools/RiskModal').then((m) => m.RiskModal), { ssr: false });
+const ScreenerModal = dynamic(() => import('@/components/tools/ScreenerModal').then((m) => m.ScreenerModal), { ssr: false });
+const WatchlistPopover = dynamic(() => import('@/components/tools/WatchlistPopover').then((m) => m.WatchlistPopover), { ssr: false });
+const RatingsModal = dynamic(() => import('@/components/tools/RatingsModal').then((m) => m.RatingsModal), { ssr: false });
+const HeatmapModal = dynamic(() => import('@/components/tools/HeatmapModal').then((m) => m.HeatmapModal), { ssr: false });
+const JournalModal = dynamic(() => import('@/components/tools/JournalModal').then((m) => m.JournalModal), { ssr: false });
+const MagnifierModal = dynamic(() => import('@/components/tools/MagnifierModal').then((m) => m.MagnifierModal), { ssr: false });
+const AlertsPanelModal = dynamic(() => import('@/components/tools/AlertsPanelModal').then((m) => m.AlertsPanelModal), { ssr: false });
+const PatternsModal = dynamic(() => import('@/components/tools/PatternsModal').then((m) => m.PatternsModal), { ssr: false });
+const ScriptLabModal = dynamic(() => import('@/components/tools/ScriptLabModal').then((m) => m.ScriptLabModal), { ssr: false });
+const EdgeLiqModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeLiqModal), { ssr: false });
+const EdgeLagModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeLagModal), { ssr: false });
+const EdgeRegimeModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeRegimeModal), { ssr: false });
+const EdgeClockModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeClockModal), { ssr: false });
+const OnChainPanel = dynamic(() => import('@/components/onchain/OnChainPanel').then((m) => m.OnChainPanel), { ssr: false });
+const ProMetricsPanel = dynamic(() => import('@/components/pro/ProMetricsPanel').then((m) => m.ProMetricsPanel), { ssr: false });
 import { TOKEN_INDEX } from '@/lib/constants';
 import type { ExchangeId } from '@/websockets/types';
 import { SupportModal } from '@/components/support/SupportModal';
@@ -132,11 +145,37 @@ export function TerminalShell() {
   const tp = useTranslations('pro');
   const t2 = useTranslations('support');
   const hydrated = useHydrated();
+  /** M7: Werkzeug-Chunks in der Idle-Zeit wärmen (Klick bleibt sofort). */
+  useEffect(() => {
+    warmToolChunks();
+  }, []);
   const openShare = useViralStore((s) => s.openShare);
   const onChainOpen = useOnChainStore(selectOnChainOpen);
   const toggleOnChain = useOnChainStore((s) => s.toggle);
   const proOpen = useProStore(selectProOpen);
   const togglePro = useProStore((s) => s.toggle);
+
+  /**
+   * Mobile-Toolbar einklappen.
+   *
+   * Auf Phones belegte die vollständige Toolbar (7 umgebrochene Zeilen) 426 px
+   * und ließ vom Chart nur 47 px im First-View übrig. Deshalb ist das Terminal
+   * mobil jetzt viewport-füllend (kein Seiten-Scroll mehr – wie in einem echten
+   * Terminal) und die Toolbar startet auf einer schmalen Leiste
+   * (Symbol · Preis · Intervall · Werkzeuge). Ein Tipp holt die volle Leiste
+   * zurück, der Chevron legt sie wieder weg.
+   *
+   * Umgesetzt wird das **CSS-first** (siehe `.nc-toolbar-*` in globals.css):
+   * Server und Client rendern denselben Zustand (`closed`), das Umschalten ist
+   * ein reines `data`-Attribut. Damit gibt es keinen Hydration-Mismatch, keinen
+   * Layout-Sprung beim ersten Paint (CLS 0) und die schmale Leiste funktioniert
+   * sogar ohne JavaScript.
+   *
+   * Bewusst KEIN Scroll-Trigger: Ein-/Ausklappen ändert die Höhe und damit die
+   * Scrollposition – das erzeugt Rückkopplung und Flackern. Der Zustand hängt
+   * nur an der Viewport-Breite und an expliziten Tipps.
+   */
+  const [toolbarOpen, setToolbarOpen] = useState(false);
 
   // Shared links carry `?ticker=SOL` – open exactly the chart that was posted.
   // Read from `location.search` at mount (no useSearchParams → no Suspense
@@ -260,10 +299,29 @@ export function TerminalShell() {
   const alertsCount = useChartStore((state) => state.alerts.length);
   const TF_MINUTES: Record<string, number> = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080 };
   const barMs = (customAgg ?? TF_MINUTES[timeframe] ?? 60) * 60_000;
+  /**
+   * Symbol aus einem Werkzeug (Heatmap, Screener …) übernehmen.
+   *
+   * Vorher wurde nur in `TOKEN_INDEX` gesucht – und das sind die fünf
+   * Seed-Tokens. Ein Klick auf eine Heatmap-Kachel (z. B. XRP/USDT) lief
+   * deshalb ins Leere: `false` ⇒ der Dialog blieb offen, der Chart wechselte
+   * nicht. Gefunden in der CI (Endkontrolle M9, `heatmap tile click loads the
+   * pair`). Jetzt löst derselbe Weg wie im SmartSearch das Paar über den
+   * CEX-Katalog auf – weiterhin per dynamischem Import, damit das Universum
+   * nicht im Start-Bundle landet (M7-Performance).
+   */
   const pickSymbol = (symbol: string): boolean => {
-    const token = Object.values(TOKEN_INDEX).find((entry) => entry.symbol === symbol);
-    if (!token) return false;
-    useAppStore.getState().setActiveToken(token);
+    const seed = Object.values(TOKEN_INDEX).find((entry) => entry.symbol === symbol);
+    if (seed) {
+      useAppStore.getState().setActiveToken(seed);
+      return true;
+    }
+    void import('@/lib/cex-universe').then(({ CEX_UNIVERSE, cexToToken }) => {
+      const instrument = CEX_UNIVERSE.find((entry) => `${entry.base}/${entry.quote}` === symbol);
+      if (!instrument) return;
+      useAppStore.getState().setActiveToken(cexToToken(instrument, instrument.exchanges[0] ?? 'binance'));
+    });
+    /* `true`: Der Dialog darf schließen – die Auflösung läuft asynchron nach. */
     return true;
   };
   const session = useMemo(() => sessionStats(sessionCandles), [sessionCandles]);
@@ -275,21 +333,32 @@ export function TerminalShell() {
   const connected = status === 'open';
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)))] xl:flex-row">
+    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)),var(--nc-socialbar-h,0px))] max-lg:h-[calc(100dvh-var(--nc-header-h)-var(--nc-socialbar-h,0px))] max-lg:overflow-hidden xl:flex-row">
       {/* linke Sidebar: Banner 160×600, Desktop only (xl-Row-Layout) */}
       <SidebarBanner />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* sponsored strip (Smartlink-Kit) – Header-Zone über der Toolbar:
           auf Mobile sonst hinter der wrappenden Toolbar im Toast-Bereich */}
+      {/* Reserviert dauerhaft eine Zeile (M6): das Kit mountet erst nach dem Idle
+          und schob die Grid-Zeile sonst um bis zu 85 px nach unten (0,28 CLS).
+          Die Chips bleiben einzeilig und scrollen horizontal, damit die Höhe
+          unabhängig von Sprache und Breite konstant 44 px bleibt. Für Spender
+          und Blocker (Cache) blendet das Boot-Skript den Platz vor dem ersten
+          Paint aus – dort entsteht kein Leerraum. */}
       {SMARTLINKS_ENABLED ? (
-        <div id="sponsor-strip" className="mx-2 mt-1 flex flex-wrap items-center gap-2 empty:mx-0 empty:hidden" />
+        <div id="sponsor-strip" className="mx-2 mt-1 flex min-h-11 items-center gap-2 overflow-x-auto" />
       ) : null}
 
       {/* ------------------------------- toolbar ---------------------------- */}
-      <div className="sticky top-header z-40 border-b border-line/80 bg-bg/85 backdrop-blur-xl">
+      <div
+        className="sticky top-header z-40 border-b border-line/80 bg-bg/85 backdrop-blur-xl"
+        data-nc-toolbar={toolbarOpen ? 'open' : 'closed'}
+      >
         {/* Wrap-stable: font-swap reflow must never change the row count on
           desktop (CLS), so ≥sm keeps one scrollable line; phones still wrap. */}
-        <div className="flex max-lg:flex-wrap lg:flex-nowrap items-center gap-2 px-3 py-2.5 lg:overflow-x-auto [&>*]:lg:shrink-0">
+        <div
+          className="nc-toolbar-full flex max-lg:flex-wrap lg:flex-nowrap items-center gap-2 px-3 py-2.5 lg:overflow-x-auto [&>*]:lg:shrink-0"
+        >
           {/* live symbol + price */}
           <div className="flex min-w-0 items-baseline gap-2">
             <span className="truncate font-display text-base font-extrabold tracking-tight">
@@ -486,7 +555,7 @@ export function TerminalShell() {
         </div>
 
         {/* chart types */}
-        <div className="flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1 border-t border-line/60 px-3 py-2 lg:overflow-x-auto [&>*]:lg:shrink-0">
+        <div className="nc-toolbar-full flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1 border-t border-line/60 px-3 py-2 lg:overflow-x-auto [&>*]:lg:shrink-0">
           <Terminal className="mr-1 size-3.5 text-primary" aria-hidden />
           <Dropdown
             triggerLabel={t(`types.${chartType}`)}
@@ -690,11 +759,13 @@ export function TerminalShell() {
             {t('pct')}
           </Chip>
           <span className="relative shrink-0">
-            <Chip active={hydrated && watchOpen} onClick={() => setWatchOpen((value) => !value)}>
+            <Chip data-watch-trigger active={hydrated && watchOpen} onClick={() => setWatchOpen((value) => !value)}>
               <List className="size-3" aria-hidden />
               {t('watch')}
             </Chip>
-            <WatchlistPopover open={watchOpen} onClose={() => setWatchOpen(false)} />
+            <LazyGate active={watchOpen}>
+              <WatchlistPopover open={watchOpen} onClose={() => setWatchOpen(false)} />
+            </LazyGate>
           </span>
           <button
             type="button"
@@ -742,65 +813,130 @@ export function TerminalShell() {
               : t('waiting')}
           </span>
         </div>
+        {/* Schmale Leiste (nur Phones, siehe .nc-toolbar-slim): Kern-Status
+            bleibt sichtbar, die volle Leiste holt der Button zurück. */}
+        <div className="nc-toolbar-slim items-center gap-2 px-3 py-1.5">
+            <span className="min-w-0 truncate font-display text-sm font-extrabold tracking-tight">
+              {activeToken.symbol}
+            </span>
+            <span className={cn('min-w-0 truncate font-mono text-xs tabular-nums', livePrice != null ? 'text-primary' : 'text-faint')}>
+              {usd(livePrice)}
+            </span>
+            {liveChange != null && (
+              <span className={cn('font-mono text-2xs tabular-nums', liveChange >= 0 ? 'text-bull' : 'text-bear')}>
+                {pct(liveChange)}
+              </span>
+            )}
+            <span className="nc-chip shrink-0">{timeframe}</span>
+            <button
+              type="button"
+              onClick={() => setToolbarOpen(true)}
+              aria-expanded={false}
+              aria-label={t('toolbarExpand')}
+              title={t('toolbarExpand')}
+              className="nc-clip-sm ml-auto inline-flex size-8 shrink-0 items-center justify-center border border-line bg-surface/70 text-muted transition-colors hover:border-primary/50 hover:text-fg"
+            >
+              <Wrench className="size-3.5" aria-hidden />
+            </button>
+        </div>
+
+        {/* Chevron schließt die volle Leiste (nur Phones, nur wenn offen). */}
+        <button
+          type="button"
+          onClick={() => setToolbarOpen(false)}
+          aria-label={t('toolbarCollapse')}
+          title={t('toolbarCollapse')}
+          className="nc-toolbar-toggle w-full items-center justify-center gap-1.5 border-t border-line/60 py-1 font-mono text-2xs uppercase tracking-cyber text-faint transition-colors hover:text-fg"
+        >
+          <ChevronUp className="size-3" aria-hidden />
+          {t('toolbarCollapse')}
+        </button>
       </div>
 
-      {/* mobile ad container (Adsterra native strip) – null without config */}
+      {/* ad strips (Adsterra native 4:1, je Geräteklasse eins) – null ohne Config.
+          Bewusst als Streifen über dem Grid: der frühere 176×600-Rail am Ende
+          reservierte 600 px Höhe für ein 4:1-Widget und blieb ohne Fill leer. */}
       <AdSlot variant="mobile" />
+      <AdSlot variant="desktop" />
 
       {/* -------------------------------- grid ------------------------------ */}
       <ChartGrid />
       </div>
 
       {/* live on-chain signals (right dock, fetched only while open) */}
-      <OnChainPanel />
+      <LazyGate active={onChainOpen}>
+        <OnChainPanel />
+      </LazyGate>
 
       {/* PRO metrics dock (derivatives / flow / global / heat / options) */}
-      <ProMetricsPanel />
+      <LazyGate active={proOpen}>
+        <ProMetricsPanel />
+      </LazyGate>
       <ToastHost />
-      <BacktestModal
-        paneId="pane-1"
-        symbol={activeToken.symbol}
-        timeframe={timeframe}
-        candles={sessionCandles}
-        open={backtestOpen}
-        onClose={() => setBacktestOpen(false)}
-      />
-      <ScreenerModal open={screenerOpen} onClose={() => setScreenerOpen(false)} />
-      <RiskModal symbol={activeToken.symbol} lastPrice={livePrice} open={riskOpen} onClose={() => setRiskOpen(false)} />
-      <PatternsModal candles={sessionCandles} open={patternsOpen} onClose={() => setPatternsOpen(false)} />
-      <RatingsModal
-        exchange={(selection?.exchange ?? activeToken.exchange ?? 'binance') as ExchangeId}
-        symbol={activeToken.symbol}
-        open={ratingsOpen}
-        onClose={() => setRatingsOpen(false)}
-      />
-      <HeatmapModal open={heatmapOpen} onClose={() => setHeatmapOpen(false)} onPick={pickSymbol} />
-      <JournalModal symbol={activeToken.symbol} open={journalOpen} onClose={() => setJournalOpen(false)} />
-      <MagnifierModal
-        symbol={activeToken.symbol}
-        barMs={barMs}
-        candles={sessionCandles}
-        open={magnifierOpen}
-        onClose={() => setMagnifierOpen(false)}
-      />
-      <ScriptLabModal candles={sessionCandles} open={scriptLabOpen} onClose={() => setScriptLabOpen(false)} />
-      <EdgeLiqModal candles={sessionCandles} />
-      <EdgeLagModal candles={sessionCandles} />
-      <EdgeRegimeModal candles={sessionCandles} />
-      <EdgeClockModal candles={sessionCandles} />
-      <AlertsPanelModal
-        symbol={activeToken.symbol}
-        lastPrice={livePrice}
-        open={alertsOpen}
-        onClose={() => setAlertsOpen(false)}
-      />
+      <LazyGate active={backtestOpen} warm>
+        <BacktestModal
+          paneId="pane-1"
+          symbol={activeToken.symbol}
+          timeframe={timeframe}
+          candles={sessionCandles}
+          open={backtestOpen}
+          onClose={() => setBacktestOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={screenerOpen} warm>
+        <ScreenerModal open={screenerOpen} onClose={() => setScreenerOpen(false)} />
+      </LazyGate>
+      <LazyGate active={riskOpen} warm>
+        <RiskModal symbol={activeToken.symbol} lastPrice={livePrice} open={riskOpen} onClose={() => setRiskOpen(false)} />
+      </LazyGate>
+      <LazyGate active={patternsOpen}>
+        <PatternsModal candles={sessionCandles} open={patternsOpen} onClose={() => setPatternsOpen(false)} />
+      </LazyGate>
+      <LazyGate active={ratingsOpen}>
+        <RatingsModal
+          exchange={(selection?.exchange ?? activeToken.exchange ?? 'binance') as ExchangeId}
+          symbol={activeToken.symbol}
+          open={ratingsOpen}
+          onClose={() => setRatingsOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={heatmapOpen}>
+        <HeatmapModal open={heatmapOpen} onClose={() => setHeatmapOpen(false)} onPick={pickSymbol} />
+      </LazyGate>
+      <LazyGate active={journalOpen} warm>
+        <JournalModal symbol={activeToken.symbol} open={journalOpen} onClose={() => setJournalOpen(false)} />
+      </LazyGate>
+      <LazyGate active={magnifierOpen}>
+        <MagnifierModal
+          symbol={activeToken.symbol}
+          barMs={barMs}
+          candles={sessionCandles}
+          open={magnifierOpen}
+          onClose={() => setMagnifierOpen(false)}
+        />
+      </LazyGate>
+      <LazyGate active={scriptLabOpen}>
+        <ScriptLabModal candles={sessionCandles} open={scriptLabOpen} onClose={() => setScriptLabOpen(false)} />
+      </LazyGate>
+      <LazyGate active={edgeLiqOpen || edgeLagOpen || edgeRegimeOpen || edgeClockOpen}>
+        <EdgeLiqModal candles={sessionCandles} />
+        <EdgeLagModal candles={sessionCandles} />
+        <EdgeRegimeModal candles={sessionCandles} />
+        <EdgeClockModal candles={sessionCandles} />
+      </LazyGate>
+      <LazyGate active={alertsOpen} warm>
+        <AlertsPanelModal
+          symbol={activeToken.symbol}
+          lastPrice={livePrice}
+          open={alertsOpen}
+          onClose={() => setAlertsOpen(false)}
+        />
+      </LazyGate>
       <SupportModal />
       <SupportNudge />
       {/* Smartlink-Kit (Terminal): Sponsored-Strip + Post-Action-Offers */}
       <SmartlinkKit surface="app" />
 
-      {/* desktop ad container (Adsterra native rail) – null without config */}
-      <AdSlot variant="desktop" />
     </div>
   );
 }
@@ -809,16 +945,18 @@ function Chip({
   children,
   active,
   onClick,
+  ...rest
 }: {
   children: React.ReactNode;
   active?: boolean;
   onClick: () => void;
-}) {
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'children'>) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      {...rest}
       className={cn(
         'nc-clip-sm inline-flex h-7 items-center gap-1.5 border px-2 font-mono text-2xs uppercase tracking-cyber transition-colors duration-150',
         active

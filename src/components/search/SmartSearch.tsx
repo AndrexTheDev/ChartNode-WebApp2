@@ -4,22 +4,20 @@
 import { Building2, Droplets, Loader2, ScanSearch, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { auditTokens, isAuditableChain } from '@/api/security';
 import type { ChainId } from '@/lib/chains';
-import { smartSearch, type SmartSearchResult } from '@/api/search';
+import type { SmartSearchResult } from '@/api/search';
 import type { SearchHit, SecurityAudit } from '@/api/types';
 import { Kbd } from '@/components/ui/Kbd';
 import { Dropdown, type DropdownItem } from '@/components/ui/Dropdown';
 import { SecurityBadge } from './SecurityBadge';
 import { useRouter } from '@/i18n/navigation';
 import { classifyQuery, QUERY_KIND_LABEL } from '@/lib/address';
-import { CEX_UNIVERSE, cexToToken } from '@/lib/cex-universe';
 import { CHAIN_LABEL, type ChainId as ChainLabelId } from '@/lib/chains';
 import { EXCHANGE_META } from '@/lib/exchanges';
 import { cn } from '@/lib/cn';
 import { compactUsd, usd } from '@/lib/format';
 import { useAppStore } from '@/store/useAppStore';
-import { isCexExchange } from '@/store/useExchangeSelection';
+import { isCexExchange } from '@/lib/exchanges';
 import { useDismiss } from '@/lib/hooks/useDismiss';
 import type { Token } from '@/store/types';
 import type { ExchangeId } from '@/websockets/types';
@@ -63,7 +61,12 @@ export function SmartSearch({ className }: { className?: string }) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
-      void smartSearch(trimmed, controller.signal)
+      // M7: Die Such-Engine (api/search → cex-universe + DEX-Adapter, ~24 kB
+      // gzip inkl. aller 12 Börsen-Hosts) lag vorher im Layout-Bundle JEDER
+      // Seite – auch auf der Landingpage, die nie sucht. Sie kommt jetzt beim
+      // ersten Tastendruck.
+      void import('@/api/search')
+        .then(({ smartSearch }) => smartSearch(trimmed, controller.signal))
         .then((result) => {
           if (controller.signal.aborted) return;
           setResults(result);
@@ -86,40 +89,47 @@ export function SmartSearch({ className }: { className?: string }) {
     if (!results) return;
     let cancelled = false;
 
-    // Group the burst by chain and audit in ONE batched GoPlus call per chain
-    // (10 hits ⇒ 1 request instead of 10) – keeps the page under public rate
-    // limits; a 429 storm here would park every downstream signal in cooldown.
-    const byChain = new Map<string, string[]>();
-    for (const hit of results.hits) {
-      if (hit.kind !== 'dex') continue;
-      const { pair } = hit;
-      if (!isAuditableChain(pair.chain)) continue;
+    void (async () => {
+      // M7: Das Sicherheits-Audit (GoPlus, ~14 kB Modul) kommt erst, wenn es
+      // wirklich Ergebnisse zu prüfen gibt – vorher lag es in jedem Layout-Bundle.
+      const security = await import('@/api/security');
+      if (cancelled) return;
 
-      const key = `${pair.chain}:${pair.baseAddress.toLowerCase()}`;
-      if (key in auditsRef.current) continue;
-      auditsRef.current[key] = 'pending';
-      setAudits((prev) => ({ ...prev, [key]: 'pending' }));
+      // Group the burst by chain and audit in ONE batched GoPlus call per chain
+      // (10 hits ⇒ 1 request instead of 10) – keeps the page under public rate
+      // limits; a 429 storm here would park every downstream signal in cooldown.
+      const byChain = new Map<string, string[]>();
+      for (const hit of results.hits) {
+        if (hit.kind !== 'dex') continue;
+        const { pair } = hit;
+        if (!security.isAuditableChain(pair.chain)) continue;
 
-      const list = byChain.get(pair.chain) ?? [];
-      list.push(pair.baseAddress);
-      byChain.set(pair.chain, list);
-    }
+        const key = `${pair.chain}:${pair.baseAddress.toLowerCase()}`;
+        if (key in auditsRef.current) continue;
+        auditsRef.current[key] = 'pending';
+        setAudits((prev) => ({ ...prev, [key]: 'pending' }));
 
-    for (const [chain, contracts] of byChain) {
-      void auditTokens(chain as ChainId, contracts).then((audits) => {
-        if (cancelled) return;
-        setAudits((prev) => {
-          const next = { ...prev };
-          for (const contract of contracts) {
-            const key = `${chain}:${contract.toLowerCase()}`;
-            const audit = audits.get(contract.toLowerCase()) ?? null;
-            auditsRef.current[key] = audit;
-            next[key] = audit;
-          }
-          return next;
+        const list = byChain.get(pair.chain) ?? [];
+        list.push(pair.baseAddress);
+        byChain.set(pair.chain, list);
+      }
+
+      for (const [chain, contracts] of byChain) {
+        void security.auditTokens(chain as ChainId, contracts).then((audits) => {
+          if (cancelled) return;
+          setAudits((prev) => {
+            const next = { ...prev };
+            for (const contract of contracts) {
+              const key = `${chain}:${contract.toLowerCase()}`;
+              const audit = audits.get(contract.toLowerCase()) ?? null;
+              auditsRef.current[key] = audit;
+              next[key] = audit;
+            }
+            return next;
+          });
         });
-      });
-    }
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -188,8 +198,10 @@ export function SmartSearch({ className }: { className?: string }) {
         : EXCHANGE_META[venueFilter].name;
 
   /* --------------------------------- selection -------------------------------- */
-  function tokenFor(hit: SearchHit): Token | null {
+  async function tokenFor(hit: SearchHit): Promise<Token | null> {
     if (hit.kind === 'cex') {
+      // M7: Der CEX-Katalog (cex-universe) wird erst beim Auswählen geladen.
+      const { CEX_UNIVERSE, cexToToken } = await import('@/lib/cex-universe');
       const instrument = CEX_UNIVERSE.find((entry) => `${entry.base}/${entry.quote}` === hit.symbol);
       if (!instrument) return null;
       return cexToToken(instrument, chipExchange(hit));
@@ -206,8 +218,8 @@ export function SmartSearch({ className }: { className?: string }) {
     };
   }
 
-  function select(hit: SearchHit) {
-    const token = tokenFor(hit);
+  async function select(hit: SearchHit) {
+    const token = await tokenFor(hit);
     if (!token) return;
     setActiveToken(token);
     setOpen(false);
@@ -231,7 +243,7 @@ export function SmartSearch({ className }: { className?: string }) {
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const hit = shown[cursor];
-      if (hit) select(hit);
+      if (hit) void select(hit);
     }
   }
 
@@ -247,6 +259,8 @@ export function SmartSearch({ className }: { className?: string }) {
         )}
       >
         <ScanSearch className="size-3.5 shrink-0 text-primary" aria-hidden />
+        {/* M5-Fix: hier stand `focus:outline-none` – damit war der globale
+            :focus-visible-Ring des Suchfelds komplett unsichtbar. */}
         <input
           ref={inputRef}
           type="text"
@@ -265,7 +279,7 @@ export function SmartSearch({ className }: { className?: string }) {
           aria-autocomplete="list"
           autoComplete="off"
           spellCheck={false}
-          className="h-full min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+          className="h-full min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-faint"
         />
 
         {kind !== 'text' && query.trim().length > 0 && (
@@ -337,7 +351,7 @@ export function SmartSearch({ className }: { className?: string }) {
                   <li key={hit.id} role="option" aria-selected={active}>
                     <button
                       type="button"
-                      onClick={() => select(hit)}
+                      onClick={() => void select(hit)}
                       onMouseEnter={() => setCursor(index)}
                       className={cn(
                         'nc-clip-sm flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors duration-100',

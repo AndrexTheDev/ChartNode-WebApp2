@@ -165,7 +165,7 @@ export async function SiteFooter({ locale }: { locale: Locale }) {
         <p className="font-mono text-2xs uppercase tracking-cyber text-faint">{t('builtWith')}</p>
       </div>
 
-      <p className="container pb-8 text-center font-mono text-2xs text-faint/80 sm:text-left">
+      <p className="container pb-8 text-center font-mono text-2xs text-faint sm:text-left">
         {t('demoNotice')}
       </p>
     </footer>

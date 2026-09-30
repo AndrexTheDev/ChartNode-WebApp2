@@ -2,18 +2,15 @@
 'use client';
 
 import { useEffect } from 'react';
-import { needsProbe, probeAllExchanges } from '@/api/exchangeProbe';
 import { pickExchange } from '@/lib/exchange-select';
+import { isCexExchange } from '@/lib/exchanges';
 import { detectRegion } from '@/lib/region';
-import { ADAPTERS } from '@/websockets/registry';
 import type { ExchangeId } from '@/websockets/types';
 import type { Timeframe } from './types';
 import { useExchangeStore, type ExchangeReach } from './useExchangeStore';
 
-/** Type guard for "is this string one of our twelve venues?". */
-export function isCexExchange(value: string | undefined | null): value is ExchangeId {
-  return typeof value === 'string' && value in ADAPTERS;
-}
+/* M7: Guard wandert nach `lib/exchanges` (Leaf, kein Börsen-Infrastruktur-Import). */
+export { isCexExchange } from '@/lib/exchanges';
 
 /**
  * Region bootstrap: detects the visitor's country (edge cookie → timezone) and
@@ -28,7 +25,11 @@ export function useRegionBootstrap(enabled = true): void {
     if (region.country && region.country !== store.country) {
       store.setRegion(region.country, region.source);
     }
-    if (needsProbe(useExchangeStore.getState())) void probeAllExchanges();
+    // M7: Probe-Engine (~20 kB Börsen-Infrastruktur) erst hier nachladen –
+    // statisch importiert hing sie an jedem Modul, das den Guard brauchte.
+    void import('@/api/exchangeProbe').then((probe) => {
+      if (probe.needsProbe(useExchangeStore.getState())) void probe.probeAllExchanges();
+    });
   }, [enabled]);
 }
 

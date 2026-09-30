@@ -1,7 +1,7 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StarOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { fetchScreenerRows, type ScreenerRow } from '@/api/prometrics';
@@ -23,6 +23,7 @@ export function WatchlistPopover({ open, onClose }: { open: boolean; onClose: ()
   const setActiveToken = useAppStore((s) => s.setActiveToken);
   const toggleWatchlist = useAppStore((s) => s.toggleWatchlist);
   const [rows, setRows] = useState<ScreenerRow[]>([]);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -40,6 +41,33 @@ export function WatchlistPopover({ open, onClose }: { open: boolean; onClose: ()
     };
   }, [open]);
 
+  /*
+   * M5-Fix: Der Popover ließ sich nur über den Chip selbst wieder schließen –
+   * kein Escape, kein Klick daneben. Beides gehört zu einem Overlay, das die
+   * Toolbar überlagert (der Chip trägt `data-watch-trigger` und ist
+   * ausgenommen, damit sein eigener Klick nicht doppelt schaltet).
+   */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (panelRef.current?.contains(target ?? null)) return;
+      if (target?.closest('[data-watch-trigger]')) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
+  }, [open, onClose]);
+
   const quoteByBase = useMemo(() => {
     const map = new Map<string, ScreenerRow>();
     for (const row of rows) map.set(row.base, row);
@@ -49,7 +77,12 @@ export function WatchlistPopover({ open, onClose }: { open: boolean; onClose: ()
   if (!open) return null;
 
   return (
-    <div className="nc-clip absolute right-0 top-full z-40 mt-2 w-72 border border-secondary/40 bg-bg/97 shadow-volt backdrop-blur-xl">
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label={t('watch.title')}
+      className="nc-clip absolute right-0 top-full z-40 mt-2 w-72 border border-secondary/40 bg-bg/97 shadow-volt backdrop-blur-xl"
+    >
       <header className="flex items-center justify-between border-b border-line/70 px-2.5 py-1.5">
         <span className="font-mono text-2xs uppercase tracking-cyber text-secondary">{t('watch.title')}</span>
         <span className="font-mono text-2xs tabular-nums text-faint">{watchlist.length}</span>
@@ -70,7 +103,12 @@ export function WatchlistPopover({ open, onClose }: { open: boolean; onClose: ()
                   onClose();
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') setActiveToken(token);
+                  /* M5-Fix: role="button" braucht Enter UND Space (WCAG 4.1.2). */
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setActiveToken(token);
+                    onClose();
+                  }
                 }}
                 className={cn(
                   'flex cursor-pointer items-center gap-2 border-b border-line/40 px-2.5 py-1.5 transition-colors hover:bg-secondary/8',

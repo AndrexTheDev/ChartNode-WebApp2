@@ -44,12 +44,13 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { useLocale } from 'next-intl';
 import { RSI as RsiCalc } from 'technicalindicators';
 import { readChartTheme, withAlpha, type ChartTheme } from '@/lib/chart-theme';
 import { crosshairBus, rangeBus, rangesEqual } from '@/lib/chart-sync';
 import { hitTestDrawings, type XY } from '@/lib/drawings';
 import { cn } from '@/lib/cn';
-import { minMoveFor, pricePrecision } from '@/lib/format';
+import { minMoveFor, pricePrecision, safeLocale } from '@/lib/format';
 import {
   INDICATOR_LIBRARY,
   SERIES_COLORS,
@@ -252,6 +253,15 @@ export function PriceChart({
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  /*
+   * lightweight-charts formatiert Achsen-Ticks intern mit
+   * `Date.toLocaleString()` **ohne** Locale-Argument – also im Runtime-Default.
+   * Ist der kaputt (POSIX-Tags wie `en-US@posix`), wirft jede Tick-Beschriftung
+   * einen `RangeError`. Wir geben dem Chart deshalb explizit eine validierte
+   * Locale: robust und zugleich korrekt lokalisiert.
+   */
+  const locale = safeLocale(useLocale());
+  const localeRef = useRef(locale);
   const mainRef = useRef<AnySeries | null>(null);
   const volumeRef = useRef<AnySeries | null>(null);
   const indicatorSeriesRef = useRef<Map<string, AnySeries>>(new Map());
@@ -449,6 +459,7 @@ export function PriceChart({
       rightPriceScale: { borderColor: chartTheme.border, scaleMargins: { top: 0.08, bottom: 0.24 } },
       timeScale: { borderColor: chartTheme.border, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       handleScale: { axisPressedMouseMove: { time: true, price: false } },
+      localization: { locale: safeLocale(localeRef.current) },
     });
 
     chartRef.current = chart;
@@ -580,6 +591,13 @@ export function PriceChart({
     // incrementally below, so candle ticks never recreate the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType, chartId]);
+
+  /* ---------------------- Achsen-Locale im Theme-Update -------------------- */
+
+  useEffect(() => {
+    localeRef.current = locale;
+    chartRef.current?.applyOptions({ localization: { locale } });
+  }, [locale]);
 
   /* --------------------------------- data ---------------------------------- */
 
@@ -728,6 +746,12 @@ export function PriceChart({
         }
       });
     }
+    /* Audit-Haken: Zahl der Chart-Panes (Haupt-Pane + je Oszillator-Pane).
+       `data-nc-legend` markiert die Legende und zählt damit GRID-Zellen – nicht
+       die inneren Panes von lightweight-charts. Ein Oszillator wie RSI legt
+       seinen Pane innerhalb DESSELBEN Canvas an, war also über die Legende
+       nicht nachweisbar (Audit-Suite meldete fälschlich „kein Pane"). */
+    containerRef.current?.setAttribute('data-nc-panes', String(chart.panes().length));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey, chartType, chartId]);
 
@@ -1273,11 +1297,11 @@ export function PriceChart({
       />
 
       {/* legend – DOM on purpose: selectable, translatable, screen-reader friendly */}
-      <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-micro-10 leading-tight">
+      <div data-nc-legend="" className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-micro-10 leading-tight">
         <span className="text-fg">{symbol}</span>
         <span className="text-faint">{intervalLabel ?? timeframe}</span>
         {shown && (
-          <span className="text-muted">
+          <span data-nc-legend-ohlc="" className="text-muted">
             O <span className="text-fg">{shown.o.toFixed(digits)}</span> H{' '}
             <span className="text-fg">{shown.h.toFixed(digits)}</span> L{' '}
             <span className="text-fg">{shown.l.toFixed(digits)}</span> C{' '}

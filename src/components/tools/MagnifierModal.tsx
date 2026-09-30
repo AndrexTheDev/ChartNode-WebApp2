@@ -2,11 +2,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
-import { usd } from '@/lib/format';
+import { dateTime, usd } from '@/lib/format';
 import { useViralStore } from '@/store/useViralStore';
 import type { Candle } from '@/websockets/types';
 
@@ -44,6 +44,7 @@ interface TapeStats {
  */
 export function MagnifierModal({ symbol, barMs, candles, open, onClose }: MagnifierModalProps) {
   const t = useTranslations('tools');
+  const locale = useLocale();
   const closed = useMemo(() => candles.slice(0, -1), [candles]);
   const [offset, setOffset] = useState(1);
   const [stats, setStats] = useState<TapeStats | null>(null);
@@ -62,12 +63,26 @@ export function MagnifierModal({ symbol, barMs, candles, open, onClose }: Magnif
       setError(false);
     const pair = symbol.replace('/', '');
     const start = target!.t;
+    /*
+     * M8-Härtung: rohe Sekundär-Fetches bekommen denselben 12-s-Deckel wie der
+     * zentrale Fetch-Layer (`api/http.ts`). Ohne ihn bliebe der Dialog bei einer
+     * hängenden Verbindung dauerhaft im Ladezustand – ein Abbruch endet jetzt im
+     * regulären Fehlerpfad („Tape nicht erreichbar“).
+     */
     const binance = fetch(
       `https://api.binance.com/api/v3/aggTrades?symbol=${encodeURIComponent(pair)}&startTime=${start}&endTime=${start + barMs - 1}&limit=1000`,
+      { signal: AbortSignal.timeout(12_000) },
     ).then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))));
-    const okx = fetch(`https://www.okx.com/api/v5/market/trades?instId=${encodeURIComponent(symbol.replace('/', '-'))}&limit=300`).then(
-      (response) => (response.ok ? response.json() : Promise.reject(new Error('http'))),
-    );
+    const okx = fetch(`https://www.okx.com/api/v5/market/trades?instId=${encodeURIComponent(symbol.replace('/', '-'))}&limit=300`, {
+      signal: AbortSignal.timeout(12_000),
+    }).then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))));
+    /*
+     * M8-Fix (Befund O3 aus §1): Der Zweitmarkt-Promise muss auch dann
+     * beobachtet sein, wenn Binance gewinnt – sonst meldet der Browser eine
+     * unbehandelte Rejection („Failed to fetch“), sobald OKX z. B. regional
+     * gesperrt ist. Der Fallback-Pfad unten nutzt denselben Promise weiter.
+     */
+    void okx.catch(() => null);
     binance
       .catch(() =>
         okx.then((payload: unknown) => {
@@ -151,7 +166,7 @@ export function MagnifierModal({ symbol, barMs, candles, open, onClose }: Magnif
             <ChevronLeft size={12} />
           </button>
           <span className="border border-line bg-surface/40 px-2 py-1 text-fg">
-            {bar ? new Date(bar.t).toLocaleString() : '—'}
+            {bar ? dateTime(bar.t, locale) : '—'}
           </span>
           <button
             type="button"

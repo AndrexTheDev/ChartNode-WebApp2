@@ -37,27 +37,60 @@ const brand = Orbitron({
   variable: '--font-brand',
 });
 
+/*
+ * M7: Kyrillisch wird NICHT mehr vorausgeladen.
+ *
+ * `next/font` legt für jedes Subset eine eigene woff2 an und hängt ein
+ * `<link rel="preload">` an – 17 Dateien / 204 kB auf JEDER Seite, davon acht
+ * kyrillische (≈ 78 kB), die nur /ru überhaupt braucht. Die
+ * `unicode-range`-Regeln laden ein Subset ohnehin erst, wenn ein Glyph es
+ * verlangt; nur der Preload-Hint erzwang den Download für alle.
+ *
+ * Deshalb zwei Aufrufe je Familie: latin (Preload an, kritischer Pfad) und
+ * cyrillic (Preload aus, kommt beim ersten kyrillischen Zeichen von selbst).
+ * Beide werden in der Tailwind-Kette hintereinander gelegt, sodass der Browser
+ * pro Glyph die passende Datei wählt.
+ */
 const display = Exo_2({
-  // latin-ext: keine unserer fünf Locales braucht es – jedes Subset ist eine
-  // eigene woff2 + ein Preload-Hint mehr (CWV-Budget)
-  subsets: ['latin', 'cyrillic'],
+  subsets: ['latin'],
   weight: ['700', '800', '900'],
   display: 'swap',
   variable: '--font-display',
 });
+const displayCyr = Exo_2({
+  subsets: ['cyrillic'],
+  weight: ['700', '800', '900'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-display-cyr',
+});
 
 const sans = Manrope({
-  subsets: ['latin', 'cyrillic'],
+  subsets: ['latin'],
   weight: ['400', '600', '700'],
   display: 'swap',
   variable: '--font-sans',
 });
+const sansCyr = Manrope({
+  subsets: ['cyrillic'],
+  weight: ['400', '600', '700'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-sans-cyr',
+});
 
 const mono = JetBrains_Mono({
-  subsets: ['latin', 'cyrillic'],
+  subsets: ['latin'],
   weight: ['400', '700'],
   display: 'swap',
   variable: '--font-mono',
+});
+const monoCyr = JetBrains_Mono({
+  subsets: ['cyrillic'],
+  weight: ['400', '700'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-mono-cyr',
 });
 
 /* -------------------------------------------------------------------------- */
@@ -143,7 +176,7 @@ export default async function LocaleLayout({
       dir="ltr"
       data-theme="acid"
       suppressHydrationWarning
-      className={cn(brand.variable, display.variable, sans.variable, mono.variable)}
+      className={cn(brand.variable, display.variable, displayCyr.variable, sans.variable, sansCyr.variable, mono.variable, monoCyr.variable)}
     >
       <head>
         {/* Applies the persisted theme before first paint – no flash of wrong skin. */}
@@ -181,8 +214,12 @@ export default async function LocaleLayout({
           {/* Native Banner (4:1) in der Header-Zone – Terminal skippt (Strip) */}
           <HeaderNativeBanner />
 
-          {/* Sprach-Hinweis in-flow in der Header-Zone: verdeckt nie Content */}
-          <LocaleDetectBanner />
+          {/* Sprach-Hinweis in der Header-Zone: Platz wird pre-paint reserviert
+              (Boot-Skript ⇒ 0 CLS), der Hinweis selbst steht im Fluss und
+              verdeckt damit keine Bedienelemente mehr. */}
+          <div className="nc-langhint-slot">
+            <LocaleDetectBanner />
+          </div>
 
           <main id="nc-content" className="flex-1">
             {children}

@@ -54,6 +54,13 @@ export function SmartlinkKit({ surface }: { surface: SmartlinkSurface }) {
       script.dataset.config = JSON.stringify({
         URL: SMARTLINK_URL,
         LABEL: t('sponsored'),
+        // Labels der Sponsored-Leiste sind Content, kein Kit-String: ohne
+        // Übersetzung stünden sie in allen fünf Locales englisch da.
+        ITEMS: [
+          { icon: '🎁', label: t('offerBonus') },
+          { icon: '⚡', label: t('offerPartner') },
+          { icon: '🏆', label: t('offerContest') },
+        ],
         TOAST_TEXT: `🎁 ${t('toastText')}`,
         TOAST_CTA: t('toastCta'),
         FALLBACK_TITLE: t('fallbackTitle'),

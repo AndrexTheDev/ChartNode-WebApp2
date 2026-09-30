@@ -2,10 +2,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Bell, BellOff, Plus, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
+import { dateTime } from '@/lib/format';
 import { beepAlert, notificationGranted, requestNotificationPermission } from '@/lib/notifications';
 import { useChartStore } from '@/store/useChartStore';
 import { useViralStore } from '@/store/useViralStore';
@@ -27,6 +28,7 @@ const input =
  */
 export function AlertsPanelModal({ symbol, lastPrice, open, onClose }: AlertsPanelModalProps) {
   const t = useTranslations('tools');
+  const locale = useLocale();
   const alerts = useChartStore((state) => state.alerts);
   const addAlertFull = useChartStore((state) => state.addAlertFull);
   const removeAlert = useChartStore((state) => state.removeAlert);
@@ -65,7 +67,7 @@ export function AlertsPanelModal({ symbol, lastPrice, open, onClose }: AlertsPan
   return (
     <Modal open={open} onClose={onClose} title={t('alerts.title')} subtitle={t('alerts.sub')}>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -168,7 +170,7 @@ export function AlertsPanelModal({ symbol, lastPrice, open, onClose }: AlertsPan
                 </span>
                 {alert.note && <span className="truncate text-secondary">{alert.note}</span>}
                 <span className="ml-auto text-faint">
-                  {alert.fired && alert.firedAt ? new Date(alert.firedAt).toLocaleTimeString() : t(alert.fired ? 'alerts.fired' : 'alerts.armed')}
+                  {alert.fired && alert.firedAt ? dateTime(alert.firedAt, locale) : t(alert.fired ? 'alerts.fired' : 'alerts.armed')}
                 </span>
                 <button type="button" aria-label={t('alerts.del')} onClick={() => removeAlert(alert.id)} className="text-faint hover:text-bear">
                   <Trash2 size={12} />

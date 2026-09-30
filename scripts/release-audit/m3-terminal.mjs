@@ -3,7 +3,15 @@
 // Timeframe-Switch + Persistenz, Befehlspalette, Indikator-Add, On-Chain/Pro-
 // Panels, Script-Lab-Modal, Whale-Ticker, Help-Doku-Vollständigkeit,
 // Mobile-Guard, Console-Sauberkeit während der gesamten Batterie.
-import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait } from './lib.mjs';
+import { BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, withFixtures } from './lib.mjs';
+
+/*
+ * Der Fixture-Feed beantwortet bewusst alle Venue-Aufrufe, die KEINE Klines
+ * sind, mit 503 (Region-Ranker u. a. fallen dann durch – siehe
+ * `scripts/audit-sandbox/README.md`). Das ist erwarteter Teil des Fixture-
+ * Vertrags und kein App-Fehler.
+ */
+const FIXTURE_503 = /503 \(Service Unavailable\)/i;
 
 export const META = { id: 'M3', name: 'Terminal-Funktionalbatterie' };
 
@@ -30,7 +38,10 @@ export async function run() {
   const browser = await launchBrowser();
   const page = await newPage(browser, { width: 1440, height: 900 });
   const errs = [];
-  attachConsole(page, errs);
+  attachConsole(page, errs, { allow: (t) => FIXTURE_503.test(t) });
+  // Ohne Fixture-Feed bliebe der Chart in der Sandbox im Platzhalter stehen
+  // (kein Börsenzugang) – geprüft wird die App, nicht das Sandbox-Netz.
+  await withFixtures(page);
 
   await gotoSafe(page, BASE + '/de/terminal');
   await page.waitForSelector('canvas', { timeout: 40000 });

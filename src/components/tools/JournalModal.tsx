@@ -81,7 +81,7 @@ export function JournalModal({ symbol, open, onClose }: JournalModalProps) {
 
   const stat = (label: string, value: string, tone?: 'bull' | 'bear') => (
     <div className="border border-line/60 bg-surface/30 px-2 py-1.5">
-      <p className="text-2xs uppercase tracking-cyber text-faint">{label}</p>
+      <p className="text-2xs uppercase tracking-cyber text-faint [overflow-wrap:anywhere]">{label}</p>
       <p className={cn('font-mono text-xs tabular-nums', tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-fg')}>{value}</p>
     </div>
   );

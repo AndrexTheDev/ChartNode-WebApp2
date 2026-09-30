@@ -139,7 +139,7 @@ export function SupportNudge() {
             </button>
             <button
               type="button"
-              aria-label="dismiss"
+              aria-label={t('dismiss')}
               onClick={() => celebrate(ribbon)}
               className="shrink-0 text-faint transition-colors hover:text-fg"
             >
@@ -166,7 +166,7 @@ export function SupportNudge() {
             </button>
             <button
               type="button"
-              aria-label="dismiss"
+              aria-label={t('dismiss')}
               onClick={() => setToolNudge(false)}
               className="shrink-0 text-faint transition-colors hover:text-fg"
             >

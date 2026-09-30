@@ -126,3 +126,16 @@ export const EXCHANGE_LIST: ExchangeMeta[] = Object.values(EXCHANGE_META);
 export function exchangeName(id: ExchangeId): string {
   return EXCHANGE_META[id]?.name ?? id;
 }
+
+/**
+ * M7: Type guard „ist das eine unserer zwölf CEX-Kennungen?".
+ *
+ * Lag vorher in `store/useExchangeSelection` – das Modul importiert aber
+ * `api/exchangeProbe` → `websockets/rest` + `registry` und zog damit die
+ * komplette Börsen-Infrastruktur (≈20 kB gzip) in JEDES Layout-Bundle, weil
+ * die Kopfzeilen-Suche nur diesen Guard brauchte. Die Kennungsliste ist
+ * dieselbe wie in `EXCHANGE_META` (und damit wie in `ADAPTERS`).
+ */
+export function isCexExchange(value: string | undefined | null): value is ExchangeId {
+  return typeof value === 'string' && value in EXCHANGE_META;
+}

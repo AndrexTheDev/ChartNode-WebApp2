@@ -84,7 +84,10 @@ export function ChartGrid() {
   const visible = useMemo(() => panes.slice(0, preset.panes), [panes, preset.panes]);
 
   return (
-    <div className="relative flex-1">
+    /* M6: Auf Desktop darf ein (fehl)füllender Werbeplatz die Chart-Fläche
+       nicht auf 0 quetschen – ein ausscherendes Kreativ tat genau das
+       (gemessen: Wrapper 8 s lang 0 px hoch, Panes unsichtbar). */
+    <div className="relative min-h-0 flex-1 lg:min-h-[20rem]">
       <div
         className={cn('grid h-full gap-2 p-2', preset.gridClass)}
         style={{ minHeight: preset.rows * preset.rowMinHeight }}
@@ -291,7 +294,10 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
           </span>
         }
         actions={
-          <div className="flex items-center gap-1">
+          /* `flex-wrap`: Dropdowns + PaneButtons sind als eine Zeile ~352 px breit
+             und passen in ein 360-px-Pane nicht (326 px). Ohne Umbruch schob die
+             Zeile den Header 26 px über den Panel-Rand. */
+          <div className="flex flex-wrap items-center justify-end gap-1">
             <Dropdown
               items={timeframeItems}
               triggerLabel={t('pane.timeframe')}
@@ -440,6 +446,7 @@ function PaneButton({
 
 function PanePlaceholder({
   symbol,
+  status,
   label,
   price,
   change,
@@ -454,7 +461,11 @@ function PanePlaceholder({
 }) {
   const t = useTranslations('chart');
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+    <div
+      data-nc-pane-placeholder=""
+      data-nc-placeholder-reason={status}
+      className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-4 text-center"
+    >
       <Scan className="size-5 animate-pulse text-primary/50" aria-hidden />
       <p className="font-display text-sm font-bold text-fg">{symbol}</p>
       <p className="font-mono text-2xs uppercase tracking-cyber text-faint">{label}</p>

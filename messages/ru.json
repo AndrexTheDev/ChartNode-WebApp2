@@ -197,7 +197,7 @@
     "venue": "Источник",
     "timeframe": "Таймфрейм",
     "stateReadout": "Состояние хранилища",
-    "waiting": "Ожидание графического движка (часть 2)",
+    "waiting": "Ожидание рыночных данных …",
     "vp": "VP",
     "avwap": "aVWAP",
     "sr": "S/R Авто",
@@ -250,6 +250,8 @@
       "help": "Центр помощи",
       "edge": "Edge"
     },
+    "toolbarCollapse": "Свернуть панель",
+    "toolbarExpand": "Инструменты",
     "compareNone": "Без сравнения"
   },
   "cta": {
@@ -1140,6 +1142,9 @@
   },
   "ads": {
     "sponsored": "Спонсоры",
+    "offerBonus": "Бонусное предложение",
+    "offerPartner": "Партнёрская акция",
+    "offerContest": "Торговый конкурс",
     "claimBonus": "Забрать бонус",
     "partnerDeals": "Партнёрские акции",
     "partnerNote": "Спонсорские предложения помогают финансировать NodeChart.",

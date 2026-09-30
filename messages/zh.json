@@ -197,7 +197,7 @@
     "venue": "数据来源",
     "timeframe": "周期",
     "stateReadout": "Store 状态",
-    "waiting": "等待图表引擎接入（第二部分）",
+    "waiting": "正在等待行情数据 …",
     "vp": "VP",
     "avwap": "aVWAP",
     "sr": "支撑/阻力",
@@ -250,6 +250,8 @@
       "help": "帮助中心",
       "edge": "Edge"
     },
+    "toolbarCollapse": "收起工具栏",
+    "toolbarExpand": "工具",
     "compareNone": "无对比"
   },
   "cta": {
@@ -1140,6 +1142,9 @@
   },
   "ads": {
     "sponsored": "赞助",
+    "offerBonus": "奖金优惠",
+    "offerPartner": "合作伙伴优惠",
+    "offerContest": "交易竞赛",
     "claimBonus": "领取奖励",
     "partnerDeals": "合作伙伴优惠",
     "partnerNote": "赞助合作优惠助力 NodeChart 持续运营。",

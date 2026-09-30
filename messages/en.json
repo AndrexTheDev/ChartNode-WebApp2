@@ -197,7 +197,7 @@
     "venue": "Venue",
     "timeframe": "Timeframe",
     "stateReadout": "Store state",
-    "waiting": "Awaiting chart engine (Part 2)",
+    "waiting": "Waiting for market data …",
     "vp": "VP",
     "avwap": "aVWAP",
     "sr": "S/R Auto",
@@ -250,6 +250,8 @@
       "help": "Help center",
       "edge": "Edge"
     },
+    "toolbarCollapse": "Collapse tools",
+    "toolbarExpand": "Tools",
     "compareNone": "No comparison"
   },
   "cta": {
@@ -1140,6 +1142,9 @@
   },
   "ads": {
     "sponsored": "Sponsored",
+    "offerBonus": "Bonus Offer",
+    "offerPartner": "Partner Deal",
+    "offerContest": "Trading Contest",
     "claimBonus": "Claim Bonus",
     "partnerDeals": "Partner Deals",
     "partnerNote": "Sponsored partner offers help fund NodeChart.",

@@ -197,7 +197,7 @@
     "venue": "Quelle",
     "timeframe": "Zeiteinheit",
     "stateReadout": "Store-State",
-    "waiting": "Wartet auf die Chart-Engine (Teil 2)",
+    "waiting": "Warte auf Kursdaten …",
     "vp": "VP",
     "avwap": "aVWAP",
     "sr": "S/R Auto",
@@ -250,6 +250,8 @@
       "help": "Hilfe-Center",
       "edge": "Edge"
     },
+    "toolbarCollapse": "Werkzeuge einklappen",
+    "toolbarExpand": "Werkzeuge",
     "compareNone": "Kein Vergleich"
   },
   "cta": {
@@ -1140,6 +1142,9 @@
   },
   "ads": {
     "sponsored": "Gesponsert",
+    "offerBonus": "Bonus-Angebot",
+    "offerPartner": "Partner-Deal",
+    "offerContest": "Trading-Wettbewerb",
     "claimBonus": "Bonus sichern",
     "partnerDeals": "Partner-Deals",
     "partnerNote": "Gesponserte Partner-Angebote helfen, NodeChart zu finanzieren.",

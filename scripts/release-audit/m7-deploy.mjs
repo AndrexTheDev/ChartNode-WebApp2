@@ -8,6 +8,23 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, BASE, makeReporter } from './lib.mjs';
 
+/*
+ * Der Cloudflare-Build ruft intern `npm run build` (= `next build --webpack`) auf.
+ * In der Sandbox gibt es keinen Zugang zu fonts.googleapis.com; ohne die echten
+ * Fontdateien bricht schon das Next-Build ab (in der CI/am echten Deploy-Host
+ * mit Netz ist der Mock unnötig und wird deshalb nur ergänzt, wenn er fehlt).
+ */
+const buildEnv = () => {
+  const mock = join(ROOT, 'scripts/audit-sandbox/font-mock.cjs');
+  return {
+    ...process.env,
+    ...(existsSync(mock) && !process.env.NEXT_FONT_GOOGLE_MOCKED_RESPONSES
+      ? { NEXT_FONT_GOOGLE_MOCKED_RESPONSES: mock }
+      : {}),
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || 'https://nodechart.cc',
+  };
+};
+
 export const META = { id: 'M7', name: 'Deploy-Readiness (Cloudflare)' };
 
 export async function run() {
@@ -48,7 +65,7 @@ export async function run() {
   let cfOk = true;
   let cfInfo = '';
   try {
-    const out = execSync('npm run cf:build', { cwd: ROOT, encoding: 'utf8', timeout: 900000, stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = execSync('npm run cf:build', { cwd: ROOT, encoding: 'utf8', timeout: 900000, stdio: ['ignore', 'pipe', 'pipe'], env: buildEnv() });
     cfInfo = (out.match(/✓[^\n]*/g) || []).slice(-1)[0] || 'ok';
   } catch (e) {
     cfOk = false;

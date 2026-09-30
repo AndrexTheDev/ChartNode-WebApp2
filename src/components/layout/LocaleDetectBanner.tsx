@@ -66,6 +66,9 @@ export function LocaleDetectBanner() {
     } catch {
       /* ignore */
     }
+    // Reservierten Slot freigeben – die Karte verschwindet als direkte Folge
+    // der Nutzeraktion (kein automatischer Layoutsprung).
+    document.documentElement.removeAttribute('data-nc-langhint');
     setSuggestion(null);
   }
 
@@ -81,9 +84,19 @@ export function LocaleDetectBanner() {
   return (
     <div
       role="status"
-      className="container flex justify-center px-4 pt-3"
+      /* M6-Fix (CLS) + Korrektur aus der Vollverifikation:
+         Der Hinweis entsteht erst nach der Hydration (navigator) und stand
+         zuerst IN-FLOW ⇒ jeder erste Besuch mit abweichender Browsersprache
+         verschob die Seite (0,056 CLS auf /terminal, 0,239 @1440). M6 nahm ihn
+         deshalb aus dem Fluss – als schwebende Karte lag er damit aber VOR der
+         ersten Inhaltszeile und blockierte auf Mobil die Klickpunkte der
+         Sponsor-Leiste (elementFromPoint am Chip-Zentrum traf den Banner).
+         Jetzt: wieder im Fluss, aber der Platz ist vom Boot-Skript pre-paint
+         markiert (`.nc-langhint-slot`, `html[data-nc-langhint='1']`) ⇒ 0 CLS
+         UND keine Überdeckung. */
+      className="flex h-full justify-center px-4 pt-3"
     >
-      <div className="nc-clip pointer-events-auto flex w-full max-w-lg animate-fade-up flex-col gap-3 border border-primary/45 bg-elevated/95 p-4 shadow-neon-lg backdrop-blur-md sm:flex-row sm:items-center">
+      <div className="nc-clip pointer-events-auto flex h-full w-full max-w-lg animate-fade-up flex-col justify-center gap-2.5 border border-primary/45 bg-elevated/95 p-4 shadow-neon-lg backdrop-blur-md lg:max-w-2xl lg:flex-row lg:items-center lg:gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center border border-primary/40 bg-primary/10 text-primary">
           <Languages className="size-4" aria-hidden />
         </span>
@@ -95,7 +108,7 @@ export function LocaleDetectBanner() {
           </p>
         </div>
 
-        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap sm:shrink-0">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto lg:flex-nowrap lg:shrink-0">
           <NeonButton size="sm" onClick={accept}>
             {t('switch', { language: target.short })}
           </NeonButton>

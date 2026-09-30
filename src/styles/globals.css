@@ -20,13 +20,13 @@
     --nc-line: 110 22% 24%;
     --nc-fg: 110 25% 93%;
     --nc-muted: 110 9% 63%;
-    --nc-faint: 110 7% 42%;
+    --nc-faint: 110 7% 50%; /* M5-Fix: 3.5:1 → 4.75:1 auf elevated (WCAG AA) */
 
     --nc-primary: 110 100% 54%; /* #39ff14 acid green */
     --nc-primary-fg: 110 60% 5%;
     --nc-primary-dim: 110 100% 32%;
-    --nc-secondary: 278 100% 57%; /* #b026ff electric purple */
-    --nc-secondary-fg: 0 0% 100%;
+    --nc-secondary: 278 100% 65%; /* electric purple – M5-Fix: L57→65 ⇒ 4.78:1 als Text */
+    --nc-secondary-fg: 278 60% 6%; /* M5-Fix: dunkle Ink statt Weiß (Weiß/64% = 3.8:1) */
     --nc-accent: 186 100% 50%; /* #00f0ff */
     --nc-danger: 344 100% 59%; /* #ff2e63 */
     --nc-warning: 43 100% 50%; /* #ffb800 */
@@ -50,9 +50,9 @@
     --nc-line: 278 40% 28%;
     --nc-fg: 270 30% 95%;
     --nc-muted: 270 12% 66%;
-    --nc-faint: 270 10% 45%;
+    --nc-faint: 270 10% 55%; /* M5-Fix: 3.3:1 → 4.73:1 */
 
-    --nc-primary: 278 100% 62%;
+    --nc-primary: 278 100% 65%; /* M5-Fix: L62→65 ⇒ 4.70:1 als Text auf elevated */
     --nc-primary-fg: 278 60% 6%;
     --nc-primary-dim: 278 90% 40%;
     --nc-secondary: 110 100% 54%;
@@ -78,7 +78,7 @@
     --nc-line: 220 16% 80%;
     --nc-fg: 222 34% 9%;
     --nc-muted: 220 12% 36%;
-    --nc-faint: 220 10% 54%;
+    --nc-faint: 220 10% 43%; /* M5-Fix: 3.2:1 → 4.70:1 im hellen Skin */
 
     --nc-primary: 130 92% 24%;
     --nc-primary-fg: 0 0% 100%;
@@ -87,7 +87,7 @@
     --nc-secondary-fg: 0 0% 100%;
     --nc-accent: 196 92% 30%;
     --nc-danger: 348 82% 42%;
-    --nc-warning: 32 96% 40%;
+    --nc-warning: 32 96% 32%; /* M5-Fix: 3.2:1 → 4.71:1 */
     --nc-bull: 152 68% 28%;
     --nc-bear: 348 82% 42%;
 
@@ -107,7 +107,7 @@
     --nc-line: 140 45% 20%;
     --nc-fg: 120 45% 88%;
     --nc-muted: 130 18% 58%;
-    --nc-faint: 130 14% 38%;
+    --nc-faint: 130 14% 48%; /* M5-Fix: 3.2:1 → 4.74:1 */
 
     --nc-primary: 130 100% 45%; /* phosphor #00e63c */
     --nc-primary-fg: 130 70% 4%;
@@ -135,7 +135,7 @@
     --nc-line: 320 60% 30%;
     --nc-fg: 320 40% 95%;
     --nc-muted: 320 25% 68%;
-    --nc-faint: 320 20% 46%;
+    --nc-faint: 320 20% 56%; /* M5-Fix: 3.3:1 → 4.69:1 */
 
     --nc-primary: 330 100% 60%; /* hot pink #ff2e97 */
     --nc-primary-fg: 330 70% 6%;
@@ -161,6 +161,11 @@
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
     scrollbar-color: hsl(var(--nc-primary) / 0.4) transparent;
+    /* Sicherheitsnetz: ein einzelnes überbreites Token (langer deutscher
+       Komposit-Begriff, URL, Hash) darf das Layout-Viewport nicht aufblähen.
+       `clip` statt `hidden`, damit kein Scroll-Container entsteht und
+       `position: sticky` (Header/Toolbar) unangetastet bleibt. */
+    overflow-x: clip;
   }
 
   body {
@@ -475,16 +480,39 @@ select[aria-invalid='true'] {
 
 /* ── Native Banner (Adsterra 4:1) in der Header-Zone ───────────────────────
    Reservierte Box = Widget-Layout 4:1 ⇒ füllt CLS-frei hinein; ohne Fill
-   kollabiert .nc-collapsed (React-State) ⇒ kein toter Raum. Mobile darf
-   etwas höher reservieren (responsive Tiles stapeln dort gern 2×2). */
+   kollabiert .nc-collapsed (React-State) ⇒ kein toter Raum.
+
+   M6: Die Box war volle Breite mit `max-height: 10rem`. Auf 1440 px ergibt
+   4:1 aber 352 px – das Kreativ wurde auf 160 px beschnitten (über die Hälfte
+   des Banners unsichtbar). Deshalb ist die Box jetzt in der Breite begrenzt:
+   Reserve und Kreativhöhe sind identisch, nichts wird geclippt. Mobile
+   reserviert 2:1 (responsive Tiles stapeln dort), ebenfalls breitenbegrenzt. */
+/*
+ * Spender/QA: Das Boot-Skript setzt `data-nc-adsuppressed` VOR dem ersten
+ * Paint ⇒ die reservierten Werbeflächen verschwinden ohne Layout-Sprung
+ * (React-Baum und Hydration bleiben identisch, es ist reines CSS).
+ */
+[data-nc-adsuppressed='1'] .nc-header-ad,
+[data-nc-adsuppressed='1'] [data-ad-slot],
+[data-nc-adsuppressed='1'] .nc-sidebar-rail,
+[data-nc-adsuppressed='1'] [data-sidebar-banner],
+[data-nc-adsuppressed='1'] #sponsor-strip {
+  display: none !important;
+}
 .nc-header-ad {
   padding-top: 0.5rem;
 }
 .nc-header-ad > div {
   width: 100%;
+  max-width: 40rem;
+  margin-inline: auto;
   aspect-ratio: 4 / 1;
-  max-height: 10rem;
   overflow: hidden;
+}
+.nc-header-ad iframe,
+.nc-header-ad ins,
+.nc-header-ad img {
+  max-width: 100%;
 }
 .nc-header-ad.nc-collapsed {
   display: none;
@@ -492,8 +520,21 @@ select[aria-invalid='true'] {
 @media (max-width: 640px) {
   .nc-header-ad > div {
     aspect-ratio: 2 / 1;
-    max-height: 12rem;
+    max-width: 30rem;
   }
+}
+
+/* ── Touchscreen-Hinweis (Werkzeugleiste) ──────────────────────────────────
+   M7: Der Hinweis erschien erst nach der Hydration (JS-Touch-Erkennung) und
+   schob die Chart-Fläche um ~194 px nach unten – gemessen 0,110 CLS, der
+   einzige messbare Layout-Sprung des Terminals. Das Boot-Skript setzt
+   `data-nc-touch` jetzt VOR dem ersten Paint, die Sichtbarkeit entscheidet
+   also CSS; Server- und Client-Markup bleiben identisch (Hydration-sicher). */
+.nc-touch-gate {
+  display: none;
+}
+[data-nc-touch='1'] .nc-touch-gate {
+  display: flex;
 }
 
 /* ── Ad-Pause unter offenen Dialogen ───────────────────────────────────────
@@ -502,6 +543,41 @@ select[aria-invalid='true'] {
    ein Dialog offen ist ausgeblendet (Modal setzt body.nc-modal-open). */
 body.nc-modal-open [data-nc-socialbar="1"] {
   visibility: hidden;
+}
+
+/* ── Terminal-Toolbar: auf Phones einklappbar ──────────────────────────────
+   Die volle Toolbar braucht auf einem 390-px-Gerät 7 Zeilen (426 px) und ließ
+   vom Chart nur 47 px im First-View. Deshalb: schmale Leiste als Default,
+   volle Leiste nur auf Wunsch (`data-nc-toolbar="open"`).
+
+   CSS-first statt React-Konditional: Server und Client rendern denselben
+   Zustand (`closed`) ⇒ kein Hydration-Mismatch, kein Layout-Sprung beim ersten
+   Paint, und die schmale Leiste funktioniert selbst ohne JavaScript. Desktop
+   (≥ 1024px) bleibt unverändert bei der vollen Leiste. */
+.nc-toolbar-slim,
+.nc-toolbar-toggle {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  /* Standard auf Phones: schmale Leiste sichtbar, volle Leiste aus */
+  .nc-toolbar-full {
+    display: none;
+  }
+  .nc-toolbar-slim,
+  .nc-toolbar-toggle {
+    display: flex;
+  }
+  /* Ausgeklappt: volle Leiste + Chevron, schmale Leiste weicht */
+  [data-nc-toolbar='open'] .nc-toolbar-full {
+    display: flex;
+  }
+  [data-nc-toolbar='open'] .nc-toolbar-slim {
+    display: none;
+  }
+  [data-nc-toolbar='closed'] .nc-toolbar-toggle {
+    display: none;
+  }
 }
 
 /* ── Sponsored-Strip: auf Mobile einzeiliger Scroller ──────────────────────
@@ -522,3 +598,38 @@ body.nc-modal-open [data-nc-socialbar="1"] {
     overflow-x: visible;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Sprachhinweis-Slot (M6-Nachtrag / Vollverifikation)
+ *
+ * Der Hinweis wurde in M6 aus dem Fluss genommen, um den CLS beim ersten
+ * Besuch zu killen – als schwebende Karte lag er danach aber VOR der ersten
+ * Inhaltszeile und blockierte auf Mobil die Klickpunkte der Sponsor-Leiste
+ * (gemessen: elementFromPoint am Chip-Zentrum lieferte den Banner-Absatz).
+ *
+ * Jetzt umgekehrt: Der Hinweis steht wieder im Fluss, sein Platz wird aber
+ * VOR dem ersten Paint reserviert (Boot-Skript setzt `data-nc-langhint`)
+ * ⇒ 0 CLS UND keine Überdeckung. Beim Wegklicken entfernt die Komponente das
+ * Attribut; der Slot kollabiert dann als direkte Folge der Nutzeraktion.
+ * ------------------------------------------------------------------------- */
+.nc-langhint-slot { display: none; }
+/*
+ * Feste Höhe statt `min-height`: Der Hinweis ist in fünf Sprachen
+ * unterschiedlich hoch (gemessen 105–261 px). Mit einer Untergrenze wuchs der
+ * Slot beim Hydrieren nach und schob die Seite (0,19 CLS). Mit einer festen
+ * Höhe füllt die Karte den reservierten Platz exakt – kein Nachwachsen, keine
+ * Lücke. Der Text ist begrenzt (`line-clamp`), damit er in jede Sprache passt.
+ */
+html[data-nc-langhint='1'] .nc-langhint-slot {
+  display: block;
+  height: 13.5rem;
+}
+@media (min-width: 640px) {
+  /* Spalten-Layout bleibt bis 1024px: in der Zeile daneben war die Textspalte
+     zu schmal (russisch brauchte dort 8 Zeilen und wurde beschnitten). */
+  html[data-nc-langhint='1'] .nc-langhint-slot { height: 11rem; }
+}
+@media (min-width: 1024px) {
+  html[data-nc-langhint='1'] .nc-langhint-slot { height: 9rem; }
+}
+

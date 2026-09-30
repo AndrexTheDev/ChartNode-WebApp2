@@ -3,6 +3,9 @@
 # Benötigte Repository-Secrets (siehe VEROEFFENTLICHEN.md §3b):
 #   CLOUDFLARE_API_TOKEN  (Template "Edit Cloudflare Workers")
 #   CLOUDFLARE_ACCOUNT_ID (Dashboard → rechts auf der Overview-Seite)
+#
+# Das Gate liegt in .github/workflows/verify.yml und wird hier aufgerufen –
+# dieselbe Kette läuft dadurch bei jedem Pull Request (dort ohne Deploy).
 name: Deploy to Cloudflare
 
 on:
@@ -15,7 +18,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    # Ruft das PR-Gate auf: Build → Server → `npm run verify`.
+    # Scheitert es, wird der Deploy-Job übersprungen (kein halber Deploy).
+    uses: ./.github/workflows/verify.yml
+
   deploy:
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,12 +40,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Guard-Suite (SEO/CWV/Fit/QA) – Deploy nur grün
-        run: |
-          npm run build
-          (npm start -- -H 127.0.0.1 -p 3000 &) && sleep 4 && npm run verify
-          kill %1 || true
-
       - name: OpenNext Cloudflare build
         run: npm run cf:build
 
@@ -45,3 +48,25 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Der Deploy ist erst fertig, wenn die Domain ihn auch ausliefert.
+      # Prüft genau die §5-Checkliste aus VEROEFFENTLICHEN.md – als Befehl:
+      # Sitemap (30 URLs), hreflang, Canonicals, robots/googlebot, JSON-LD,
+      # OG-Karte, 404-Verhalten, Header, alle fünf Sprachen und die
+      # Domain-Regeln (Always HTTPS, www → apex).
+      - name: Auf die Domain warten (Deploy-Propagation)
+        run: |
+          for attempt in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L https://nodechart.cc/de || true)
+            if [ "$code" = "200" ]; then
+              echo "nodechart.cc liefert 200 nach ${attempt}s"
+              exit 0
+            fi
+            echo "Versuch ${attempt}: HTTP ${code}"
+            sleep 5
+          done
+          echo "::error::nodechart.cc antwortet nach 5 Minuten nicht mit 200"
+          exit 1
+
+      - name: Live-Endkontrolle (npm run check:live)
+        run: npm run check:live

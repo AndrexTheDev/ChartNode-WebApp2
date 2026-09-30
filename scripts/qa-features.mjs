@@ -46,7 +46,11 @@ const snap = () =>
       whale: w.enabled, proOpen: p.open,
       dialogs: document.querySelectorAll('[role="dialog"]').length,
       dialogTitle: document.querySelector('[role="dialog"] h2')?.textContent ?? null,
-      panes: document.querySelectorAll('.font-mono.text-micro-10').length,
+      panes: document.querySelectorAll('[data-nc-legend]').length,
+      /* Grid-Zellen ≠ Chart-Panes: ein Oszillator (RSI & Co.) legt seinen Pane
+         INNERHALB desselben Charts an. PreisChart schreibt die echte Zahl der
+         lightweight-charts-Panes in `data-nc-panes`. */
+      chartPanes: Number(document.querySelector('[data-nc-panes]')?.getAttribute('data-nc-panes') ?? 0),
       url: location.pathname + location.search,
     };
   });
@@ -104,13 +108,27 @@ console.log('\n— S2: Indikatoren live —');
   });
   await wait(800);
   const ind1 = await page.evaluate(() => Object.values(window.__NC__.useChartStore.getState().indicators).flat().map((i) => i.kind));
+  /* Gegenprobe zum Oszillator-Pane: VWAP ist ein Overlay und darf KEINEN
+     zweiten Pane anlegen – sonst wäre die S2b-Messung wertlos. */
+  const overlayPanes = await page.evaluate(() => Number(document.querySelector('[data-nc-panes]')?.getAttribute('data-nc-panes') ?? 0));
   check('S2a VWAP landet im Chart-Store', ind1.some((k) => k.toLowerCase() === 'vwap'), ind1.join(','));
+  check('S2a2 Overlay-Indikator legt keinen zweiten Pane an', overlayPanes === 1, `chartPanes=${overlayPanes}`);
   await page.evaluate(() => {
     [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim().startsWith('RSI'))?.click();
   });
-  await wait(900);
-  const st = await snap();
-  check('S2b RSI öffnet eigenes Oszillator-Pane', st.panes >= 2 && st.indCount >= 2, `panes=${st.panes} ind=${st.indCount}`);
+  /* Polling statt fester Wartezeit: der Oszillator-Pane entsteht erst, wenn
+     lightweight-charts den neuen Pane angehängt und React nachgezogen hat. Auf
+     einem 2-Kern-Runner reichten 900 ms sporadisch nicht (Gate-Flake). */
+  let st = await snap();
+  for (let attempt = 0; attempt < 24 && !(st.chartPanes >= 2 && st.indCount >= 2); attempt += 1) {
+    await wait(250);
+    st = await snap();
+  }
+  check(
+    'S2b RSI öffnet eigenes Oszillator-Pane',
+    st.chartPanes >= 2 && st.indCount >= 2,
+    `chartPanes=${st.chartPanes} gridZellen=${st.panes} ind=${st.indCount}`,
+  );
   await page.keyboard.press('Escape');
   await wait(400);
 }
