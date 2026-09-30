@@ -4,6 +4,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Modal } from '@/components/ui/Modal';
+/* M9: Nur Paare zeigen, die sich auch laden lassen. Vorher kam die Liste roh
+   von der Börse (bis zu 64 Paare), `pickSymbol` konnte aber nur auflösen, was
+   im CEX-Katalog steht – Kacheln außerhalb liefen ins Leere (CI-Befund
+   „heatmap tile click loads the pair"). Der Katalog wird hier lazy geladen
+   (Heatmap ist selbst lazy), das Start-Bundle bleibt unberührt. */
+import { CEX_UNIVERSE } from '@/lib/cex-universe';
 import { useViralStore } from '@/store/useViralStore';
 
 interface TickerRow {
@@ -22,6 +28,10 @@ interface Rect {
 }
 
 const EXCLUDE = new Set(['USDCUSDT', 'TUSDUSDT', 'BUSDUSDT', 'USDPUSDT', 'FDUSDUSDT', 'EURUSDT', 'USTCUSDT']);
+/** Stablecoin-Paar weglassen – egal über welche Börse die Liste kam. */
+const isExcluded = (base: string, quote: string) => EXCLUDE.has(`${base}${quote}`);
+/** Basen, die die App wirklich öffnen kann (CEX-Katalog, USDT-Paare). */
+const CE_USDT = new Set(CEX_UNIVERSE.filter((entry) => entry.quote === 'USDT').map((entry) => entry.base));
 
 /** Squarified-ish treemap: rows of tiles with balanced aspect ratios. */
 function treemap(rows: TickerRow[], width: number, height: number): Rect[] {
@@ -101,6 +111,7 @@ export function HeatmapModal({ open, onClose, onPick }: HeatmapModalProps) {
           ? (wrapped as Array<Record<string, unknown>>)
               .filter((entry) => typeof entry.symbol === 'string' && (entry.symbol as string).endsWith('USDT'))
               .filter((entry) => !EXCLUDE.has(entry.symbol as string))
+              .filter((entry) => CE_USDT.has((entry.symbol as string).replace(/USDT$/, '')))
               .map((entry) => ({
                 symbol: entry.symbol as string,
                 base: (entry.symbol as string).replace(/USDT$/, ''),
@@ -109,7 +120,13 @@ export function HeatmapModal({ open, onClose, onPick }: HeatmapModalProps) {
               }))
           : Array.isArray(okxPayload)
             ? (okxPayload as Array<Record<string, string>>)
+                /* Vorher fehlten hier die Stablecoin-Ausschlüsse: auf OKX-
+                   Fallback war USDC/USDT die volumenstärkste Kachel – ein
+                   Paar, das die App nie lädt (Klick ohne Wirkung). Jetzt
+                   gelten dieselben Regeln wie im Binance-Zweig. */
                 .filter((entry) => entry.instId?.endsWith('-USDT'))
+                .filter((entry) => !isExcluded((entry.instId ?? '').replace('-USDT', ''), 'USDT'))
+                .filter((entry) => CE_USDT.has((entry.instId ?? '').replace('-USDT', '')))
                 .map((entry) => {
                   const last = Number(entry.last);
                   const open = Number(entry.open24h);

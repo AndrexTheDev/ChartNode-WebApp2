@@ -1114,7 +1114,9 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
     const tileBase = await w4.evaluate(() => {
       const nodes = [...document.querySelectorAll('[role="dialog"] button[title*="/USDT ·"]')];
       const seeds = new Set(['BTC', 'ETH', 'SOL']);
-      const node = nodes.find((n) => !seeds.has(n.title.split('/')[0])) ?? nodes[0];
+      const stable = new Set(['USDC', 'TUSD', 'BUSD', 'USDP', 'FDUSD', 'DAI', 'EUR', 'USTC']);
+      const node =
+        nodes.find((n) => !seeds.has(n.title.split('/')[0]) && !stable.has(n.title.split('/')[0])) ?? nodes[0];
       if (!node) return null;
       node.click();
       return node.title.split('/')[0];

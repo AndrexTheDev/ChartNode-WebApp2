@@ -114,6 +114,16 @@ const TICKER_PAIRS = [
   ['FTM', 90_000_000, 3.1], ['SAND', 85_000_000, -2.2], ['MANA', 80_000_000, 1.9],
   ['AXS', 75_000_000, -3.9], ['ROSE', 70_000_000, 6.7], ['KAVA', 65_000_000, -0.4],
   ['ZEC', 60_000_000, 2.6], ['DASH', 55_000_000, -1.5], ['IOTA', 50_000_000, 0.8],
+  /* Ab hier die restlichen Basen des CEX-Katalogs: die Heatmap zeigt seit M9
+     nur noch handelbare Paare, das Fixture soll den ganzen Katalog abdecken
+     (sonst prüft die Offline-Kette eine kleinere Auswahl als die CI). */
+  ['BNB', 2_600_000_000, 1.2], ['TRX', 820_000_000, 0.3], ['POL', 640_000_000, -1.4],
+  ['VET', 300_000_000, 2.2], ['ICP', 280_000_000, -2.5], ['STX', 240_000_000, 3.4],
+  ['KAS', 220_000_000, 5.1], ['FET', 200_000_000, -1.8], ['RENDER', 190_000_000, 4.3],
+  ['TAO', 180_000_000, 6.2], ['JUP', 170_000_000, -0.7], ['PYTH', 150_000_000, 1.3],
+  ['ONDO', 140_000_000, 2.8], ['ENA', 130_000_000, -3.1], ['WLD', 120_000_000, 3.9],
+  ['PEPE', 700_000_000, 7.7], ['SHIB', 420_000_000, -1.2], ['FLOKI', 110_000_000, 2.1],
+  ['BONK', 100_000_000, 4.8], ['WIF', 95_000_000, -2.9],
 ];
 const TICKER_PRICES = {
   BTC: 64_000, ETH: 3_100, SOL: 148, XRP: 0.62, DOGE: 0.158, ADA: 0.48, AVAX: 34.2,
@@ -122,8 +132,18 @@ const TICKER_PRICES = {
   ETC: 26.8, XLM: 0.108, HBAR: 0.082, RNDR: 7.1, GRT: 0.26, AAVE: 92.5, UNI: 9.4,
   MKR: 2_460, CRV: 0.44, ALGO: 0.19, FTM: 0.72, SAND: 0.39, MANA: 0.44, AXS: 7.6,
   ROSE: 0.11, KAVA: 0.82, ZEC: 29.4, DASH: 31.2, IOTA: 0.22,
+  BNB: 585, TRX: 0.128, POL: 0.52, VET: 0.034, ICP: 9.8, STX: 1.9, KAS: 0.14,
+  FET: 1.4, RENDER: 7.4, TAO: 420, JUP: 0.95, PYTH: 0.42, ONDO: 0.86, ENA: 0.65,
+  WLD: 2.4, PEPE: 0.0000115, SHIB: 0.0000215, FLOKI: 0.00014, BONK: 0.0000245, WIF: 2.1,
 };
-const tickerPrice = (base, changePct) => Number((TICKER_PRICES[base] ?? 1).toFixed(base === 'XLM' || base === 'HBAR' || base === 'ALGO' || base === 'IOTA' ? 3 : 2)) * (1 + changePct / 100);
+const tickerDigits = (base) => {
+  const price = TICKER_PRICES[base] ?? 1;
+  if (price >= 1) return 2;
+  if (price >= 0.01) return 4;
+  if (price >= 0.001) return 5;
+  return 8; // Memecoins
+};
+const tickerPrice = (base, changePct) => Number((TICKER_PRICES[base] ?? 1).toFixed(tickerDigits(base))) * (1 + changePct / 100);
 function makeTickers(venue) {
   if (venue === 'okx') {
     return { code: '0', data: TICKER_PAIRS.map(([base, volume, change]) => ({
