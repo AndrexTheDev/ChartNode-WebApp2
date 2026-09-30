@@ -847,7 +847,7 @@ Fixture-Schicht — dieselbe Antwort-Pipeline wie der echte Feed, nur mit
 
 Leitfrage: **Kommt das Projekt wirklich live – und prüft das Gate dabei die
 richtigen Dinge?** M9 ist kein Feature-Modul, sondern die Abnahme des
-Auslieferungswegs. Gefunden wurden acht Punkte, davon drei, die den Deploy
+Auslieferungswegs. Gefunden wurden elf Punkte, davon drei, die den Deploy
 **blockiert** hätten.
 
 ### Deploy-Pfad (verifiziert)
@@ -959,6 +959,52 @@ Zwei Punkte, beide erst nach dem Push sichtbar geworden:
   **echt** statt als SKIP. Die Kachel-Prüfung wählt gezielt ein Paar
   außerhalb der Seed-Liste – mit BTC als Testfall wäre sie auch mit dem alten
   Fehler grün gewesen.
+
+**10. Fehlende Cloudflare-Secrets ließen „Deploy Worker“ kryptisch sterben.**
+Ohne `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` brach der Deploy-Job in
+Wrangler ab — die Meldung nannte weder Ursache noch Abhilfe, und der Grund
+(fehlende Repository-Secrets) war nur über Log-Archäologie zu erraten. Neu:
+`scripts/ci-deploy.sh` prüft beide Secrets **vor** dem Wrangler-Aufruf; fehlt
+eins, setzt der Job je eine `::error::`-Annotation („… ist leer (Repository-
+Secret anlegen).“) und schreibt die Komplett-Anleitung (VEROEFFENTLICHEN.md
+§3b) in die Step-Summary — lesbar direkt am roten Check, ohne Log-Download.
+Schlägt Wrangler trotz beider Secrets fehl, landen dessen Fehlerzeilen samt
+Log-Auszug ebenfalls dort. Beleg: Run 36756858960 (2026-09-30) — Gate grün
+(6m58s), Deploy-Job bricht in „Deploy Worker“ mit exakt beiden Annotationen
+und der Anleitung ab.
+
+**11. Die Domain-Endkontrolle war nur an den Deploy-Job gebunden.**
+`check:live` (§5 als Befehl) lief ausschließlich als letzter Schritt des
+Deploy-Workflows — kein manueller Lauf, kein periodischer Wächter, nichts
+meldet eine später verschlechterte Domain. Neu:
+`.github/workflows/live-check.yml` („Live check (Domain)“) — manuell per
+`workflow_dispatch` (Domain als Input überschreibbar), zusätzlich wöchentlich
+montags 06:00 UTC; Ergebnis in der Step-Summary, Protokoll als Artefakt nur
+bei Fehlschlag (14 Tage).
+
+**12. `check:live` ohne Argument: Absturz statt Domain-Check.**
+Der Site-Fallback kannte `--site=` und freistehendes `--site`, ermittelte
+dessen Position bei Abwesenheit aber als `-1` — und `argv[-1 + 1]` ist
+`argv[0]`: der Pfad des Node-Binärprogramms. `npm run check:live` (exakt so
+in §3b Schritt 6 dokumentiert) crashte folglich mit `TypeError: Failed to
+parse URL from /usr/local/bin/node/`; der Default `https://nodechart.cc`
+wurde nie erreicht. Fix: der freistehende `--site`-Fallback greift nur, wenn
+das Flag existiert. Beleg: Absturz-Trace vor dem Fix; danach defaultet der
+Aufruf auf nodechart.cc, `--site=URL` und `SITE_URL` bleiben wirksam.
+
+**13. Netzfehler beendeten die Live-Kontrolle per Stacktrace — und der Workflow hätte nie rot gefärbt.**
+Zwei Halbwahrheiten desselben Themas. (a) `get()` warf bei nicht erreichbarer
+Domain (`fetch failed`) ungefangen: Das Skript starb im ersten Check mit
+Stacktrace — ohne Zusammenfassung, ohne die eigenen PASS/FAIL-Zähler. Fix:
+`get()` fängt Netzfehler, meldet sie als `NETZ`-Zeile und liefert Status 0,
+sodass alle Folgerprüfungen sauber FAIL laufen (Domain noch nicht live ⇒ ein
+ehrlicher roter Bericht statt eines Crashes). (b) Der Workflow pipete
+`node … | tee live-check.log` — die Default-Shell der Step ist `bash -e`
+**ohne** `pipefail`, der Exitcode also der von `tee`: Die Step wäre **immer**
+grün gewesen, auch bei `fail > 0`, und der Artefakt-Schritt (`if: failure()`)
+hätte nie gelaufen. Fix: `set -o pipefail` vor dem Aufruf. Belege: Crash-Trace
+vor Fix (a); Gegenprobe `bash -e -c 'false | tee'` → Exit 0, mit `pipefail`
+→ Exit 1 (b).
 
 ### Endkontrolle (Auslieferungs-Build)
 

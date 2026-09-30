@@ -119,9 +119,15 @@ sich selbst** — ohne Cloudflare-Build-Konfiguration im Dashboard.
    | --- | --- |
    | `CLOUDFLARE_API_TOKEN` | Token aus Schritt 1 |
    | `CLOUDFLARE_ACCOUNT_ID` | ID aus Schritt 2 |
-4. Fertig: ab jetzt deployt jeder Push auf `main` automatisch (Tab **Actions**
+4. Ab jetzt deployt jeder Push auf `main` automatisch (Tab **Actions**
    beobachten, ~6–8 min). Fehlt ein Secret, failt der Job sichtbar — keine
    halben Deploys.
+5. **Deploy neu starten** (kein neuer Commit nötig): **Actions → „Deploy to
+   Cloudflare“ → letzten Lauf öffnen → Re-run jobs**. Fehlen die Secrets
+   weiterhin, nennt der Job sie namentlich — als Annotation am roten Check
+   und in seiner Zusammenfassung.
+6. **Domain prüfen:** **Actions → „Live check (Domain)“ → Run workflow** (oder
+   lokal `npm run check:live`). Erwartung: **42 PASS / 0 FAIL**.
 
 > Beide Varianten schließen sich nicht aus; wer §3 gebaut hat, kann §3b trotzdem
 > aktivieren — gewonnen hat immer der letzte erfolgreiche Deploy.
