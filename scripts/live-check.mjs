@@ -14,7 +14,13 @@
  * www → apex). Prüfungen, die nur auf der echten Domain Sinn ergeben, werden
  * außerhalb von nodechart.cc als SKIP geführt.
  */
-const SITE = (process.env.SITE_URL ?? process.argv.find((a) => a.startsWith('--site='))?.slice(7) ?? process.argv[process.argv.indexOf('--site') + 1] ?? 'https://nodechart.cc').replace(/\/+$/, '');
+const argvSiteFlag = process.argv.indexOf('--site');
+const SITE = (
+  process.env.SITE_URL
+  ?? process.argv.find((a) => a.startsWith('--site='))?.slice(7)
+  ?? (argvSiteFlag !== -1 ? process.argv[argvSiteFlag + 1] : undefined)
+  ?? 'https://nodechart.cc'
+).replace(/\/+$/, '');
 const CANONICAL = 'https://nodechart.cc';
 const IS_PROD = SITE === CANONICAL;
 const LOCALES = ['de', 'en', 'es', 'ru', 'zh'];
@@ -35,13 +41,20 @@ const skipped = (name, why) => {
 };
 
 const get = async (path, opts = {}) => {
-  const res = await fetch(`${SITE}${path}`, {
-    redirect: opts.follow ? 'follow' : 'manual',
-    headers: { 'user-agent': opts.ua ?? UA_BROWSER, accept: opts.accept ?? 'text/html,application/xhtml+xml' },
-    signal: AbortSignal.timeout(20_000),
-  });
-  const body = opts.body === false ? '' : await res.text();
-  return { status: res.status, headers: res.headers, body };
+  try {
+    const res = await fetch(`${SITE}${path}`, {
+      redirect: opts.follow ? 'follow' : 'manual',
+      headers: { 'user-agent': opts.ua ?? UA_BROWSER, accept: opts.accept ?? 'text/html,application/xhtml+xml' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = opts.body === false ? '' : await res.text();
+    return { status: res.status, headers: res.headers, body };
+  } catch (error) {
+    // Netzfehler (Domain nicht erreichbar, Timeout) sind ein FAIL, kein Crash:
+    // Status 0 lässt jede Folgerprüfung rot laufen, statt das Skript zu beenden.
+    console.log(`  NETZ  ${SITE}${path} — ${error?.cause?.message ?? error?.message ?? error}`);
+    return { status: 0, headers: new Headers(), body: '' };
+  }
 };
 /** Inhalt eines <meta>-Tags, Attributreihenfolge egal: meta('name','robots'). */
 const meta = (html, attr, value) => {
