@@ -1,0 +1,60 @@
+# © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
+# Manuelle Live-Endkontrolle der ausgelieferten Domain (VEROEFFENTLICHEN.md §5).
+#
+#   GitHub → Actions → „Live check (Domain)“ → Run workflow
+#
+# Prüft nodechart.cc so, wie Crawler, Social-Bots und Browser sie sehen:
+# Sitemap (30 URLs), hreflang-Netz, Canonicals, robots/googlebot, JSON-LD,
+# dynamische OG-Karte, 404-Verhalten, Cache-/Security-Header, alle fünf
+# Sprachen und die Domain-Regeln (Always HTTPS, www → apex). Kein Deploy.
+name: Live check (Domain)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Domain (Standard: https://nodechart.cc)'
+        required: false
+        default: 'https://nodechart.cc'
+  schedule:
+    # Wöchentlicher Wächter: meldet, wenn die Live-Domain sich verschlechtert.
+    - cron: '0 6 * * 1'
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Live-Endkontrolle
+        env:
+          SITE_URL: ${{ inputs.site || 'https://nodechart.cc' }}
+        run: |
+          node scripts/live-check.mjs 2>&1 | tee live-check.log
+          {
+            echo "### Live-Endkontrolle \`$SITE_URL\`"
+            echo
+            echo '```'
+            tail -60 live-check.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Protokoll sichern (nur bei Fehlschlag)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-check-log
+          path: live-check.log
+          retention-days: 14
+          if-no-files-found: ignore
