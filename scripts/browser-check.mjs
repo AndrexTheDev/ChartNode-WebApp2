@@ -980,8 +980,16 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await wait(2500);
   // Chips may live behind a toolbar dropdown – open menus automatically.
   const clickChip = async (label) => {
+    /* Nur SICHTBARE Buttons: dieselbe Fehlerklasse wie beim Spendendialog –
+       der Text „Rating" existiert auch auf unsichtbaren Elementen (Toolbar-
+       Chips hinter geschlossenen Menüs). Ein Klick dort tut nichts, der Dialog
+       bleibt aus und die Prüfung schlägt ohne App-Fehler fehl (CI-Befund). */
     const direct = await w4.evaluate((text) => {
-      const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+      const visible = (el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && el.getAttribute('aria-hidden') !== 'true';
+      };
+      const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text && visible(b));
       if (!button) return false;
       button.click();
       return true;
@@ -1023,7 +1031,10 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   };
   const dialogDump = () =>
     w4.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.textContent ?? '').slice(0, 40)));
-  const expectDialog = (fragment, ms = 8000) =>
+  /* 20 s statt 8 s: mehrere Modals (Rating, Heatmap, Journal, Lupe) sind
+     `dynamic(..., { ssr: false })` – in der CI muss der Chunk erst geladen
+     werden. Acht Sekunden reichten dort sporadisch nicht. */
+  const expectDialog = (fragment, ms = 20000) =>
     w4
       .waitForFunction(
         (frag) => ([...document.querySelectorAll('[role="dialog"]')].pop()?.textContent ?? '').includes(frag),
@@ -1074,7 +1085,16 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   // ratings matrix
   await resetDialogs();
   await clickChip('Rating');
-  check('ratings chip opens the matrix', await expectDialog('Technische Ratings'));
+  let ratingsOpen = await expectDialog('Technische Ratings');
+  if (!ratingsOpen) {
+    /* Zweiter Versuch: beim ersten Klick lädt React den Chunk nach, der
+       Toolbar-Zustand kann dabei verloren gehen (beobachtet in der CI auf
+       main – im PR-Lauf war derselbe Codepfad grün). */
+    await resetDialogs();
+    await clickChip('Rating');
+    ratingsOpen = await expectDialog('Technische Ratings', 25000);
+  }
+  check('ratings chip opens the matrix', ratingsOpen);
   const rated = await w4
     .waitForFunction(
       () => {
