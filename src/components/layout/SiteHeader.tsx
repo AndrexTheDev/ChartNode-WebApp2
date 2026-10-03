@@ -36,11 +36,13 @@ export function SiteHeader() {
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : '';
+    document.body.style.overflow = mobileOpen && pathname !== ROUTES.cluster ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [mobileOpen]);
+  }, [mobileOpen, pathname]);
+
+  if (pathname === ROUTES.cluster) return null;
 
   return (
     <header className="sticky top-0 z-header w-full">
@@ -50,7 +52,7 @@ export function SiteHeader() {
       <div className="border-b border-line/70 bg-bg/80 backdrop-blur-xl supports-[backdrop-filter]:bg-bg/60">
         <div className="container flex min-h-[var(--nc-header-h)] flex-wrap items-center gap-3 py-1.5">
           <Link href={ROUTES.home} className="shrink-0 rounded-none transition-[filter,opacity] duration-200 hover:brightness-125 active:opacity-80" aria-label="NodeChart">
-            <Logo />
+            <Logo decorative />
           </Link>
 
           <SmartSearch className="hidden w-full max-w-[13rem] md:block xl:max-w-sm" />
@@ -145,7 +147,7 @@ export function SiteHeader() {
               {t('launchTerminal')}
             </Link>
             <p className="mt-3 text-center font-mono text-2xs uppercase tracking-cyber text-faint">
-              {t('freeForever')}
+              {t('coreAccessNote')}
             </p>
           </nav>
         </div>

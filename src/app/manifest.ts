@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: `${SITE_NAME} – Decode the Market`,
     short_name: SITE_NAME,
-    description: 'Free, fast, decentralized charting terminal for CEX & DEX markets.',
+    description: 'Browser-based crypto charts and research tools for selected CEX and DEX markets. Core access has no recurring subscription; ads may appear and some Pro features require verified support.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
@@ -17,8 +17,8 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: THEME_COLOR.acid,
     categories: ['finance', 'productivity'],
     icons: [
-      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+      { src: '/brand/nodechart-icon-192.webp', sizes: '192x192', type: 'image/webp', purpose: 'any' },
+      { src: '/brand/nodechart-icon-512.webp', sizes: '512x512', type: 'image/webp', purpose: 'any' },
     ],
     shortcuts: [
       // Relativ zur scope – absolute Cross-Origin-URLs verwirft der Browser

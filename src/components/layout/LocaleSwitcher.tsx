@@ -10,11 +10,11 @@ import { LOCALE_LIST, LOCALE_META } from '@/lib/locales';
 import { LOCALE_CHOICE_KEY } from './LocaleDetectBanner';
 
 /**
- * Language menu. `router.replace(pathname, { locale })` keeps the user on the
- * exact same page and lets next-intl persist the NEXT_LOCALE cookie, so the
- * choice survives the next visit and overrides Accept-Language detection.
+ * Language menu. Locale-aware routing keeps the user on the same page and
+ * lets next-intl persist NEXT_LOCALE. Shareable surfaces can also retain their
+ * query string and hash when the language changes.
  */
-export function LocaleSwitcher() {
+export function LocaleSwitcher({ preserveQuery = false }: { preserveQuery?: boolean }) {
   const locale = useLocale() as Locale;
   const t = useTranslations('nav');
   const pathname = usePathname();
@@ -35,7 +35,10 @@ export function LocaleSwitcher() {
       } catch {
         /* storage blocked – the cookie set by next-intl is enough */
       }
-      router.replace(pathname, { locale: entry.code });
+      const destination = preserveQuery && typeof window !== 'undefined'
+        ? `${pathname}${window.location.search}${window.location.hash}`
+        : pathname;
+      router.replace(destination as typeof pathname, { locale: entry.code });
     },
   }));
 

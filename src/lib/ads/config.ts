@@ -15,11 +15,13 @@
  *   NEXT_PUBLIC_ADSTERRA_NATIVE_DESKTOP / _MOBILE   native banner per device
  *   NEXT_PUBLIC_ADSTERRA_SOCIALBAR_DESKTOP / _MOBILE
  *   NEXT_PUBLIC_ADSTERRA_POPUNDER_DESKTOP / _MOBILE  override the bundled src
+ *   NEXT_PUBLIC_ADSTERRA_CLUSTER_LEFT_KEY / NEXT_PUBLIC_ADSTERRA_CLUSTER_RIGHT_KEY
+ *   NEXT_PUBLIC_ADSTERRA_CLUSTER_LEFT_SRC / NEXT_PUBLIC_ADSTERRA_CLUSTER_RIGHT_SRC
  *
  * Legacy single-value variables (`…_NATIVE`, `…_SOCIALBAR`, `…_POPUNDER`) act
- * as fallback for both devices, so existing setups keep working. Native and
- * Social Bar render zero slots without config; the Popunder ships with the
- * real delivery script for nodechart.cc (dashboard code, before </head>).
+ * as fallback for both devices. Some placements also have bundled delivery
+ * defaults (including Social Bar, Popunder and banner slots); an empty Env
+ * setup does not guarantee that all third-party ad requests are disabled.
  */
 // NEXT_PUBLIC_* values are inlined at BUILD time – and only for *static*
 // member access (`process.env.NEXT_PUBLIC_X`), never for computed keys.
@@ -57,6 +59,28 @@ export const SIDEBAR_BANNER_SRCS: readonly string[] = [
   process.env.NEXT_PUBLIC_ADSTERRA_SIDEBAR_SRC ||
     `https://globalimmaturelunatic.com/${SIDEBAR_BANNER_KEY}/invoke.js`,
 ];
+
+/**
+ * NodeCluster medium-rectangle slots reuse the existing configured Adsterra
+ * delivery path by default. Dedicated per-slot keys/sources can be supplied
+ * when the publisher dashboard has separate 300×250 placements.
+ */
+const clusterLeftKey = process.env.NEXT_PUBLIC_ADSTERRA_CLUSTER_LEFT_KEY || SIDEBAR_BANNER_KEY;
+const clusterRightKey = process.env.NEXT_PUBLIC_ADSTERRA_CLUSTER_RIGHT_KEY || SIDEBAR_BANNER_KEY;
+const sidebarBannerSrc = SIDEBAR_BANNER_SRCS[0] || `https://globalimmaturelunatic.com/${SIDEBAR_BANNER_KEY}/invoke.js`;
+
+export const NODECLUSTER_BANNERS = {
+  left: {
+    key: clusterLeftKey,
+    src: process.env.NEXT_PUBLIC_ADSTERRA_CLUSTER_LEFT_SRC
+      || (clusterLeftKey === SIDEBAR_BANNER_KEY ? sidebarBannerSrc : `https://globalimmaturelunatic.com/${clusterLeftKey}/invoke.js`),
+  },
+  right: {
+    key: clusterRightKey,
+    src: process.env.NEXT_PUBLIC_ADSTERRA_CLUSTER_RIGHT_SRC
+      || (clusterRightKey === SIDEBAR_BANNER_KEY ? sidebarBannerSrc : `https://globalimmaturelunatic.com/${clusterRightKey}/invoke.js`),
+  },
+} as const;
 
 /**
  * Echtes Adsterra-Popunder-Delivery-Skript für nodechart.cc (Dashboard:

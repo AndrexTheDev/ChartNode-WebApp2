@@ -6,6 +6,8 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Playwright and local browser sessions use this loopback origin for dev HMR.
+  allowedDevOrigins: ['127.0.0.1'],
   poweredByHeader: false,
   // Cloudflare Workers/Pages has no Next.js image-optimization server by default.
   // NodeChart renders charts on <canvas>/<svg> anyway, so we keep this off and stay $0.
@@ -44,12 +46,20 @@ const nextConfig = {
         headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' }],
       },
       {
-        source: '/icon.svg',
+        source: '/icon.png',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' }],
+      },
+      {
+        source: '/apple-icon.png',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' }],
+      },
+      {
+        source: '/brand/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' }],
       },
       // HTML: Edge darf 5 min puffern, Browser immer validieren
       {
-        source: '/((?!_next|api|sitemap\\.xml|robots\\.txt|og\\.png|icon\\.svg).*)',
+        source: '/((?!_next|api|sitemap\\.xml|robots\\.txt|og\\.png|icon\\.png|apple-icon\\.png|brand/).*)',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=86400' }],
       },
     ];

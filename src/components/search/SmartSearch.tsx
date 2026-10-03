@@ -27,12 +27,19 @@ type DexHit = Extract<SearchHit, { kind: 'dex' }>;
 /**
  * Top-nav Smart Search.
  *
- *  - token names/symbols → instant CEX universe match + live DEX aggregation
- *  - pasted contract address (EVM `0x…` or Solana base58) → direct token lookup
- *  - every DEX result is audited in the background (GoPlus / RugCheck) and the
- *    row flips to a glowing green "Safe" or a red skull "Scam / Honeypot" chip
+ *  - token names/symbols can match the local CEX universe and query supported
+ *    DEX providers; returned coverage depends on those datasets
+ *  - contract addresses can query supported EVM or Solana provider lookups
+ *  - supported results may receive provider risk flags; no flags do not prove
+ *    safety, and provider indicators are not a full security audit
  */
-export function SmartSearch({ className }: { className?: string }) {
+interface SmartSearchProps {
+  className?: string;
+  /** When supplied, keep selection in the current tool instead of opening /terminal. */
+  onTokenSelected?: (token: Token) => void;
+}
+
+export function SmartSearch({ className, onTokenSelected }: SmartSearchProps) {
   const t = useTranslations('search');
   const router = useRouter();
   const setActiveToken = useAppStore((s) => s.setActiveToken);
@@ -42,7 +49,7 @@ export function SmartSearch({ className }: { className?: string }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SmartSearchResult | null>(null);
   const [cursor, setCursor] = useState(0);
-  // Börsen-Filter (TradingView-Standard): Händler suchen auf ihrer Börse
+  // Venue filter: traders can narrow results to a configured exchange.
   const [venueFilter, setVenueFilter] = useState<'all' | 'dex' | ExchangeId>('all');
   const [audits, setAudits] = useState<Record<string, SecurityAudit | 'pending' | null>>({});
 
@@ -199,23 +206,10 @@ export function SmartSearch({ className }: { className?: string }) {
 
   /* --------------------------------- selection -------------------------------- */
   async function tokenFor(hit: SearchHit): Promise<Token | null> {
-    if (hit.kind === 'cex') {
-      // M7: Der CEX-Katalog (cex-universe) wird erst beim Auswählen geladen.
-      const { CEX_UNIVERSE, cexToToken } = await import('@/lib/cex-universe');
-      const instrument = CEX_UNIVERSE.find((entry) => `${entry.base}/${entry.quote}` === hit.symbol);
-      if (!instrument) return null;
-      return cexToToken(instrument, chipExchange(hit));
-    }
-    const { pair } = hit;
-    return {
-      id: `dex:${pair.chain}:${pair.baseAddress.toLowerCase()}`,
-      symbol: `${pair.baseSymbol}/${pair.quoteSymbol}`,
-      base: pair.baseSymbol,
-      quote: pair.quoteSymbol,
-      venue: 'DEX',
-      chain: pair.chain,
-      contract: pair.baseAddress,
-    };
+    // Keep the instrument catalog out of the initial layout bundle until a hit is selected.
+    const { searchHitToToken } = await import('@/lib/search-hit-to-token');
+    const exchange = hit.kind === 'cex' ? chipExchange(hit) : undefined;
+    return searchHitToToken(hit, exchange);
   }
 
   async function select(hit: SearchHit) {
@@ -224,7 +218,8 @@ export function SmartSearch({ className }: { className?: string }) {
     setActiveToken(token);
     setOpen(false);
     setQuery(token.symbol);
-    router.push('/terminal');
+    if (onTokenSelected) onTokenSelected(token);
+    else router.push('/terminal');
   }
 
   function onKeyDown(event: React.KeyboardEvent) {

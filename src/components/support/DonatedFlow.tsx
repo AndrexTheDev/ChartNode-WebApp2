@@ -9,22 +9,14 @@ import { useToastStore } from '@/store/useToastStore';
 import { BIG_DONATION_USD, useViralStore } from '@/store/useViralStore';
 
 /**
- * „Ich habe gespendet" – zweistufig, ehrlich, ohne Backend.
+ * Two-step optional-support self-report; no payment is verified here.
  *
- * On-chain lässt sich eine Spende client-side nicht *zuordnen* (kein Konto,
- * kein Backend, $0-Stack), deshalb ist Stufe 2 eine Selbstauskunft über die
- * Größenordnung – genau wie der alte eine Klick, nur dass sie jetzt über die
- * Gnadenfrist entscheidet:
- *
- *   Stufe 1: „Ich habe gespendet"          → Betrag-Frage klappt auf
- *   Stufe 2: „Bis $5"     → registerDonation(1)  → 48 h keine Aufrufe
- *          „Über $5"    → registerDonation(10) → 5 Tage keine Aufrufe
- *
- * Beide Wege setzen zusätzlich das dauerhafte SUPPORTER-Badge (kosmetisch) –
- * die *Stille* ist zeitlich begrenzt, die Ehre nicht.
+ * The user selects a reminder-pause tier. Any selection sets a local cosmetic
+ * badge and pause window; it does not confirm a transaction or unlock Pro.
+ * The translated UI labels may vary by locale.
  */
 
-/** Nominale Beträge der beiden Chips (nur die >$5-Schwelle ist relevant). */
+/** Nominal tier values; only the >$5 threshold affects the local pause. */
 export const DONATION_SMALL_USD = 1;
 export const DONATION_BIG_USD = 10;
 

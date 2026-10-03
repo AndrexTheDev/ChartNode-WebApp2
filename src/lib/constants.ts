@@ -6,7 +6,7 @@ export const SITE_NAME = 'NodeChart';
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://nodechart.cc').replace(/\/$/, '');
 
 /** Slogan – kept in code (not in messages) because it is the brand line. */
-export const TAGLINE = 'Decode the Market. Free, Fast, Decentralized.';
+export const TAGLINE = 'Browser-based crypto charts and research tools for selected CEX and DEX markets.';
 
 export const CONTACT = {
   email: 'hippie.highho@gmail.com',
@@ -94,6 +94,7 @@ export const TICKER_SEED = [
 export const ROUTES = {
   home: '/',
   terminal: '/terminal',
+  cluster: '/cluster',
   help: '/help',
   terms: '/legal/terms',
   disclaimer: '/legal/disclaimer',

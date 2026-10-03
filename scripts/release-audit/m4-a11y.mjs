@@ -24,7 +24,9 @@ const A11Y_FN =
       if (last && lvl > last + 1) bad.heads.push('h' + last + '→h' + lvl);
       last = lvl;
     }
-    for (const img of document.querySelectorAll('img')) if (!img.getAttribute('alt')) bad.noAlt.push(img.src.slice(-40));
+    // An empty alt is valid for decorative images (e.g. a logo inside an
+    // already-labelled link); only a missing alt attribute is an accessibility failure.
+    for (const img of document.querySelectorAll('img')) if (!img.hasAttribute('alt')) bad.noAlt.push(img.src.slice(-40));
     for (const inp of document.querySelectorAll('input, select, textarea')) {
       const id = inp.getAttribute('id');
       const labelled =

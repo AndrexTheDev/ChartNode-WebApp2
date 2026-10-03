@@ -10,17 +10,10 @@ import { donationGraceActive, useViralStore } from '@/store/useViralStore';
 import { selectDivOn, selectReplayOn, selectSrOn, selectVpOn, useChartStore } from '@/store/useChartStore';
 
 /**
- * The (polite) survival kit – honest nudges, zero dark patterns. Every ask
- * below shares ONE gate: `donationGraceActive()` – a declared donation buys
- * 48 h of silence (5 days above $5), and while that window runs nothing here
- * fires. The permanent supporter badge lives on regardless:
- *
- *   1. a rotating tip-jar toast every ~7 minutes of active terminal time
- *   2. a session-milestone card (3rd / 10th / 25th / 50th visit)
- *   3. a one-time ribbon when a feature lands that paid charting suites sell
- *
- * Everything is dismissible, everything is stored locally, nothing pretends
- * to be something it is not: one dev, ads + tips, no paywalls.
+ * Optional-support prompts. A self-reported contribution can pause reminders
+ * locally for a limited period and add a cosmetic badge; it does not verify a
+ * payment or unlock Pro. Selected Pro features use a separate on-chain check.
+ * Prompts are dismissible and their local state may be cleared or changed.
  */
 
 const NUDGE_MS = 7 * 60_000;
@@ -88,7 +81,7 @@ export function SupportNudge() {
     return () => clearTimeout(hide);
   }, [toolNudge]);
 
-  /* 3 — premium-celebration ribbon */
+  /* 3 — optional-support ribbon after tool use */
   const vpOn = useChartStore(selectVpOn);
   const srOn = useChartStore(selectSrOn);
   const divOn = useChartStore(selectDivOn);

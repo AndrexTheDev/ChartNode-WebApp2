@@ -8,27 +8,27 @@ import { APP_VERSION, CONTACT, SITE_NAME, SITE_URL, TAGLINE } from './constants'
  * inside a single <script type="application/ld+json"> block.
  */
 
-export function organizationLd() {
+export function organizationLd(description = TAGLINE) {
   return {
     '@type': 'Organization',
     '@id': `${SITE_URL}/#organization`,
     name: SITE_NAME,
     url: SITE_URL,
-    logo: `${SITE_URL}/icon.svg`,
-    description: TAGLINE,
+    logo: `${SITE_URL}/brand/nodechart-logo.webp`,
+    description,
     email: CONTACT.email,
     founder: { '@type': 'Person', name: CONTACT.handle },
-    sameAs: [CONTACT.mailto],
+    contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', email: CONTACT.email }],
   };
 }
 
-export function websiteLd(locale: Locale) {
+export function websiteLd(locale: Locale, description = TAGLINE) {
   return {
     '@type': 'WebSite',
     '@id': `${SITE_URL}/#website`,
     name: SITE_NAME,
     url: absoluteUrl(locale),
-    description: TAGLINE,
+    description,
     inLanguage: locale,
     publisher: { '@id': `${SITE_URL}/#organization` },
     // Sitelinks-Searchbox: die Terminal-Suche versteht Ticker-Symbole
@@ -43,7 +43,7 @@ export function websiteLd(locale: Locale) {
   };
 }
 
-export function softwareApplicationLd(locale: Locale, features: string[]) {
+export function softwareApplicationLd(locale: Locale, features: string[], description = TAGLINE) {
   return {
     '@type': 'SoftwareApplication',
     '@id': `${SITE_URL}/#app`,
@@ -52,10 +52,8 @@ export function softwareApplicationLd(locale: Locale, features: string[]) {
     applicationCategory: 'FinanceApplication',
     operatingSystem: 'Web',
     browserRequirements: 'Requires JavaScript',
-    description: TAGLINE,
+    description,
     inLanguage: locale,
-    isAccessibleForFree: true,
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     softwareVersion: APP_VERSION,
     screenshot: `${SITE_URL}/og.png`,
     featureList: features,

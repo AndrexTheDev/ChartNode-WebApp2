@@ -21,8 +21,8 @@ export interface ExchangeMeta {
 }
 
 /**
- * Every venue NodeChart can stream from. All twelve are public and key-less:
- * no account, no API key, no paid tier, no backend.
+ * Configured venue metadata for the market-data adapters. Public endpoint
+ * access, symbol coverage and regional reachability depend on each provider.
  */
 export const EXCHANGE_META: Record<ExchangeId, ExchangeMeta> = {
   binance: {

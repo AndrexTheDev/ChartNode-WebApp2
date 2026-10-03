@@ -6,6 +6,8 @@
 //
 // Nutzung: node scripts/qa-features.mjs
 import puppeteer from 'puppeteer';
+import { readFile } from 'node:fs/promises';
+import { installFixtures } from './audit-sandbox/fixtures.mjs';
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -24,6 +26,8 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 120)));
+// Keep chart rendering deterministic in restricted/offline release environments.
+await installFixtures(page);
 await page.goto(`${BASE}/de/terminal?qa=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForSelector('canvas', { timeout: 30000 });
 await wait(4500);
@@ -286,6 +290,8 @@ console.log('\n— S8: Palette —');
 /* ---------------- S9: Landing schlank + Benefit ---------------- */
 console.log('\n— S9: Landing —');
 for (const loc of ['de', 'en']) {
+  const localized = JSON.parse(await readFile(new URL(`../messages/${loc}.json`, import.meta.url), 'utf8'));
+  const expectedRows = localized.benefit.paid.length + localized.benefit.unique.length;
   const land = await browser.newPage();
   await land.goto(`${BASE}/${loc}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await wait(1500);
@@ -297,7 +303,7 @@ for (const loc of ['de', 'en']) {
     len: document.body.innerText.length,
     cta: !!document.querySelector('a[href*="terminal"]'),
   }));
-  check(`S9 ${loc}: Benefit-Block mit 18 Zeilen`, info.features && info.rows === 18, `rows=${info.rows}`);
+  check(`S9 ${loc}: Benefit-Block matches ${expectedRows} localized copy rows`, info.features && info.rows === expectedRows, `rows=${info.rows}; expected=${expectedRows}`);
   check(`S9 ${loc}: keine FAQ-/Story-Sektion, Text < 6k Zeichen`, !info.faq && !info.survival && info.len < 6000, `len=${info.len}`);
   check(`S9 ${loc}: Terminal-CTA vorhanden`, info.cta);
   await land.close();

@@ -39,6 +39,8 @@
 
     --nc-gutter: 1.25rem;
     --nc-header-h: 3.75rem;
+    /* Reserve before Adsterra loads; AdManager raises this after measuring. */
+    --nc-socialbar-h: 72px;
   }
 
   [data-theme='violet'] {
@@ -96,7 +98,7 @@
     --nc-scan-opacity: 0;
   }
 
-  /* ── PREMIUM (share-to-unlock) ───────────────────────────────────────────
+  /* ── SHARE-GATED THEMES ───────────────────────────────────────────────────
      Matrix Green: phosphor CRT – near-black glass, terminal green, no purple. */
   [data-theme='matrix'] {
     color-scheme: dark;
@@ -479,8 +481,8 @@ select[aria-invalid='true'] {
 }
 
 /* ── Native Banner (Adsterra 4:1) in der Header-Zone ───────────────────────
-   Reservierte Box = Widget-Layout 4:1 ⇒ füllt CLS-frei hinein; ohne Fill
-   kollabiert .nc-collapsed (React-State) ⇒ kein toter Raum.
+   Die responsive Reserve bleibt auch bei No-fill stehen und zeigt dann einen
+   klar markierten Hinweis; nur Blocker/Spender/QA blenden die Fläche aus.
 
    M6: Die Box war volle Breite mit `max-height: 10rem`. Auf 1440 px ergibt
    4:1 aber 352 px – das Kreativ wurde auf 160 px beschnitten (über die Hälfte
@@ -535,6 +537,13 @@ select[aria-invalid='true'] {
 }
 [data-nc-touch='1'] .nc-touch-gate {
   display: flex;
+}
+
+/* The fixed whale dock must not cover the touch warning or its actions. The
+   warning is present until the user dismisses it, after which the live ticker
+   returns automatically. `data-nc-touch` is set by the pre-paint boot script. */
+html[data-nc-touch='1']:has(.nc-touch-gate) .nc-whale-ticker {
+  display: none;
 }
 
 /* ── Ad-Pause unter offenen Dialogen ───────────────────────────────────────

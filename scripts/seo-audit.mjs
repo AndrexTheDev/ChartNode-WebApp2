@@ -6,13 +6,15 @@
  * dieselben Seiten mit einer eigenen Implementierung (fetch + Regex statt
  * DOM), damit ein Fehler in der einen Implementierung nicht still durchgeht.
  *
- * Erwartungen = ausgelieferter Stand: Landing ohne FAQ-Sektion (schlank,
- * Abschnitt M2), Terminal indexierbar, Sitemap 30 URLs (6 Routen × 5 Sprachen).
- * Run mit: node scripts/seo-audit.mjs
+ * Expectations follow the configured localized routes. Landing without FAQ,
+ * Terminal and standalone Cluster tool indexable; sitemap entries are checked
+ * against the explicit route/locale matrix below.
+ * Run with: node scripts/seo-audit.mjs
  */
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
 const SITE = 'https://nodechart.cc';
 const LOCALES = ['en', 'de', 'es', 'zh', 'ru'];
+const ROUTE_PATHS = ['', '/terminal', '/cluster', '/help', '/legal/terms', '/legal/privacy', '/legal/disclaimer'];
 
 let failures = 0;
 function check(name, condition, detail = '') {
@@ -125,10 +127,17 @@ for (const locale of LOCALES) {
 
   const terminal = await get(`/${locale}/terminal`);
   check(
-    `[${locale}] terminal indexierbar (Produktseite, nicht mehr Baustelle)`,
+    `[${locale}] terminal indexable product page`,
     (metaName(terminal.body, 'robots') ?? '').includes('index'),
-    metaName(terminal.body, 'robots') ?? 'kein robots-Meta',
+    metaName(terminal.body, 'robots') ?? 'no robots metadata',
   );
+
+  const cluster = await get(`/${locale}/cluster`);
+  const clusterTitle = cluster.body.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
+  check(`[${locale}] Cluster tool responds 200 with title`, cluster.status === 200 && clusterTitle.length > 0, clusterTitle);
+  check(`[${locale}] Cluster canonical points to localized route`, cluster.body.includes(`rel="canonical" href="${SITE}/${locale}/cluster"`));
+  check(`[${locale}] Cluster has one SSR h1 and is indexable`,
+    (cluster.body.match(/<h1[\s>]/g) ?? []).length === 1 && /index/.test(metaName(cluster.body, 'robots') ?? ''));
 }
 
 console.log('\n— SEO audit: crawlers & machine readers —');
@@ -137,8 +146,13 @@ check('robots.txt allows site + names sitemap', robots.status === 200 && robots.
 check('robots.txt lässt das Terminal indexieren (erlaubt Sitemap-Scan)', !robots.body.includes('Disallow: /*/terminal'));
 
 const sitemap = await get('/sitemap.xml');
-const urlCount = (sitemap.body.match(/<url>/g) ?? []).length;
-check(`sitemap lists all 30 locale×route URLs (${urlCount})`, urlCount === 30);
+const sitemapLocs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+const expectedSitemapLocs = LOCALES.flatMap((locale) => ROUTE_PATHS.map((path) => `${SITE}/${locale}${path}`));
+check(
+  `sitemap contains configured locale×route URLs (${expectedSitemapLocs.length})`,
+  sitemapLocs.length === expectedSitemapLocs.length && expectedSitemapLocs.every((url) => sitemapLocs.includes(url)),
+  `actual=${sitemapLocs.length}; expected=${expectedSitemapLocs.length}`,
+);
 check('sitemap carries hreflang alternates + lastmod', sitemap.body.includes('xhtml:link') && sitemap.body.includes('<lastmod>'));
 
 const llms = await get('/llms.txt');

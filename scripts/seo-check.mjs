@@ -1,4 +1,5 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
+import { readFile } from 'node:fs/promises';
 // SEO-Check M1: Head/Metadaten über ALLE Routen × 5 Locales.
 // Prüft Title/Description (Länge + Einzigartigkeit), Canonical exakt,
 // Hreflang-Set (5 Locales + x-default), OG-Set, Twitter-Card, Robots-Meta
@@ -8,9 +9,14 @@ const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const SITE = 'https://nodechart.cc';
 const LOCALES = ['de', 'en', 'es', 'ru', 'zh'];
 const HTML_LANG = { de: 'de-DE', en: 'en', es: 'es-ES', ru: 'ru-RU', zh: 'zh-Hans' };
+const MESSAGES = Object.fromEntries(await Promise.all(LOCALES.map(async (locale) => [
+  locale,
+  JSON.parse(await readFile(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8')),
+])));
 const ROUTES = [
   { path: '', name: 'landing', robots: 'index', h1: 1, jsonld: true },
   { path: '/terminal', name: 'terminal', robots: 'index', h1: 1, jsonld: false },
+  { path: '/cluster', name: 'cluster', robots: 'index', h1: 1, jsonld: false },
   { path: '/help', name: 'help', robots: 'index', h1: 1, jsonld: false },
   { path: '/legal/terms', name: 'legal-terms', robots: 'index', h1: 1, jsonld: false },
   { path: '/legal/privacy', name: 'legal-privacy', robots: 'index', h1: 1, jsonld: false },
@@ -171,10 +177,19 @@ for (const locale of LOCALES) {
     }
     if (route.name === 'landing') {
       const app = graph.find((g) => g['@type'] === 'SoftwareApplication');
+      const localized = MESSAGES[locale];
+      const expectedFeatures = [
+        ...localized.benefit.paid.map(({ feat, gate }) => `${feat}: ${gate}`),
+        ...localized.benefit.unique,
+      ];
+      const actualFeatures = app?.featureList ?? [];
+      const accessCopyMatches = JSON.stringify(actualFeatures) === JSON.stringify(expectedFeatures);
+      const hasNoBroadPriceClaim = !Object.hasOwn(app ?? {}, 'offers') && !Object.hasOwn(app ?? {}, 'isAccessibleForFree');
       check(
-        `${tag}: SoftwareApplication featureList ≥12 + Offer 0 + Version`,
-        (app?.featureList ?? []).length >= 12 && app?.offers?.price === '0' && typeof app?.softwareVersion === 'string',
-        `features=${(app?.featureList ?? []).length}`,
+        `${tag}: localized SoftwareApplication description + access details + Version`,
+        app?.description === localized.meta.shortDescription && accessCopyMatches
+          && hasNoBroadPriceClaim && typeof app?.softwareVersion === 'string',
+        `features=${actualFeatures.length}; accessCopyMatches=${accessCopyMatches}; broadPriceClaim=${!hasNoBroadPriceClaim}`,
       );
     }
     if (route.name === 'help') {
@@ -216,9 +231,14 @@ const robotsTxt = await (await fetch(`${BASE}/robots.txt`)).text();
 check('robots.txt: Sitemap-Zeile + kein Terminal-Disallow', robotsTxt.includes('sitemap.xml') && !robotsTxt.includes('disallow: /*/terminal'), robotsTxt.slice(0, 200));
 check('robots.txt: Social-Bots erlaubt', robotsTxt.includes('Twitterbot') && robotsTxt.includes('facebookexternalhit') && robotsTxt.includes('TelegramBot'));
 const sitemapXml = await (await fetch(`${BASE}/sitemap.xml`)).text();
-const sitemapUrls = (sitemapXml.match(/<loc>/g) ?? []).length;
-// 6 indexierbare Routen (Terminal-Basis index, Param-Varianten noindex) × 5 Locales
-check('sitemap.xml: 30 URLs (6 Routen × 5 Locales, Terminal-Basis index)', sitemapUrls === 30, `n=${sitemapUrls}`);
+const sitemapLocs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+const sitemapUrls = sitemapLocs.length;
+const expectedSitemapLocs = LOCALES.flatMap((locale) => ROUTES.map((route) => `${SITE}/${locale}${route.path}`));
+check(
+  `sitemap.xml: all configured locale-route URLs (${expectedSitemapLocs.length})`,
+  sitemapUrls === expectedSitemapLocs.length && expectedSitemapLocs.every((url) => sitemapLocs.includes(url)),
+  `actual=${sitemapUrls}; expected=${expectedSitemapLocs.length}`,
+);
 check(
   'sitemap.xml: genau 5 Terminal-Basis-URLs, keine Param-Varianten',
   (sitemapXml.match(/\/terminal<\/loc>/g) || []).length === 5 && !sitemapXml.includes('/terminal?'),
@@ -231,7 +251,15 @@ const finalStatus = async (path, headers = {}) => {
   const res = await fetch(`${BASE}${path}`, { headers, redirect: 'follow' });
   return res.status;
 };
-check('M8: unbekannter Locale-Pfad /xx endet 404', (await finalStatus('/xx')) === 404);
+const unknownLocale = await fetch(`${BASE}/xx`, { redirect: 'manual' });
+const unknownLocaleTarget = unknownLocale.headers.get('location');
+const unknownLocaleFinal = await fetch(`${BASE}/xx`);
+check(
+  'M8: unbekannter Locale-Pfad /xx fällt auf /en zurück',
+  unknownLocale.status === 307 && !!unknownLocaleTarget
+    && new URL(unknownLocaleTarget, BASE).pathname === '/en' && unknownLocaleFinal.status === 200,
+  `${unknownLocale.status} ${unknownLocaleTarget ?? ''} → ${unknownLocaleFinal.status}`,
+);
 check('M8: unbekannte Seite /de/nope = 404', (await finalStatus('/de/nope')) === 404);
 check('M8: unbekanntes Legal-Doc = 404 (keine Soft-404)', (await finalStatus('/de/legal/nope')) === 404);
 const rootNoAl = await fetch(`${BASE}/`, { redirect: 'manual' });
@@ -256,15 +284,15 @@ for (const locale of LOCALES) {
 // Social Cards: lokalisierte OG-SVGs, Injection-Guards, Bot-Fetch, Card-Images
 const og = async (qs) => (await fetch(`${BASE}/api/og${qs}`)).text();
 const ogDe = await og('?ticker=SOL&locale=de');
-check('M7: OG-Card de lokalisiert', ogDe.includes('kein Account') && ogDe.includes('Echtzeit'), '');
+check('M7: OG-Card de lokalisiert', ogDe.includes('Ausgewählte CEX/DEX-Märkte') && ogDe.includes('Kein Abo für Basiszugang'), '');
 const ogZh = await og('?ticker=SOL&locale=zh');
-check('M7: OG-Card zh lokalisiert', ogZh.includes('终端'), '');
+check('M7: OG-Card zh lokalisiert', ogZh.includes('精选 CEX/DEX 市场') && ogZh.includes('浏览器图表'), '');
 const ogEn = await og('?ticker=SOL&locale=en');
-check('M7: OG-Card en lokalisiert', ogEn.includes('no account'), '');
+check('M7: OG-Card en lokalisiert', ogEn.includes('Selected CEX/DEX markets') && ogEn.includes('No core subscription'), '');
 const ogInj = await og('?ticker=%3Csvg%20onload%3Dalert(1)%3E&locale=de');
 check('M7: OG-Injection gesannt (kein onload-Markup)', !ogInj.includes('onload='), '');
 const ogProto = await og('?ticker=BTC&locale=constructor');
-check('M7: locale=constructor fällt auf EN zurück', ogProto.includes('no account'), '');
+check('M7: locale=constructor fällt auf EN zurück', ogProto.includes('No core subscription'), '');
 for (const locale of ['de', 'en']) {
   const html = await (await fetch(`${BASE}/${locale}/terminal?ticker=SOL&price=150`)).text();
   const ogImage = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1] ?? '';
@@ -360,7 +388,7 @@ for (const locale of LOCALES) {
   const html = await (await fetch(`${BASE}/${locale}`)).text();
   const tag = `${locale}/ [landing-M4]`;
   const h1 = decode(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  check(`${tag}: H1 trägt Keyword-Cluster (TradingView + CEX)`, /TradingView/i.test(h1) && /CEX/i.test(h1), h1);
+  check(`${tag}: H1 beschreibt ausgewählte Markt-Charts ohne Wettbewerbsvergleich`, /CEX|DEX|markt|mercad|рын|市场/i.test(h1) && !/tradingview/i.test(h1), h1);
   const levels = [...html.matchAll(/<h([1-6])[\s>]/gi)].map((m) => Number(m[1]));
   let skip = false;
   for (let i = 1; i < levels.length; i += 1) if (levels[i] - levels[i - 1] > 1) skip = true;
@@ -382,18 +410,30 @@ const sm = sitemapXml;
 const entries = [...sm.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
 const locOf = (e) => e.match(/<loc>([^<]+)<\/loc>/)?.[1] ?? '';
 const modOf = (e) => e.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1] ?? '';
-const EXPECTED_LASTMOD = { '': '2026-09-14', '/help': '2026-09-13', '/legal/terms': '2026-08-01', '/legal/privacy': '2026-08-01', '/legal/disclaimer': '2026-08-01' };
-for (const [path, mod] of Object.entries(EXPECTED_LASTMOD)) {
+const routeSeoSource = await readFile(new URL('../src/lib/sitemap-meta.ts', import.meta.url), 'utf8');
+const expectedLastmodRows = [...routeSeoSource.matchAll(
+  /\{\s*path:\s*'([^']*)',\s*priority:\s*[\d.]+,\s*changeFrequency:\s*'[^']+',\s*lastmod:\s*'(\d{4}-\d{2}-\d{2})'\s*\}/g,
+)];
+const EXPECTED_LASTMOD = Object.fromEntries(expectedLastmodRows.map(([, path, date]) => [path, date]));
+check('sitemap: every configured route has maintained lastmod metadata', Object.keys(EXPECTED_LASTMOD).length === ROUTES.length);
+for (const route of ROUTES) {
+  const path = route.path;
+  const mod = EXPECTED_LASTMOD[path];
   const rows = entries.filter((e) => {
     const loc = locOf(e).replace(`${SITE}/`, '');
     const p = loc.replace(/^(de|en|es|ru|zh)/, '');
     return p === path;
   });
-  const ok = rows.length === 5 && rows.every((e) => modOf(e).startsWith(mod));
-  check(`sitemap: lastmod ${mod} für ${path || '/'} (5 Locales)`, ok, rows.map(modOf).join(','));
+  const ok = Boolean(mod) && rows.length === LOCALES.length && rows.every((e) => modOf(e).startsWith(mod));
+  check(`sitemap: ${path || '/'} lastmod matches route metadata`, ok, `expected=${mod ?? 'missing'}; actual=${rows.map(modOf).join(',')}`);
 }
 const distinctMods = new Set(entries.map(modOf)).size;
-check('sitemap: lastmod unterscheidet Routen (kein Build-Timestamp)', distinctMods >= 3, `distinct=${distinctMods}`);
+const expectedDistinctMods = new Set(Object.values(EXPECTED_LASTMOD)).size;
+check(
+  'sitemap: lastmod distribution matches maintained metadata (not a build timestamp)',
+  distinctMods === expectedDistinctMods,
+  `actual=${distinctMods}; expected=${expectedDistinctMods}`,
+);
 
 // Cache-Header: SEO-Assets am Edge, HTML s-maxage
 const cc = async (path) => (await fetch(`${BASE}${path}`)).headers.get('cache-control') ?? '';
@@ -415,10 +455,17 @@ check('M3: ?ticker=-Duplikat kanonisiert + noindex', paramCanon === `${SITE}/de/
 const slash = await fetch(`${BASE}/de/help/`, { redirect: 'manual' });
 check('M3: Trailing-Slash 308 auf /de/help', slash.status === 308 && (slash.headers.get('location') ?? '').endsWith('/de/help'), `${slash.status} ${slash.headers.get('location')}`);
 const caseLoc = await fetch(`${BASE}/DE`, { redirect: 'manual' });
+const caseTarget = caseLoc.headers.get('location');
 const caseFinal = await fetch(`${BASE}/DE`);
 const caseHtml = await caseFinal.text();
 const caseCanon = caseHtml.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
-check('M3: Case-Variante /DE redirectet & kanonisiert auf /de', caseLoc.status === 307 || caseLoc.status === 308 ? caseCanon === `${SITE}/de` : caseCanon === `${SITE}/de`, `${caseLoc.status} ${caseCanon}`);
+check(
+  'M3: Case-Variante /DE redirectet & kanonisiert auf /de',
+  (caseLoc.status === 307 || caseLoc.status === 308)
+    && !!caseTarget && new URL(caseTarget, BASE).pathname === '/de'
+    && caseCanon === `${SITE}/de`,
+  `${caseLoc.status} ${caseTarget ?? ''} ${caseCanon}`,
+);
 const root = await fetch(`${BASE}/`, { redirect: 'manual' });
 check('M3: / redirectet auf Locale (307/308)', root.status === 307 || root.status === 308, `${root.status}`);
 

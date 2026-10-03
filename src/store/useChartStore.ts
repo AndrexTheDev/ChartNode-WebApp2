@@ -83,7 +83,7 @@ interface ChartUiState {
 
   tool: ActiveTool;
   volume: boolean;
-  /** Volume Profile Visible Range overlay (premium analytics, computed locally). */
+  /** Volume Profile Visible Range overlay (analytics computed locally). */
   vpOn: boolean;
   /** When armed, the next chart click drops an Anchored-VWAP anchor. */
   avwapArm: boolean;
@@ -98,8 +98,8 @@ interface ChartUiState {
   /** When armed, the next chart click creates a price alert at that level. */
   alertArm: boolean;
   /**
-   * Price alerts — persisted, never expiring (TradingView sells non-expiring
-   * alerts at Premium, multi-condition at Plus). Unlimited here.
+   * Price alerts persisted in local browser storage. Their usability depends on
+   * the terminal remaining open and receiving relevant feed updates.
    */
   alerts: PriceAlert[];
   /** Wave-4 auto chart-pattern markers on the price chart. */

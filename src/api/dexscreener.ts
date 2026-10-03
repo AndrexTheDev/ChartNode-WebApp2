@@ -23,6 +23,8 @@ interface DsPair {
   liquidity?: { usd?: number | null } | null;
   volume?: { h24?: number | null } | null;
   priceChange?: { h24?: number | null } | null;
+  marketCap?: number | null;
+  fdv?: number | null;
   url?: string;
 }
 
@@ -54,6 +56,8 @@ function normalise(raw: DsPair): DexPair | null {
     liquidityUsd: raw.liquidity?.usd ?? null,
     volume24h: raw.volume?.h24 ?? null,
     change24h: raw.priceChange?.h24 ?? null,
+    marketCapUsd: raw.marketCap ?? null,
+    fdvUsd: raw.fdv ?? null,
     url: raw.url ?? null,
   };
 }

@@ -10,10 +10,9 @@ import { DonatedFlow } from './DonatedFlow';
 import { WalletsList } from './WalletsList';
 
 /**
- * The tip jar. No paywall, no guilt-trip countdowns – just the honest story:
- * one dev, ads + donations, and three concrete slots your tip fills.
- * Declaring a donation grants the permanent SUPPORTER badge and starts the
- * ask-free grace window (48 h, or 5 days above $5 – see DonatedFlow).
+ * Optional-support dialog. A self-report adds a local cosmetic badge and can
+ * pause reminders temporarily; it is not payment verification. Selected Pro
+ * features use the separate on-chain verification flow.
  */
 
 export function SupportModal() {

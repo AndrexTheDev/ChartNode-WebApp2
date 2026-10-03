@@ -88,7 +88,7 @@ export default async function LegalPage({ params }: PageProps) {
       intro={t('intro')}
       backLabel={tl('back')}
       updatedLabel={tl('updated', {
-        date: format.dateTime(new Date('2026-09-09T00:00:00Z'), { dateStyle: 'long' }),
+        date: format.dateTime(new Date('2026-10-02T00:00:00Z'), { dateStyle: 'long' }),
       })}
       sections={sections}
       icon={<Icon className="size-3.5" aria-hidden />}

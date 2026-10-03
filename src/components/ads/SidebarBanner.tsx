@@ -11,6 +11,8 @@ import {
 } from '@/lib/ads/config';
 import { detectAdBlockOnce } from '@/lib/ads/adblock';
 import { donationGraceActive } from '@/store/useViralStore';
+import { AdUnavailable } from '@/components/ads/AdUnavailable';
+import { hasAdCreative } from '@/components/ads/hasAdCreative';
 
 /** atOptions-Loader: globale Konfiguration, die invoke.js beim Ausführen liest. */
 declare global {
@@ -33,8 +35,8 @@ const SIDEBAR_BREAKPOINT = '(min-width: 1280px)';
  *    `data-cfasync="false"`; echter Blocker ⇒ globale Soft-Wall-Erkennung
  *    greift ohnehin (AdManager), Rail kollabiert zusätzlich.
  *  · Donation-Grace & navigator.webdriver ⇒ keine Injection, Rail kollabiert.
- *  · Kein Fill (Flake/kein Bid) ⇒ Rail kollabiert nach Retries ⇒ kein toter
- *    160-px-Streifen; Fill ⇒ Rail bleibt (In-Flow, keine Overlaps möglich).
+ *  · No-fill (Flake/kein Bid) ⇒ die 160×600-Reserve bleibt mit einem klaren
+ *    Hinweis stehen; erkannte Blocker sowie Donation-Grace/QA kollabieren.
  */
 export function SidebarBanner() {
   const t = useTranslations('ads');
@@ -44,6 +46,7 @@ export function SidebarBanner() {
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('addemo') === '1',
   );
   const [filled, setFilled] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const holderRef = useRef<HTMLDivElement | null>(null);
   const done = useRef(false);
@@ -58,41 +61,50 @@ export function SidebarBanner() {
       setCollapsed(true);
       return;
     }
+    const holder = holderRef.current;
+    if (!holder) return;
     const mq = window.matchMedia(SIDEBAR_BREAKPOINT);
     let cancelled = false;
     let tries = 0;
+    const observer = new MutationObserver(() => {
+      if (hasAdCreative(holder)) {
+        done.current = true;
+        setFilled(true);
+        setUnavailable(false);
+      }
+    });
+    observer.observe(holder, { childList: true, subtree: true });
 
     const pollFilled = (left: number) => {
       window.setTimeout(() => {
         if (cancelled) return;
-        const holder = holderRef.current;
-        if (holder && (holder.querySelector('iframe') || holder.childElementCount > 1)) {
+        if (hasAdCreative(holder)) {
           done.current = true;
           setFilled(true);
+          setUnavailable(false);
           return;
         }
         if (left > 0) pollFilled(left - 1);
         else {
           done.current = true;
-          setCollapsed(true);
+          setUnavailable(true);
         }
       }, 1500);
     };
 
     const inject = function injectFn(srcIndex: number): void {
-      if (cancelled || done.current || srcIndex >= SIDEBAR_BANNER_SRCS.length) {
-        if (srcIndex >= SIDEBAR_BANNER_SRCS.length) {
-          done.current = true;
-          setCollapsed(true);
-        }
+      if (cancelled || done.current) return;
+      if (srcIndex >= SIDEBAR_BANNER_SRCS.length) {
+        done.current = true;
+        setUnavailable(true);
         return;
       }
-      const holder = holderRef.current;
-      if (!holder) return;
+      const target = holderRef.current;
+      if (!target) return;
       const src = SIDEBAR_BANNER_SRCS[srcIndex];
       if (!src) {
         done.current = true;
-        setCollapsed(true);
+        setUnavailable(true);
         return;
       }
       tries += 1;
@@ -126,8 +138,8 @@ export function SidebarBanner() {
         });
       };
       loader.onload = () => pollFilled(4);
-      holder.appendChild(opt);
-      holder.appendChild(loader);
+      target.appendChild(opt);
+      target.appendChild(loader);
     };
 
     const apply = () => {
@@ -135,17 +147,18 @@ export function SidebarBanner() {
       window.setTimeout(() => inject(0), 0);
     };
     apply();
-    // Meldet der Loader gar nichts (Hang/Flake), kollabiert der Rail nach
-    // 15 s ⇒ kein toter 160-px-Streifen im Terminal.
+    // Meldet der Loader gar nichts (Hang/Flake), bleibt die 160×600-Reserve
+    // nach 15 s mit einem transparenten No-fill-Hinweis erhalten.
     const armCollapse = window.setTimeout(() => {
       if (!cancelled && !done.current) {
         done.current = true;
-        setCollapsed(true);
+        setUnavailable(true);
       }
     }, 15_000);
     mq.addEventListener('change', apply);
     return () => {
       cancelled = true;
+      observer.disconnect();
       window.clearTimeout(armCollapse);
       mq.removeEventListener('change', apply);
     };
@@ -165,7 +178,7 @@ export function SidebarBanner() {
       >
         {t('sponsored')}
       </span>
-      {/* Reserve-Box 160×600: füllt ohne CLS, kollabiert ohne Fill */}
+      {/* Feste 160×600-Reserve: füllt oder zeigt transparenten No-fill-Hinweis. */}
       <div
         ref={holderRef}
         data-sidebar-banner=""
@@ -178,11 +191,12 @@ export function SidebarBanner() {
             className="flex flex-col items-center justify-center gap-2 border border-dashed border-line/70 bg-surface/40 p-2 text-center font-mono text-micro-9 uppercase tracking-cyber text-faint"
           >
             <span className="text-primary">160 × 600</span>
-            <span>Ad-Frame</span>
-            <span>Demo-Platzhalter</span>
-            <span className="normal-case tracking-normal">(addemo=1 – hier füllt das echte Adsterra-Banner im freien Netz)</span>
+            <span>{t('demoFrame')}</span>
+            <span>{t('demoPlaceholder')}</span>
+            <span className="normal-case tracking-normal">{t('demoNote')}</span>
           </div>
         )}
+        {unavailable && !demo && <AdUnavailable />}
       </div>
     </aside>
   );

@@ -4,16 +4,13 @@
  * =====================================================================
  * Vanilla ES6+, 0 Dependencies. Architektur-Prinzipien:
  *
- *  A) Echte <a href target="_blank" rel="sponsored noopener">-Anker für alle
- *     Smartlink-CTAs. Anker-Klicks sind User-Geste + echte Navigation und
- *     werden von Popup-Blockern praktisch NIE blockiert – das ist die
- *     robusteste legale Auslieferung (kein window.open nötig).
- *  B) window.open nur dort, wo kein Anker möglich ist (Buttons) – mit
- *     sauberem Fallback: sichtbares, dismissbares Modal mit Direkt-Link.
- *  C) Jedes Smartlink-Element trägt ein sichtbares Disclosure-Badge
- *     („Sponsored“/„Anzeige“). Native OPTIK ja – Tarnung als Funktion nein
- *     (Schleichwerbung ist in der EU/DE/US verboten, Adsterra sperrt
- *     Accounts bei Invalid Traffic, Safe-Browsing straft ganze Domains ab).
+ *  A) Sponsored CTAs use real <a href target="_blank"
+ *     rel="sponsored noopener"> links where possible. Browser and network
+ *     policies can still block or alter delivery.
+ *  B) Buttons use window.open only from a user gesture and show a visible,
+ *     dismissible direct-link fallback if the popup is blocked.
+ *  C) Each sponsored item carries a visible disclosure badge. This kit does
+ *     not certify a partner, the destination, or compliance with local rules.
  *  D) Frequency-Cap: max. MAX_TRIGGERS_PER_HOUR Opportunistic-Trigger
  *     (Toasts/dynamische Opens) pro Stunde. Primäre, gelabelte CTAs bleiben
  *     immer funktionsfähig (das ist ihr deklarierter Zweck).
@@ -22,8 +19,8 @@
  *              <script src="landing-smartlinks.js" defer></script>
  *
  * HTML-Markup (Auto-Enhancement via data-Attributen):
- *   <a class="nc-sl-cta" href="..." data-smartlink>🎁 Claim Bonus</a>
- *   <button class="nc-sl-cta" data-smartlink>🏦 Partner Exchanges</button>
+ *   <a class="nc-sl-cta" href="..." data-smartlink>Sponsored partner link</a>
+ *   <button class="nc-sl-cta" data-smartlink>Visit sponsor</button>
  *   <div class="nc-sl-card" data-smartlink-card>Teaser …</div>          → öffnet Smartlink (Badge)
  *   <div class="nc-sl-card" data-smartlink-card="toast" data-href="#faq"> → echte Aktion + Offer-Toast
  */
@@ -48,13 +45,13 @@
     STORAGE_KEY: 'nc_sl_fire_log',
     TOAST_KEY: 'nc_sl_last_toast',
     /* Fallback-Modal (Popup-Blocker) */
-    FALLBACK_TITLE: 'Partner-Angebot',
-    FALLBACK_TEXT: 'Dein Browser hat das neue Fenster blockiert. Öffne das Angebot direkt:',
-    FALLBACK_CTA: 'Angebot öffnen',
+    FALLBACK_TITLE: 'Gesponserter Link',
+    FALLBACK_TEXT: 'Dein Browser hat das neue Fenster blockiert. Öffne den externen Sponsor-Link nur, wenn du möchtest:',
+    FALLBACK_CTA: 'Gesponserten Link öffnen',
     FALLBACK_CLOSE: 'Schließen',
-    /* Offer-Toast */
-    TOAST_TEXT: '🎁 Bonus sichern – Partner-Angebot',
-    TOAST_CTA: 'Ansehen',
+    /* Sponsored-link toast */
+    TOAST_TEXT: 'Gesponserter externer Link',
+    TOAST_CTA: 'Link öffnen',
     RESPECT_DNT: true,
     SKIP_BOTS: true, // navigator.webdriver → aus (eigene QA/CI bleibt sauber)
     DEBUG: false,

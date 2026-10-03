@@ -93,7 +93,11 @@ export class ManagedSocket {
       // dem Close darf nichts davon am (u. U. noch CONNECTING-)Socket hängen.
       this.ws.onopen = null;
       this.ws.onmessage = null;
-      this.ws.onerror = null;
+      // Node's `ws` emits an EventEmitter `error` when a CONNECTING socket is
+      // intentionally closed before its handshake completes. Keep a no-op
+      // handler (with no adapter/store closure) so that expected shutdown
+      // noise cannot become an uncaught process error in the smoke harness.
+      this.ws.onerror = () => undefined;
       this.ws.onclose = null;
       this.ws.close();
       this.ws = null;

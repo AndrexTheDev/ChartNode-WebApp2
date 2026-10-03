@@ -8,6 +8,7 @@ import { CommandPalette } from '@/components/layout/CommandPalette';
 import { GlobalShortcuts } from '@/components/layout/GlobalShortcuts';
 import { AdManager } from '@/components/ads/AdManager';
 import { LocaleDetectBanner } from '@/components/layout/LocaleDetectBanner';
+import { HideOnClusterRoute } from '@/components/layout/HideOnClusterRoute';
 import { RateLimitOverlay } from '@/components/overlays/RateLimitOverlay';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -167,7 +168,12 @@ export default async function LocaleLayout({
   // uses translations would opt into dynamic rendering.
   setRequestLocale(locale);
 
-  const [messages, t] = await Promise.all([getMessages(), getTranslations('nav')]);
+  const [messages, t, metaT] = await Promise.all([
+    getMessages(),
+    getTranslations('nav'),
+    getTranslations({ locale, namespace: 'meta' }),
+  ]);
+  const structuredDescription = metaT('shortDescription');
   const meta = LOCALE_META[locale];
 
   return (
@@ -192,7 +198,7 @@ export default async function LocaleLayout({
         <GridBackdrop />
 
         {/* schema.org baseline for the whole site: who we are + what this is */}
-        <JsonLd data={[organizationLd(), websiteLd(locale)]} />
+        <JsonLd data={[organizationLd(structuredDescription), websiteLd(locale, structuredDescription)]} />
 
         <NextIntlClientProvider locale={locale} messages={messages}>
           <StoreBridge locale={locale} />
@@ -211,25 +217,27 @@ export default async function LocaleLayout({
 
           <SiteHeader />
 
-          {/* Native Banner (4:1) in der Header-Zone – Terminal skippt (Strip) */}
-          <HeaderNativeBanner />
+          <HideOnClusterRoute>
+            {/* Native Banner (4:1) in der Header-Zone – Terminal skippt (Strip) */}
+            <HeaderNativeBanner />
 
-          {/* Sprach-Hinweis in der Header-Zone: Platz wird pre-paint reserviert
-              (Boot-Skript ⇒ 0 CLS), der Hinweis selbst steht im Fluss und
-              verdeckt damit keine Bedienelemente mehr. */}
-          <div className="nc-langhint-slot">
-            <LocaleDetectBanner />
-          </div>
+            {/* Sprach-Hinweis: Platz wird pre-paint reserviert, damit er keinen CLS erzeugt. */}
+            <div className="nc-langhint-slot">
+              <LocaleDetectBanner />
+            </div>
+          </HideOnClusterRoute>
 
           <main id="nc-content" className="flex-1">
             {children}
           </main>
 
-          <SiteFooter locale={locale} />
+          <HideOnClusterRoute>
+            <SiteFooter />
+          </HideOnClusterRoute>
 
           <CommandPalette />
           <RateLimitOverlay />
-          {/* Adsterra slots, ad-block soft-wall, share-to-unlock modals */}
+          {/* Adsterra slots, ad-block soft-wall, share-composer-gated themes */}
           <AdManager />
         </NextIntlClientProvider>
       </body>

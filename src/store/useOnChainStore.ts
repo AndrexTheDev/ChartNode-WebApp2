@@ -21,10 +21,10 @@ import {
  * Live on-chain signal state (memory-only – these are ephemeral readings,
  * nothing worth persisting into localStorage).
  *
- * Refresh orchestration lives in `tick()`: the panel calls it on mount and on
- * an interval; each signal group is only re-fetched when its own deadline has
- * passed and no fetch for that group is in flight. Closing the panel stops the
- * interval, so a hidden panel costs zero requests.
+ * The terminal header selectively refreshes BTC fees and active-token
+ * forensics; the full panel calls `tick()` while open for the remaining groups.
+ * Every group is re-fetched only when its own deadline has passed and no fetch
+ * for that group is in flight.
  */
 
 export type SignalGroup = 'btc' | 'evm' | 'solana' | 'defi' | 'dex' | 'forensics';
@@ -49,7 +49,7 @@ export const REFRESH_MS: Record<SignalGroup, number> = {
 };
 
 interface OnChainState {
-  /** Panel visibility (controls whether anything is fetched at all). */
+  /** Full panel visibility; compact terminal badges refresh selected groups independently. */
   open: boolean;
   btc: BtcSignals | null;
   evm: Record<string, EvmChainSignals>;

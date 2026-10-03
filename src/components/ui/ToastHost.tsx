@@ -2,6 +2,7 @@
 'use client';
 
 import { BellRing, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/cn';
 import { useToastStore } from '@/store/useToastStore';
 
@@ -10,6 +11,7 @@ import { useToastStore } from '@/store/useToastStore';
  * Purely presentational – dismissible, auto-expiring, keyboard-accessible.
  */
 export function ToastHost() {
+  const t = useTranslations('common');
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
   if (toasts.length === 0) return null;
@@ -44,7 +46,7 @@ export function ToastHost() {
           <button
             type="button"
             onClick={() => dismiss(toast.id)}
-            aria-label="Dismiss"
+            aria-label={t('close')}
             className="ml-auto text-faint transition-colors hover:text-fg"
           >
             <X className="size-3" aria-hidden />

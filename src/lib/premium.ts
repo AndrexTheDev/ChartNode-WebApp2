@@ -2,8 +2,7 @@
 import type { Candle } from '@/websockets/types';
 
 /**
- * Premium chart analytics computed locally from the candle buffer –
- * the features paid charting suites put behind a subscription:
+ * Chart analytics computed locally from the loaded candle buffer:
  *
  *   • **Volume Profile (visible range)** – volume distributed over price bins,
  *     plus Point of Control and the 70 % Value Area (VAH/VAL).

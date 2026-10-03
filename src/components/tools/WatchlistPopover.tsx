@@ -11,9 +11,8 @@ import { pct, usd } from '@/lib/format';
 import { selectActiveToken, selectWatchlist, useAppStore } from '@/store/useAppStore';
 
 /**
- * Live watchlist quotes – TradingView caps free watchlists at 1 list / 30
- * symbols; this one is unlimited and priced from the cached ticker sweep
- * (the same response the breadth + screener features use: zero extra calls).
+ * Watchlist view backed by the screener's cached provider rows. Displayed
+ * quotes inherit that feed's coverage, freshness and availability limits.
  */
 
 export function WatchlistPopover({ open, onClose }: { open: boolean; onClose: () => void }) {

@@ -31,9 +31,9 @@ const UNLOCK_TARGETS: { id: ThemeId; label: string; swatch: string }[] = [
 /**
  * Viral loop: one modal, two intents, one reward.
  *
- * Clicking X or Telegram opens the pre-filled post *and* flips
- * `useViralStore.shareUnlocked`, which permanently unlocks the two premium
- * themes (the modal immediately offers to apply them – instant dopamine).
+ * Clicking X or Telegram opens the prepared composer and sets a local
+ * `useViralStore.shareUnlocked` flag for the two share-gated themes. The app
+ * does not verify whether the post is published.
  */
 export function ShareModal() {
   const t = useTranslations('share');
@@ -61,12 +61,28 @@ export function ShareModal() {
     typeof window === 'undefined'
       ? buildShareUrl(SITE_URL, locale, activeToken.symbol, price)
       : buildShareUrl(window.location.origin, locale, activeToken.symbol, price);
-  const text = buildShareText(t('tweet'), activeToken.symbol);
+  // The share copy is a template consumed by buildShareText; use raw to avoid
+  // next-intl requiring `{ticker}` during rendering before the replacement.
+  const text = buildShareText(t.raw('tweet') as string, activeToken.symbol);
   const links = buildShareLinks(text, url);
 
   const fire = (href: string) => {
-    window.open(href, '_blank', 'noopener,noreferrer,width=680,height=560');
-    unlockViaShare();
+    // Open a same-origin blank first so we can detect popup blocking, sever the
+    // opener relationship, and only then navigate to the prepared composer.
+    const popup = window.open('about:blank', '_blank', 'width=680,height=560');
+    if (!popup) return;
+
+    try {
+      const referrerPolicy = popup.document.createElement('meta');
+      referrerPolicy.name = 'referrer';
+      referrerPolicy.content = 'no-referrer';
+      popup.document.head.appendChild(referrerPolicy);
+      popup.opener = null;
+      popup.location.href = href;
+      unlockViaShare();
+    } catch {
+      popup.close();
+    }
   };
 
   return (
@@ -83,7 +99,7 @@ export function ShareModal() {
       widthClass="max-w-lg"
     >
       <div className="flex flex-col gap-3">
-        {/* the exact post that will be published – WYSIWYG virality */}
+        {/* Prepared share text and URL; displaying them does not confirm publication. */}
         <blockquote className="nc-clip-sm border border-line bg-surface/60 p-3 font-mono text-[11px] leading-relaxed text-muted">
           {text} <span className="text-accent">{url}</span>
         </blockquote>

@@ -1,7 +1,7 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFixedPopover } from '@/lib/useFixedPopover';
 import {
@@ -36,6 +36,7 @@ import {
   Compass,
   Clock3,
   ChevronUp,
+  Network,
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
@@ -47,6 +48,7 @@ import { SidebarBanner } from '@/components/ads/SidebarBanner';
 import { requestPopunder } from '@/lib/ads/adsterra';
 import { offerToast, SMARTLINKS_ENABLED } from '@/lib/ads/smartlinks';
 import { ExchangePicker } from './ExchangePicker';
+import { OnChainHeaderBadges } from './OnChainHeaderBadges';
 import { ChartGrid } from '@/components/chart/ChartGrid';
 import { SEED_TOKENS } from '@/lib/constants';
 import { EXCHANGE_META } from '@/lib/exchanges';
@@ -98,10 +100,13 @@ const EdgeLagModal = dynamic(() => import('@/components/tools/EdgeModals').then(
 const EdgeRegimeModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeRegimeModal), { ssr: false });
 const EdgeClockModal = dynamic(() => import('@/components/tools/EdgeModals').then((m) => m.EdgeClockModal), { ssr: false });
 const OnChainPanel = dynamic(() => import('@/components/onchain/OnChainPanel').then((m) => m.OnChainPanel), { ssr: false });
+const NodeClusterModal = dynamic(() => import('@/components/terminal/NodeClusterModal').then((m) => m.NodeClusterModal), { ssr: false });
+const MarketSignalsModal = dynamic(() => import('@/components/terminal/MarketSignalsModal').then((m) => m.MarketSignalsModal), { ssr: false });
 const ProMetricsPanel = dynamic(() => import('@/components/pro/ProMetricsPanel').then((m) => m.ProMetricsPanel), { ssr: false });
 import { TOKEN_INDEX } from '@/lib/constants';
 import type { ExchangeId } from '@/websockets/types';
 import { SupportModal } from '@/components/support/SupportModal';
+import { ProAccessGuard } from '@/components/terminal/ProAccessGuard';
 import { SupportNudge } from '@/components/support/SupportNudge';
 import { useHydrated } from '@/store/useHydrated';
 import { useViralStore } from '@/store/useViralStore';
@@ -142,7 +147,9 @@ export function TerminalShell() {
   const tw = useTranslations('whales');
   const ts = useTranslations('share');
   const toc = useTranslations('onchain');
+  const tnc = useTranslations('nodecluster');
   const tp = useTranslations('pro');
+  const tms = useTranslations('marketSignals');
   const t2 = useTranslations('support');
   const hydrated = useHydrated();
   /** M7: Werkzeug-Chunks in der Idle-Zeit wärmen (Klick bleibt sofort). */
@@ -233,6 +240,28 @@ export function TerminalShell() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [magnifierOpen, setMagnifierOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [nodeClusterOpen, setNodeClusterOpen] = useState(false);
+  const [terminalView, setTerminalView] = useState<'chart' | 'cluster'>('chart');
+  const openNodeClusterModal = useCallback(() => {
+    setTerminalView('chart');
+    setNodeClusterOpen(true);
+  }, []);
+  const closeInlineNodeCluster = useCallback(() => setTerminalView('chart'), []);
+  const closeNodeCluster = useCallback(() => setNodeClusterOpen(false), []);
+  const handleTerminalViewKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const nextView = event.key === 'ArrowRight' || event.key === 'End'
+      ? 'cluster'
+      : event.key === 'ArrowLeft' || event.key === 'Home'
+        ? 'chart'
+        : null;
+    if (!nextView) return;
+    event.preventDefault();
+    if (nextView === 'cluster') setNodeClusterOpen(false);
+    setTerminalView(nextView);
+    window.requestAnimationFrame(() => document.getElementById(`terminal-${nextView}-tab`)?.focus());
+  }, []);
+  const [signalsOpen, setSignalsOpen] = useState(false);
+  const closeSignals = useCallback(() => setSignalsOpen(false), []);
 
   // QA-Hook: ?qa=1 exponiert die Stores für automatisierte Feature-Tests.
   useEffect(() => {
@@ -333,7 +362,7 @@ export function TerminalShell() {
   const connected = status === 'open';
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)),var(--nc-socialbar-h,0px))] max-lg:h-[calc(100dvh-var(--nc-header-h)-var(--nc-socialbar-h,0px))] max-lg:overflow-hidden xl:flex-row">
+    <div className="flex min-h-[calc(100dvh-var(--nc-header-h))] pb-[max(2.5rem,calc(var(--nc-dock-offset,0px)+env(safe-area-inset-bottom)),var(--nc-socialbar-h,0px))] max-lg:h-[calc(100dvh-var(--nc-header-h))] max-lg:overflow-hidden xl:flex-row">
       {/* linke Sidebar: Banner 160×600, Desktop only (xl-Row-Layout) */}
       <SidebarBanner />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -471,8 +500,39 @@ export function TerminalShell() {
             </span>
           </div>
 
+          <OnChainHeaderBadges onOpen={toggleOnChain} />
+          <button
+            type="button"
+            onClick={() => setSignalsOpen(true)}
+            aria-expanded={signalsOpen}
+            aria-haspopup="dialog"
+            aria-label={tms('button')}
+            title={tms('title')}
+            data-testid="market-signals-toggle"
+            className={cn(
+              'nc-clip-sm inline-flex h-7 items-center gap-1.5 border px-2 font-mono text-2xs uppercase tracking-cyber transition-colors',
+              signalsOpen ? 'border-cyan-300/50 bg-cyan-300/10 text-cyan-100' : 'border-line bg-surface/50 text-muted hover:border-cyan-300/40 hover:text-cyan-100',
+            )}
+          >
+            <Activity className="size-3" aria-hidden />
+            <span className="hidden sm:inline">{tms('button')}</span>
+          </button>
+
           {/* whale toggle + layouts */}
           <div role="group" aria-label={tn('layouts')} className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={openNodeClusterModal}
+              aria-expanded={nodeClusterOpen}
+              aria-haspopup="dialog"
+              aria-label={tnc('button')}
+              title={tnc('title')}
+              data-testid="nodecluster-toggle"
+              className="nc-clip-sm inline-flex h-8 items-center gap-1.5 border border-primary/70 bg-primary/10 px-2.5 font-mono text-2xs font-bold uppercase tracking-cyber text-primary shadow-neon-sm transition-all duration-200 hover:-translate-y-px hover:bg-primary/20 hover:shadow-neon-md"
+            >
+              <Network className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">{tnc('button')}</span>
+            </button>
             <button
               type="button"
               onClick={toggleOnChain}
@@ -620,7 +680,7 @@ export function TerminalShell() {
             ]}
           />
 
-          {/* grouped premium analytics – one tidy trigger instead of a chip wall */}
+          {/* grouped chart analytics – one tidy trigger instead of a chip wall */}
           <ToolMenu
             id="analyse"
             label={t('menus.analyse')}
@@ -830,6 +890,33 @@ export function TerminalShell() {
             <span className="nc-chip shrink-0">{timeframe}</span>
             <button
               type="button"
+              onClick={openNodeClusterModal}
+              aria-expanded={nodeClusterOpen}
+              aria-haspopup="dialog"
+              aria-label={tnc('button')}
+              title={tnc('title')}
+              data-testid="nodecluster-toggle-mobile"
+              className="nc-clip-sm inline-flex size-8 shrink-0 items-center justify-center border border-primary/70 bg-primary/10 text-primary shadow-neon-sm transition-all duration-200 hover:bg-primary/20 hover:shadow-neon-md"
+            >
+              <Network className="size-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSignalsOpen(true)}
+              aria-expanded={signalsOpen}
+              aria-haspopup="dialog"
+              aria-label={tms('button')}
+              title={tms('title')}
+              data-testid="market-signals-toggle-mobile"
+              className={cn(
+                'nc-clip-sm inline-flex size-8 shrink-0 items-center justify-center border transition-colors',
+                signalsOpen ? 'border-cyan-300/50 bg-cyan-300/10 text-cyan-100' : 'border-line bg-surface/70 text-muted hover:border-cyan-300/40 hover:text-cyan-100',
+              )}
+            >
+              <Activity className="size-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
               onClick={() => setToolbarOpen(true)}
               aria-expanded={false}
               aria-label={t('toolbarExpand')}
@@ -859,13 +946,90 @@ export function TerminalShell() {
       <AdSlot variant="mobile" />
       <AdSlot variant="desktop" />
 
-      {/* -------------------------------- grid ------------------------------ */}
-      <ChartGrid />
+      {/* Inline workspace tabs keep the chart and NodeCluster in one terminal route. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line/70 bg-bg/75 px-3 py-1.5">
+        <div role="tablist" aria-label={tnc('standalone.viewMode')} className="inline-flex items-center gap-1 rounded-md border border-line/70 bg-surface/40 p-1">
+          <button
+            type="button"
+            id="terminal-chart-tab"
+            role="tab"
+            aria-selected={terminalView === 'chart'}
+            aria-controls="terminal-chart-panel"
+            tabIndex={terminalView === 'chart' ? 0 : -1}
+            onClick={() => setTerminalView('chart')}
+            onKeyDown={handleTerminalViewKeyDown}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded px-2.5 font-mono text-2xs font-semibold uppercase tracking-cyber transition-colors',
+              terminalView === 'chart' ? 'bg-primary/12 text-primary shadow-neon-sm' : 'text-muted hover:bg-elevated/70 hover:text-fg',
+            )}
+          >
+            <BarChart3 className="size-3.5" aria-hidden />
+            {tnc('standalone.chartView')}
+          </button>
+          <button
+            type="button"
+            id="terminal-cluster-tab"
+            role="tab"
+            aria-selected={terminalView === 'cluster'}
+            aria-controls="terminal-cluster-panel"
+            tabIndex={terminalView === 'cluster' ? 0 : -1}
+            onClick={() => {
+              setNodeClusterOpen(false);
+              setTerminalView('cluster');
+            }}
+            onKeyDown={handleTerminalViewKeyDown}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded px-2.5 font-mono text-2xs font-semibold uppercase tracking-cyber transition-colors',
+              terminalView === 'cluster' ? 'bg-primary/12 text-primary shadow-neon-sm' : 'text-muted hover:bg-elevated/70 hover:text-fg',
+            )}
+          >
+            <Network className="size-3.5" aria-hidden />
+            {tnc('standalone.clusterView')}
+          </button>
+        </div>
+        <span className="hidden font-mono text-[9px] uppercase tracking-cyber text-faint sm:inline">
+          {activeToken.symbol}
+        </span>
       </div>
 
+      <div
+        id="terminal-chart-panel"
+        role="tabpanel"
+        aria-labelledby="terminal-chart-tab"
+        hidden={terminalView !== 'chart'}
+        className={cn(
+          'relative min-h-0 flex-1 flex-col',
+          terminalView === 'chart' ? 'flex' : 'hidden',
+        )}
+      >
+        {terminalView === 'chart' && <ChartGrid />}
+      </div>
+      <div
+        id="terminal-cluster-panel"
+        role="tabpanel"
+        aria-labelledby="terminal-cluster-tab"
+        hidden={terminalView !== 'cluster'}
+        className={cn(
+          'relative min-h-0 flex-1 flex-col',
+          terminalView === 'cluster' ? 'flex' : 'hidden',
+        )}
+      >
+        {terminalView === 'cluster' && (
+          <NodeClusterModal token={activeToken} open onClose={closeInlineNodeCluster} mode="inline" />
+        )}
+      </div>
+      </div>
+
+      <ProAccessGuard />
       {/* live on-chain signals (right dock, fetched only while open) */}
       <LazyGate active={onChainOpen}>
         <OnChainPanel />
+      </LazyGate>
+      <LazyGate active={nodeClusterOpen}>
+        <NodeClusterModal token={activeToken} open={nodeClusterOpen} onClose={closeNodeCluster} />
+      </LazyGate>
+      <LazyGate active={signalsOpen}>
+        <MarketSignalsModal token={activeToken} open={signalsOpen} onClose={closeSignals} />
       </LazyGate>
 
       {/* PRO metrics dock (derivatives / flow / global / heat / options) */}

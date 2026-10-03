@@ -16,6 +16,7 @@ echo "── SEO ──";              node scripts/seo-check.mjs
 echo "── CWV ──";              node scripts/cwv-check.mjs
 echo "── Fit (Fixture-Feed) ──";     node scripts/audit-sandbox/run-with-fixtures.mjs scripts/fit-check.mjs
 echo "── Features (Fixture-Feed) ──"; node scripts/audit-sandbox/run-with-fixtures.mjs scripts/qa-features.mjs
+echo "── Ratings Empty-State (Fault Injection) ──"; node scripts/audit-sandbox/ratings-empty-state.mjs
 echo "── Browser (Fixture-Feed) ──";  node scripts/audit-sandbox/run-with-fixtures.mjs scripts/browser-check.mjs
 echo
 echo "✔ verify (offline) abgeschlossen"

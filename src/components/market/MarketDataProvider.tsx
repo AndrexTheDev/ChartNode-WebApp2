@@ -37,8 +37,9 @@ const DEX_POLL_MS = 20_000;
  *
  *  - active CEX token  → kline feed on the *best reachable* venue
  *    (region-aware: measured latency + geo blocks + whether the pair is listed)
- *  - watchlist CEX     → trade channels for the whale stream
- *  - active DEX token  → DexScreener polling (REST aggregator, 20 s cadence)
+ *  - active/watchlist CEX → trade channels for the whale stream; mirrored on
+ *    Binance's public market-data endpoint for the dedicated >$100k session counter
+ *  - active DEX token     → DexScreener polling (REST aggregator, 20 s cadence)
  *
  * Everything is reference-counted inside CexSocketManager, so navigating
  * around never leaks a socket. Renders nothing.
@@ -161,6 +162,14 @@ export function MarketDataProvider() {
     const targets: WhaleTarget[] = [];
     const seen = new Set<string>();
 
+    const pushExact = (venue: ExchangeId, symbol: string) => {
+      if (unsupported[venue]?.includes(symbol)) return;
+      const key = `${venue}:${symbol}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      targets.push({ exchange: venue, symbol });
+    };
+
     const push = (tokenExchange: string | undefined, symbol: string) => {
       // Prefer the venue we already have a socket for, else the best reachable one.
       const venue: ExchangeId | null =
@@ -177,10 +186,7 @@ export function MarketDataProvider() {
                 preferred: state.preferred,
               });
       if (!venue) return;
-      const key = `${venue}:${symbol}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      targets.push({ exchange: venue, symbol });
+      pushExact(venue, symbol);
     };
 
     if (activeToken.venue === 'CEX') push(activeToken.exchange, activeToken.symbol);
@@ -188,6 +194,21 @@ export function MarketDataProvider() {
       if (targets.length >= MAX_WHALE_SYMBOLS) break;
       const token = TOKEN_INDEX[id];
       if (token && token.venue === 'CEX') push(token.exchange, token.symbol);
+    }
+
+    // The toolbar's large-trade counter is Binance-specific and has a fixed
+    // >$100k USD threshold. Mirror USD-quoted active/watchlist symbols on Binance
+    // through its public market-data mirror, while preserving the normal
+    // multi-exchange ticker above. A liquid reference pair keeps the counter useful for
+    // DEX-only/empty-watchlist sessions too.
+    if (whaleEnabled) {
+      const usdQuoted = (symbol: string) =>
+        ['USD', 'USDT', 'USDC', 'FDUSD', 'TUSD', 'BUSD', 'USDP', 'DAI'].includes(symbol.split('/')[1]?.toUpperCase() ?? '');
+      const monitoredSymbols = [...new Set(targets.map((target) => target.symbol))]
+        .filter(usdQuoted)
+        .slice(0, MAX_WHALE_SYMBOLS);
+      if (monitoredSymbols.length === 0) monitoredSymbols.push('BTC/USDT');
+      for (const symbol of monitoredSymbols) pushExact('binance', symbol);
     }
 
     // Kein Cleanup hier: setWhaleTargets diffed selbst gegen den Vorzustand.

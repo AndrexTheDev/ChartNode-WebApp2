@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 import { dateTime, usd } from '@/lib/format';
+import { fetchJson } from '@/api/http';
 import { useViralStore } from '@/store/useViralStore';
 import type { Candle } from '@/websockets/types';
 
@@ -38,9 +39,9 @@ interface TapeStats {
 }
 
 /**
- * Bar magnifier (TradingView: Premium). Inspects the raw trade tape inside
- * one candle via Binance aggTrades (CORS-open): prints, taker delta and a
- * cumulative-delta curve for the selected bar.
+ * Requests Binance aggTrades for a selected candle and summarizes the returned
+ * prints, taker delta and cumulative-delta curve. The provider may return only
+ * part of the tape or make it unavailable for a symbol, region or timeframe.
  */
 export function MagnifierModal({ symbol, barMs, candles, open, onClose }: MagnifierModalProps) {
   const t = useTranslations('tools');
@@ -57,25 +58,21 @@ export function MagnifierModal({ symbol, barMs, candles, open, onClose }: Magnif
   useEffect(() => {
     if (!open || !target) return undefined;
     let alive = true;
+    const controller = new AbortController();
     const timer = setTimeout(run, 0);
     function run() {
       setLoading(true);
       setError(false);
     const pair = symbol.replace('/', '');
     const start = target!.t;
-    /*
-     * M8-Härtung: rohe Sekundär-Fetches bekommen denselben 12-s-Deckel wie der
-     * zentrale Fetch-Layer (`api/http.ts`). Ohne ihn bliebe der Dialog bei einer
-     * hängenden Verbindung dauerhaft im Ladezustand – ein Abbruch endet jetzt im
-     * regulären Fehlerpfad („Tape nicht erreichbar“).
-     */
-    const binance = fetch(
+    const binance = fetchJson<unknown>(
       `https://api.binance.com/api/v3/aggTrades?symbol=${encodeURIComponent(pair)}&startTime=${start}&endTime=${start + barMs - 1}&limit=1000`,
-      { signal: AbortSignal.timeout(12_000) },
-    ).then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))));
-    const okx = fetch(`https://www.okx.com/api/v5/market/trades?instId=${encodeURIComponent(symbol.replace('/', '-'))}&limit=300`, {
-      signal: AbortSignal.timeout(12_000),
-    }).then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))));
+      { source: 'binance', cacheTtlMs: 0, signal: controller.signal },
+    );
+    const okx = fetchJson<unknown>(
+      `https://www.okx.com/api/v5/market/trades?instId=${encodeURIComponent(symbol.replace('/', '-'))}&limit=300`,
+      { source: 'okx', cacheTtlMs: 0, signal: controller.signal },
+    );
     /*
      * M8-Fix (Befund O3 aus §1): Der Zweitmarkt-Promise muss auch dann
      * beobachtet sein, wenn Binance gewinnt – sonst meldet der Browser eine
@@ -140,6 +137,7 @@ export function MagnifierModal({ symbol, barMs, candles, open, onClose }: Magnif
     return () => {
       alive = false;
       clearTimeout(timer);
+      controller.abort();
     };
   }, [open, target, barMs, symbol]);
 

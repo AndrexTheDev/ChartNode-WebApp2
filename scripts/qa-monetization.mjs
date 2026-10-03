@@ -2,7 +2,7 @@
 // Monetization-QA: Adsterra-Ausfallsicherheit, AdBlock-Soft-Wall, Clipboard,
 // Viral Loop (Share → Theme-Unlock) und localStorage-Härtung (XSS/Korruption).
 //
-// Läuft gegen einen Build OHNE Adsterra-Env (Default) auf :3000.
+// Läuft gegen einen Build auf :3000; ein leeres Adsterra-Env deaktiviert nicht alle gebündelten Ad-Defaults.
 // Blocker-Simulation via CDP `Network.setBlockedURLs` (kein Request-
 // Interception – die würde die Hydration killen, s. QA-Vergangenheit).
 //
@@ -154,12 +154,12 @@ console.log('\n— 2: Blocker-Simulation (CDP blockt /ads.js) —');
 }
 
 /* -------------------------------------------------------------------------- */
-console.log('\n— 3: Viral Loop (Share → Unlock → Premium-Theme) —');
+console.log('\n— 3: Share-Composer → lokale Theme-Freischaltung —');
 {
   const page = await browser.newPage();
   const errors = await openTerminal(page);
 
-  // Premium-Gate VOR dem Unlock: Theme-Picker öffnet stattdessen den Share
+  // Share-Gate VOR dem Unlock: Theme-Picker öffnet stattdessen die Composer-Einladung
   await page.evaluate(() => {
     [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Design')?.click();
   });
@@ -171,47 +171,68 @@ console.log('\n— 3: Viral Loop (Share → Unlock → Premium-Theme) —');
   await wait(600);
   const gated = await page.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
-    shareUp: [...document.querySelectorAll('[role="dialog"]')].some((d) => /freischalten|Unlock/i.test(d.textContent ?? '')),
+    shareUp: [...document.querySelectorAll('[role="dialog"]')].some((d) => /composer|freizuschalten/i.test(d.textContent ?? '')),
   }));
-  check('gesperrtes Premium-Theme öffnet die Share-Einladung statt zu skinnen', gated.shareUp && gated.theme === 'acid', JSON.stringify(gated));
+  check('gesperrtes Share-Theme öffnet die Composer-Einladung statt zu wechseln', gated.shareUp && gated.theme === 'acid', JSON.stringify(gated));
   await page.keyboard.press('Escape');
   await wait(300);
 
-  // Share-Modal über das Menü, window.open-Stub fängt die Intent-URLs
+  // Share-Modal über das Menü; der Popup-Stub simuliert Blockierung und Erfolg.
   await page.evaluate(() => {
-    window.__opened = [];
-    window.open = (url) => {
-      window.__opened.push(String(url));
-      return null; // Popup-Blocker-Simulation: Unlock darf trotzdem flippen
+    window.__popupAllowed = false;
+    window.__popup = null;
+    window.open = () => {
+      if (!window.__popupAllowed) return null;
+      const popup = {
+        opener: window,
+        document: { createElement: () => ({}), head: { appendChild() {} } },
+        location: { href: 'about:blank' },
+        close() {},
+      };
+      window.__popup = popup;
+      return popup;
     };
   });
   check('Share-Menüeintrag öffnet das Modal', await clickMenuItem(page, 'Teilen'));
   await page.waitForSelector('[role="dialog"]', { timeout: 8000 });
   const preview = await page.evaluate(() => document.querySelector('[role="dialog"]')?.textContent ?? '');
-  check('Tweet-Vorschau ist der Spec-Text mit Cashtag', preview.includes('Found an insane setup for $BTC on NodeChart') && preview.includes('#Crypto #Trading'));
+  check('Share-Vorschau enthält Ticker und qualifizierten Coverage-Hinweis', preview.includes('BTC auf NodeChart ansehen') && preview.includes('Abdeckung und Aktualität hängen von Anbietern ab') && preview.includes('#Crypto'));
 
-  await page.evaluate(() => {
-    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === 'Auf X posten')?.click();
+  const clickXComposer = () => page.evaluate(() => {
+    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === 'X-Composer öffnen')?.click();
   });
+  await clickXComposer();
+  await wait(300);
+  const blockedUnlock = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('nc-viral-v1') ?? '{}').state;
+    return state?.shareUnlocked === true;
+  });
+  check('Popup-Blocker leaves the share-gated themes locked', !blockedUnlock);
+
+  await page.evaluate(() => { window.__popupAllowed = true; });
+  await clickXComposer();
   await wait(500);
-  const xUrl = await page.evaluate(() => window.__opened[0] ?? '');
+  const xUrl = await page.evaluate(() => window.__popup?.location?.href ?? '');
   check(
-    'X-Intent: twitter.com + encodierter Tweet + Share-URL mit ticker/price',
+    'X composer opens with encoded text and ticker/price URL',
     xUrl.startsWith('https://twitter.com/intent/tweet?text=') &&
       decodeURIComponent(xUrl).includes('$BTC') &&
-      decodeURIComponent(xUrl).includes('#Crypto #Trading') &&
+      decodeURIComponent(xUrl).includes('#Crypto') &&
       /ticker=BTC/.test(decodeURIComponent(xUrl)),
     xUrl.slice(0, 110),
   );
-  check('Popup-Blocker (window.open → null) bricht den Unlock nicht', await page.evaluate(() => document.body.innerText.toLowerCase().includes('freigeschaltet')));
+  check('successful composer open sets a local unlock without verifying publication', await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('nc-viral-v1') ?? '{}').state;
+    return state?.shareUnlocked === true && document.body.innerText.toLowerCase().includes('freigeschaltet');
+  }));
 
   // Telegram-Intent aus demselben Modal
   await page.evaluate(() => {
     [...document.querySelectorAll('[role="dialog"] button')].find((b) => /Telegram/i.test(b.textContent ?? ''))?.click();
   });
   await wait(400);
-  const tgUrl = await page.evaluate(() => window.__opened[1] ?? '');
-  check('Telegram-Intent: t.me/share/url mit url+text', tgUrl.startsWith('https://t.me/share/url?url=') && decodeURIComponent(tgUrl).includes('ticker=BTC'), tgUrl.slice(0, 100));
+  const tgUrl = await page.evaluate(() => window.__popup?.location?.href ?? '');
+  check('Telegram composer opens with URL and text', tgUrl.startsWith('https://t.me/share/url?url=') && decodeURIComponent(tgUrl).includes('ticker=BTC'), tgUrl.slice(0, 100));
 
   // Unlock-Buttons im Modal: Matrix anwenden
   await page.evaluate(() => {
@@ -300,7 +321,7 @@ console.log('\n— 4: localStorage-Härtung (XSS + Typ-Korruption) —');
 }
 
 /* -------------------------------------------------------------------------- */
-console.log('\n— 5: Donation-Grace (48 h / >$5 → 5 Tage) —');
+console.log('\n— 5: Selbstauskunft-Pause (48 h / >$5 → 5 Tage) —');
 {
   const page = await browser.newPage();
   const errors = await openTerminal(page);
@@ -331,33 +352,32 @@ console.log('\n— 5: Donation-Grace (48 h / >$5 → 5 Tage) —');
 
   // 1) 48-h-Tier, 47 h alt → Grace aktiv → kein Aufruf (trotz adwall-Force)
   await seedViral({ supporter: true, lastDonationAt: Date.now() - 47 * H, lastDonationUsd: 1 });
-  check('Spender (≤$5, vor 47 h) sieht 48 h lang keinen Aufruf', (await loadForced()) === false);
+  check('Selbstauskunft ≤5 $ (47 h alt) pausiert Hinweise für 48 h', (await loadForced()) === false);
 
   // 2) 48-h-Tier, 49 h alt → abgelaufen → Aufruf erscheint
   await seedViral({ supporter: true, lastDonationAt: Date.now() - 49 * H, lastDonationUsd: 1 });
-  check('nach 49 h darf der Aufruf zurückkehren (48-h-Tier)', (await loadForced()) === true);
+  check('nach 49 h darf ein Hinweis zurückkehren (48-h-Selbstauskunft)', (await loadForced()) === true);
 
-  // 3) Live-Flow: Zweistufiger Button → „Über $5" → Toast + Persistenz
-  // Wiederholungsspender sehen das Badge-Label „Supporter" statt „Ich habe
-  // gespendet" – beide öffnen Stufe 2 (Grace-Verlängerung bleibt möglich).
+  // 3) Live-Flow: Selbstauskunft über Betragsstufe → lokale Pause + Toast.
+  // Das ist keine Zahlungs- oder On-Chain-Verifizierung.
   await page.evaluate(() => {
     [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
-      /^(Ich habe gespendet|Supporter)$/.test((b.textContent ?? '').trim()),
+      /^(Ich habe unterstützt|Unterstützung gemeldet)$/.test((b.textContent ?? '').trim()),
     )?.click();
   });
   await wait(400);
   const chips = await page.evaluate(() =>
     [...document.querySelectorAll('[role="dialog"] button')].map((b) => (b.textContent ?? '').trim()),
   );
-  check('Stufe 2 klappt auf: Betrags-Chips „Bis $5"/„Über $5"', chips.includes('Bis $5') && chips.includes('Über $5'), chips.join('|').slice(0, 120));
+  check('Stufe 2 klappt auf: Selbstauskunft-Chips „≤ 5 $"/„> 5 $"', chips.includes('≤ 5 $') && chips.includes('> 5 $'), chips.join('|').slice(0, 120));
   await page.evaluate(() => {
-    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === 'Über $5')?.click();
+    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === '> 5 $')?.click();
   });
   await wait(700);
   const declared = await page.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('nc-viral-v1') ?? '{}');
     return {
-      toast: document.body.innerText.includes('5 Tage'),
+      toast: document.body.innerText.includes('fünf Tage pausiert') && document.body.innerText.includes('Zahlung wurde nicht geprüft'),
       wallGone: ![...document.querySelectorAll('[role="dialog"]')].some((d) => (d.textContent ?? '').includes('bc1q')),
       supporter: raw?.state?.supporter,
       usd: raw?.state?.lastDonationUsd,
@@ -365,18 +385,18 @@ console.log('\n— 5: Donation-Grace (48 h / >$5 → 5 Tage) —');
     };
   });
   check(
-    '„Über $5" registriert Big-Tier-Donation + Danke-Toast + Wall schließt',
+    'Selbstauskunft >5 $ setzt lokale Fünf-Tage-Pause + Toast; Zahlung bleibt ungeprüft',
     declared.toast && declared.wallGone && declared.supporter === true && declared.usd > 5 && Math.abs(declared.at - Date.now()) < 60000,
     JSON.stringify(declared).slice(0, 140),
   );
 
   // 4) Big-Tier aktiv: 4 Tage alt → immer noch ruhig
   await seedViral({ supporter: true, lastDonationAt: Date.now() - 4 * D, lastDonationUsd: 10 });
-  check('Big-Tier (> $5): nach 4 Tagen weiterhin kein Aufruf', (await loadForced()) === false);
+  check('Selbstauskunft >5 $: nach 4 Tagen weiterhin kein Hinweis', (await loadForced()) === false);
 
   // 5) Big-Tier abgelaufen: 6 Tage alt → Aufruf darf zurück
   await seedViral({ supporter: true, lastDonationAt: Date.now() - 6 * D, lastDonationUsd: 10 });
-  check('Big-Tier: nach 6 Tagen ( > 5 Tage) kehrt der Aufruf zurück', (await loadForced()) === true);
+  check('Selbstauskunft >5 $: nach 6 Tagen kehrt ein Hinweis zurück', (await loadForced()) === true);
 
   check('Sektion 5: keine Page-Errors', errors.length === 0, errors[0] ?? '');
   await page.close();

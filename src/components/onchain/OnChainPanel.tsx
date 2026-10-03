@@ -29,9 +29,10 @@ import { TRACKED_EVM_CHAINS, type EvmChainSignals } from '@/api/onchain';
  *   Solana TPS (public RPC) · DeFi TVL (DeFiLlama) · DEX heat (GeckoTerminal +
  *   DexScreener boosts) · token forensics for the active DEX token (GoPlus).
  *
- * Fetching is driven by `tick()` on a 15 s interval while the panel is open –
- * a closed panel performs zero network requests. Every group fails soft:
- * unreachable providers show OFFLINE and keep their last good reading.
+ * The panel refreshes all groups with `tick()` on a 15 s interval while open.
+ * The terminal header independently keeps BTC fees and active-token forensics
+ * current; the other groups remain idle until this panel is opened. Every group
+ * fails soft: unreachable providers show OFFLINE and keep their last good reading.
  */
 
 const ALL_GROUPS: SignalGroup[] = ['btc', 'evm', 'solana', 'defi', 'dex', 'forensics'];

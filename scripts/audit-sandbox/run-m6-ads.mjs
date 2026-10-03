@@ -1,6 +1,6 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 /**
- * M6-Suite: Werbung/Monetarisierung im Fill-Fall.
+ * M6-Suite: Fill- und No-fill-Verhalten der Werbeplätze.
  *
  * Die Adsterra-Skripte werden im Browser durch Stubs ersetzt (ad-fixtures.mjs),
  * damit „Kreativ füllt", „kein Fill" (Netz-Flake) und „echter Blocker"
@@ -189,7 +189,11 @@ async function main() {
     const cls = await readCls(page);
     const ov = await overlaps(page, '#adsterra-social-bar');
     check('Bar lädt auf /terminal (mobil)', route.counts.socialbar >= 1 && state.socialbar, `requests=${route.counts.socialbar}`);
-    check('Höhe wird in --nc-socialbar-h gemessen', state.socialbarVar === '60px', `--nc-socialbar-h=${state.socialbarVar || '—'}`);
+    check(
+      'Social-Bar-Reserve deckt die Kreativhöhe ab',
+      Number.parseFloat(state.socialbarVar) >= 60,
+      `--nc-socialbar-h=${state.socialbarVar || '—'}; Kreativ=60px`,
+    );
     check('Bar überdeckt keine feste/sticky Bedien-UI', ov.persistentCount === 0, ov.persistentCount ? ov.persistent.map((h) => `${h.label} (${h.x}×${h.y})`).join(', ') : `${ov.bar?.h}px Bar am Boden, ${ov.vh}px Viewport`);
     const reserve = await page.evaluate(() => {
       const shell = [...document.querySelectorAll('div')].find((d) => String(d.className).includes('nc-socialbar-h'));
@@ -213,6 +217,7 @@ async function main() {
   }
 
   // ── S3 Dialog pausiert die Bar ───────────────────────────────────────────
+  stage = 'S3';
   console.log('\n— S3 Dialog pausiert die Bar —');
   {
     const { page, close } = mobileTerminal;
@@ -261,16 +266,23 @@ async function main() {
   {
     const { page, route, close } = await openPage(browser, { path: '/de/terminal', width: 1440, height: 900, mode: 'nofill' });
     const t0 = Date.now();
-    let box = await slotBox(page, '[data-sidebar-banner]');
-    while (!box.missing && Date.now() - t0 < T(20_000)) {
+    let fallback = await page.evaluate(() => !!document.querySelector('[data-sidebar-banner] [data-ad-fallback]'));
+    while (!fallback && Date.now() - t0 < T(20_000)) {
       await wait(1_000);
-      box = await slotBox(page, '[data-sidebar-banner]');
+      fallback = await page.evaluate(() => !!document.querySelector('[data-sidebar-banner] [data-ad-fallback]'));
     }
+    const box = await slotBox(page, '[data-sidebar-banner]');
+    const message = await page.$eval('[data-sidebar-banner] [data-ad-fallback]', (el) => ({
+      text: el.textContent?.trim() ?? '',
+      role: el.getAttribute('role'),
+      h: Math.round(el.getBoundingClientRect().height),
+    })).catch(() => null);
     const cls = await readCls(page);
-    check('Rail kollabiert ohne Fill', box.missing || box.w < 24, box.missing ? 'Rail entfernt' : `Breite ${box.w}px`);
-    check('Kollaps binnen 20 s', Date.now() - t0 < T(20_000), `${Math.round((Date.now() - t0) / 1000)}s`);
-    // Erster Besuch: Blocker wird erkannt und (Session-)gecacht ⇒ Sprung einmalig.
-    check('Netz-Flake: einmaliger Kollaps-Sprung bleibt ≤ 0.12', cls.value - baseline.terminalWide <= 0.12, `CLS=${cls.value} vs. Basis ${baseline.terminalWide}, requests=${route.counts.sidebar}`);
+    check('No-fill hält die Rail-Reserve und zeigt den Fallback', !box.missing && box.w === 160 && box.h === 600 && !!fallback, `${box.w}×${box.h}px, fallback=${fallback}`);
+    check('Fallback ist klar und zugänglich gekennzeichnet', message?.role === 'status' && message.text.includes('Werbeplatz') && message.text.includes('Anzeige verfügbar') && message.h === 600, message ? `${message.role}: „${message.text}" (${message.h}px)` : 'Fallback fehlt');
+    check('No-fill stabilisiert CLS (< 0.05)', cls.value - baseline.terminalWide < 0.05, `CLS=${cls.value} vs. Basis ${baseline.terminalWide}, requests=${route.counts.sidebar}`);
+    check('Fallback erscheint binnen 20 s', fallback && Date.now() - t0 < T(20_000), `${Math.round((Date.now() - t0) / 1000)}s`);
+    await shot(page, 'm6-sidebar-nofill');
     await close();
   }
 
@@ -305,17 +317,81 @@ async function main() {
     await close();
   }
   {
-    const { page, route, close } = await openPage(browser, { path: '/de', width: 1440, height: 900, mode: 'nofill' });
-    await wait(T(12));
+    const { page, route, close } = await openPage(browser, { path: '/de', width: 390, height: 844, mode: 'fill' });
+    await wait(T(6));
+    const measure = async () => page.evaluate((id) => {
+      const host = document.getElementById(id);
+      const frame = host?.querySelector('iframe');
+      const hr = host?.getBoundingClientRect();
+      const fr = frame?.getBoundingClientRect();
+      return { w: hr ? Math.round(hr.width) : 0, h: hr ? Math.round(hr.height) : 0, creativeH: fr ? Math.round(fr.height) : 0, filled: !!frame };
+    }, NATIVE_CONTAINER_ID);
+    const mobile = await measure();
+    const cls = await readCls(page);
+    check('Header-Fixture liefert einen deterministischen Fill', route.counts.native === 1, `Native-Anfragen=${route.counts.native}`);
+    check('Header füllt mobil (2:1) ohne Clipping', mobile.filled && mobile.w > 0 && Math.abs(mobile.h - Math.round(mobile.w / 2)) <= 2 && Math.abs(mobile.h - mobile.creativeH) <= 2, `${mobile.w}×${mobile.h}px / Kreativ ${mobile.creativeH}px`);
+    check('Mobiler Header verursacht keinen messbaren CLS', cls.value < 0.05, `CLS=${cls.value}`);
+    await shot(page, 'm6-native-header-mobile');
+    await page.setViewport({ width: 640, height: 900, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    await wait(T(1.5));
+    const at640 = await measure();
+    check('Header bleibt am 640-px-Rand im 2:1-Layout', at640.filled && Math.abs(at640.h - Math.round(at640.w / 2)) <= 2 && Math.abs(at640.h - at640.creativeH) <= 2, `${at640.w}×${at640.h}px / Kreativ ${at640.creativeH}px`);
+    await page.setViewport({ width: 641, height: 900, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    await wait(T(1.5));
+    const at641 = await measure();
+    check('Header wechselt ab 641 px ohne Fill-Gap auf 4:1', at641.filled && Math.abs(at641.h - Math.round(at641.w / 4)) <= 2 && Math.abs(at641.h - at641.creativeH) <= 2, `${at641.w}×${at641.h}px / Kreativ ${at641.creativeH}px`);
+    await shot(page, 'm6-native-header-breakpoint');
+    await close();
+  }
+  {
+    const { page, close } = await openPage(browser, { path: '/de', width: 390, height: 844, mode: 'nofill' });
+    const t0 = Date.now();
+    const clsBefore = await readCls(page);
+    let fallback = await page.evaluate((id) => !!document.getElementById(id)?.querySelector('[data-ad-fallback]'), NATIVE_CONTAINER_ID);
+    while (!fallback && Date.now() - t0 < T(20_000)) {
+      await wait(1_000);
+      fallback = await page.evaluate((id) => !!document.getElementById(id)?.querySelector('[data-ad-fallback]'), NATIVE_CONTAINER_ID);
+    }
     const box = await page.evaluate((id) => {
       const host = document.getElementById(id);
       const wrap = host?.closest('.nc-header-ad');
-      const r = wrap?.getBoundingClientRect();
-      return r ? { h: Math.round(r.height), collapsed: wrap.classList.contains('nc-collapsed') } : null;
+      const hr = host?.getBoundingClientRect();
+      const fr = host?.querySelector('[data-ad-fallback]')?.getBoundingClientRect();
+      return { w: hr ? Math.round(hr.width) : 0, h: hr ? Math.round(hr.height) : 0, fallbackH: fr ? Math.round(fr.height) : 0, collapsed: !!wrap?.classList.contains('nc-collapsed') };
+    }, NATIVE_CONTAINER_ID);
+    const clsAfter = await readCls(page);
+    check('Mobiler Header-No-fill hält die 2:1-Reserve', fallback && !box.collapsed && box.h > 0 && Math.abs(box.h - Math.round(box.w / 2)) <= 2 && box.h === box.fallbackH, `${box.w}×${box.h}px / Hinweis ${box.fallbackH}px`);
+    check('Mobiler Header-No-fill verursacht keinen messbaren CLS', clsAfter.value - clsBefore.value < 0.05, `CLS ${clsBefore.value} → ${clsAfter.value}`);
+    await shot(page, 'm6-header-mobile-nofill');
+    await close();
+  }
+  {
+    const { page, route, close } = await openPage(browser, { path: '/de', width: 1440, height: 900, mode: 'nofill' });
+    const t0 = Date.now();
+    let fallback = await page.evaluate((id) => !!document.getElementById(id)?.querySelector('[data-ad-fallback]'), NATIVE_CONTAINER_ID);
+    while (!fallback && Date.now() - t0 < T(20_000)) {
+      await wait(1_000);
+      fallback = await page.evaluate((id) => !!document.getElementById(id)?.querySelector('[data-ad-fallback]'), NATIVE_CONTAINER_ID);
+    }
+    const box = await page.evaluate((id) => {
+      const host = document.getElementById(id);
+      const wrap = host?.closest('.nc-header-ad');
+      const r = host?.getBoundingClientRect();
+      const fr = host?.querySelector('[data-ad-fallback]')?.getBoundingClientRect();
+      return r && wrap ? {
+        h: Math.round(r.height),
+        fallbackH: fr ? Math.round(fr.height) : 0,
+        collapsed: wrap.classList.contains('nc-collapsed'),
+        text: host.querySelector('[data-ad-fallback]')?.textContent?.trim() ?? '',
+        role: host.querySelector('[data-ad-fallback]')?.getAttribute('role'),
+      } : null;
     }, NATIVE_CONTAINER_ID);
     const cls = await readCls(page);
-    check('Banner kollabiert ohne Fill (kein toter Raum)', !!box && box.collapsed && box.h <= 4, box ? `Höhe ${box.h}px, collapsed=${box.collapsed}` : 'Wrapper fehlt');
-    check('Netz-Flake: einmaliger Kollaps-Sprung bleibt ≤ 0.12', cls.value - baseline.landing <= 0.12, `CLS=${cls.value} vs. Basis ${baseline.landing}, requests=${route.counts.native}`);
+    check('Header-Reserve bleibt bei No-fill erhalten', !!box && !box.collapsed && box.h > 0 && box.fallbackH === box.h, box ? `Reserve ${box.h}px / Fallback ${box.fallbackH}px` : 'Wrapper fehlt');
+    check('Header-Fallback ist klar und zugänglich gekennzeichnet', !!box && box.role === 'status' && box.text.includes('Werbeplatz') && box.text.includes('Anzeige verfügbar'), box ? `${box.role}: „${box.text}"` : 'Fallback fehlt');
+    check('No-fill stabilisiert Landing-CLS (< 0.05)', cls.value - baseline.landing < 0.05, `CLS=${cls.value} vs. Basis ${baseline.landing}, requests=${route.counts.native}`);
+    check('Fallback erscheint binnen 20 s', fallback && Date.now() - t0 < T(20_000), `${Math.round((Date.now() - t0) / 1000)}s`);
+    await shot(page, 'm6-header-nofill');
     await close();
   }
 
@@ -361,19 +437,59 @@ async function main() {
       check('kein horizontaler Überhang', slot.over <= 1, `${slot.over}px`);
     }
     await shot(page, 'm6-slot-mobile');
+    await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    await wait(T(1.5));
+    const resized = await page.evaluate(() => {
+      const host = document.querySelector('[data-ad-slot="mobile"] [data-native-banner]');
+      const f = host?.querySelector('iframe');
+      const hr = host?.getBoundingClientRect();
+      const fr = f?.getBoundingClientRect();
+      return { holderW: hr ? Math.round(hr.width) : 0, holderH: hr ? Math.round(hr.height) : 0, creativeH: fr ? Math.round(fr.height) : 0 };
+    });
+    check(
+      'Mobile-Creative passt sich einem Same-Page-Resize an',
+      !slots.mobile || (resized.holderW > 500 && resized.creativeH > 0 && Math.abs(resized.holderH - resized.creativeH) <= 8),
+      slots.mobile ? `${resized.holderW}px breit, Reserve ${resized.holderH}px / Kreativ ${resized.creativeH}px` : 'Default-Build ohne Mobile-Slot — übersprungen',
+    );
+    await shot(page, 'm6-slot-mobile-resize');
     await close();
   }
   {
-    // Ohne Fill (Blocker/kein Bid) darf der Streifen nicht stehen bleiben.
-    const { page, close } = await openPage(browser, { path: '/de/terminal', width: 390, height: 844, mode: 'nofill', invokeAs: 'native' });
-    const t0 = Date.now();
-    let gone = false;
-    while (!gone && Date.now() - t0 < T(16_000)) {
-      await wait(1_000);
-      gone = await page.evaluate(() => !document.querySelector('[data-ad-slot="mobile"]'));
+    // Bei No-fill bleibt die Reserve erhalten und der Hinweis verhindert eine leere, unmarkierte Fläche.
+    if (!slots.mobile) {
+      check('Mobiler No-fill übersprungen (kein Native-Slot konfiguriert)', true, 'Default-Build');
+    } else {
+        const { page, close } = await openPage(browser, { path: '/de/terminal', width: 390, height: 844, mode: 'nofill', invokeAs: 'native' });
+        const t0 = Date.now();
+        const clsBefore = await readCls(page);
+        let fallback = await page.evaluate(() => !!document.querySelector('[data-ad-slot="mobile"] [data-ad-fallback]'));
+        while (!fallback && Date.now() - t0 < T(16_000)) {
+          await wait(1_000);
+          fallback = await page.evaluate(() => !!document.querySelector('[data-ad-slot="mobile"] [data-ad-fallback]'));
+        }
+        const box = await page.evaluate(() => {
+          const slot = document.querySelector('[data-ad-slot="mobile"]');
+          const host = slot?.querySelector('[data-native-banner]');
+          const fallbackEl = host?.querySelector('[data-ad-fallback]');
+          const hr = host?.getBoundingClientRect();
+          const fr = fallbackEl?.getBoundingClientRect();
+          return {
+            slot: !!slot,
+            slotH: slot ? Math.round(slot.getBoundingClientRect().height) : 0,
+            holderH: hr ? Math.round(hr.height) : 0,
+            fallbackH: fr ? Math.round(fr.height) : 0,
+            role: fallbackEl?.getAttribute('role') ?? '',
+            text: fallbackEl?.textContent?.trim() ?? '',
+          };
+        });
+        const clsAfter = await readCls(page);
+        check('Mobiler No-fill zeigt den transparenten Fallback', !slots.mobile || (fallback && box.role === 'status' && box.text.includes('Werbeplatz') && box.text.includes('Anzeige verfügbar')), box.text || (slots.mobile ? 'Fallback fehlt' : 'Default-Build ohne Mobile-Slot — übersprungen'));
+        check('Mobiler Slot behält seine reservierte Geometrie', !slots.mobile || (box.slot && box.holderH > 0 && box.holderH === box.fallbackH && box.slotH > 0), `Slot ${box.slotH}px / Reserve ${box.holderH}px / Hinweis ${box.fallbackH}px`);
+        check('Mobiler No-fill verursacht keinen messbaren CLS', clsAfter.value - clsBefore.value < 0.05, `CLS ${clsBefore.value} → ${clsAfter.value}`);
+        check('Fallback erscheint binnen 16 s', !slots.mobile || (fallback && Date.now() - t0 < T(16_000)), slots.mobile ? `${Math.round((Date.now() - t0) / 1000)}s` : 'Default-Build ohne Mobile-Slot — übersprungen');
+        await shot(page, 'm6-slot-mobile-nofill');
+        await close();
     }
-    check('Mobiler Slot kollabiert ohne Fill', gone, gone ? `nach ${Math.round((Date.now() - t0) / 1000)}s entfernt` : 'Slot bleibt stehen');
-    await close();
   }
   {
     const { page, close } = await openPage(browser, { path: '/de/terminal', width: 1440, height: 900, mode: 'fill', invokeAs: 'native' });
@@ -407,6 +523,43 @@ async function main() {
     }
     await shot(page, 'm6-slot-desktop');
     await close();
+  }
+  {
+    if (!slots.desktop) {
+      check('Desktop-No-fill übersprungen (kein Native-Slot konfiguriert)', true, 'Default-Build');
+    } else {
+        const { page, close } = await openPage(browser, { path: '/de/terminal', width: 1440, height: 900, mode: 'nofill', invokeAs: 'native' });
+        const t0 = Date.now();
+        const clsBefore = await readCls(page);
+        let fallback = await page.evaluate(() => !!document.querySelector('[data-ad-slot="desktop"] [data-ad-fallback]'));
+        while (!fallback && Date.now() - t0 < T(16_000)) {
+          await wait(1_000);
+          fallback = await page.evaluate(() => !!document.querySelector('[data-ad-slot="desktop"] [data-ad-fallback]'));
+        }
+        const box = await page.evaluate(() => {
+          const slot = document.querySelector('[data-ad-slot="desktop"]');
+          const host = slot?.querySelector('[data-native-banner]');
+          const fallbackEl = host?.querySelector('[data-ad-fallback]');
+          const hr = host?.getBoundingClientRect();
+          const fr = fallbackEl?.getBoundingClientRect();
+          return {
+            slot: !!slot,
+            slotH: slot ? Math.round(slot.getBoundingClientRect().height) : 0,
+            holderW: hr ? Math.round(hr.width) : 0,
+            holderH: hr ? Math.round(hr.height) : 0,
+            fallbackH: fr ? Math.round(fr.height) : 0,
+            role: fallbackEl?.getAttribute('role') ?? '',
+            text: fallbackEl?.textContent?.trim() ?? '',
+          };
+        });
+        const clsAfter = await readCls(page);
+        check('Desktop-No-fill zeigt den transparenten Fallback', fallback && box.role === 'status' && box.text.includes('Werbeplatz') && box.text.includes('Anzeige verfügbar'), box.text || 'Fallback fehlt');
+        check('Desktop-Slot hält die 4:1-Reserve', box.slot && box.holderW > 0 && box.holderH > 0 && box.holderH === box.fallbackH, `${box.holderW}×${box.holderH}px / Hinweis ${box.fallbackH}px`);
+        check('Desktop-No-fill verursacht keinen messbaren CLS', clsAfter.value - clsBefore.value < 0.05, `CLS ${clsBefore.value} → ${clsAfter.value}`);
+        check('Fallback erscheint binnen 16 s', fallback && Date.now() - t0 < T(16_000), `${Math.round((Date.now() - t0) / 1000)}s`);
+        await shot(page, 'm6-slot-desktop-nofill');
+        await close();
+    }
   }
 
   // ── S7 Ad-Block-Wall ─────────────────────────────────────────────────────
@@ -495,7 +648,14 @@ async function main() {
     const second = await clickText(page, '3x2');
     await wait(900);
     check('Multi-Chart-Geste löst genau einen Popunder aus', route.counts.popunder === 1, `Gestes=${first}/${second}, popunder-Skripte=${route.counts.popunder}`);
-    await page.click('body').catch(() => undefined);
+    // `page.click('body')` targets the body’s off-screen center on a long
+    // terminal page and can scroll/click outside the viewport. Use a real
+    // follow-up pointer click at a stable in-viewport chart position instead.
+    const clickPoint = await page.evaluate(() => ({
+      x: Math.min(500, window.innerWidth - 1),
+      y: Math.min(800, window.innerHeight - 1),
+    }));
+    await page.mouse.click(clickPoint.x, clickPoint.y).catch(() => undefined);
     await wait(500);
     const after = await readAdState(page);
     check('Popunder feuert auf den Folge-Klick', after.popunderOpens >= 1, `Klicks gesehen=${after.popunderOpens}`);
@@ -562,6 +722,7 @@ async function main() {
   const { writeFileSync } = await import('node:fs');
   writeFileSync(`${SHOTS}/m6-report.json`, JSON.stringify({ total, failed: failed.length, results }, null, 2));
   console.log(`Report: ${SHOTS}/m6-report.json\n`);
+  process.exitCode = failed.length === 0 ? 0 : 1;
 }
 
 await main();

@@ -15,8 +15,8 @@
  *      (for the settings modal), its outputs (series to draw) and where it
  *      lives (`overlay` on price, or its own `pane` below).
  *
- * Number of indicator *instances* per chart is unlimited – the store keeps an
- * array, and each instance renders as its own series.
+ * Instances are stored as arrays by pane and rendered as separate series.
+ * This module does not define a user-facing instance limit.
  */
 
 import {
@@ -43,7 +43,7 @@ import { runScript } from '@/lib/scripts';
 
 export type IndicatorKind =
   | 'EMA' | 'SMA' | 'BB' | 'RSI' | 'MACD' | 'ATR' | 'STOCH'
-  // premium tier – normally paywalled elsewhere
+  // Additional indicator kinds supported by the local calculation engine.
   | 'SUPERTREND' | 'KELTNER' | 'DONCHIAN' | 'STOCHRSI' | 'OBV' | 'MFI' | 'CCI'
   | 'ADX' | 'PSAR' | 'TRIX' | 'PPO' | 'DPO' | 'BBPCT' | 'AROON'
   // wave 2 – pro analytics tier
@@ -200,7 +200,7 @@ const p = (key: ParamKey, min: number, max: number, step: number, def: number): 
   default: def,
 });
 
-/* ------------------------- premium maths helpers --------------------------- */
+/* ----------------------- advanced maths helpers --------------------------- */
 
 function highs(candles: Candle[]): number[] {
   return candles.map((c) => c.h);
@@ -600,7 +600,7 @@ export const INDICATOR_LIBRARY: Record<IndicatorKind, IndicatorDef> = {
       };
     },
   },
-  /* ------------------------------ premium tier ----------------------------- */
+  /* ------------------------ advanced indicators --------------------------- */
 
   SUPERTREND: {
     kind: 'SUPERTREND',

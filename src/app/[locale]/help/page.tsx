@@ -7,6 +7,7 @@ import { Breadcrumbs } from '@/components/seo/Breadcrumbs';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { SectionHeading } from '@/components/ui/SectionHeading';
 import { breadcrumbLd, definedTermSetLd, faqPageLd } from '@/lib/jsonld';
+import { routing } from '@/i18n/routing';
 import { assertLocale } from '@/lib/locale-param';
 import { buildAlternates, buildOpenGraph, buildTwitter, metaDescription, ROBOTS_DEFAULT, absoluteUrl } from '@/lib/seo';
 
@@ -15,7 +16,7 @@ interface HelpBundle {
   topics: { id: string; question: string; answer: string }[];
   scriptTopics: { id: string; question: string; answer: string }[];
   edgeTopics: { id: string; question: string; answer: string }[];
-  metrics: Record<string, { name: string; body: string }>;
+  metrics: Record<string, Record<string, { name: string; body: string }>>;
 }
 
 interface ChartBundle {
@@ -24,6 +25,11 @@ interface ChartBundle {
 
 interface PageProps {
   params: Promise<{ locale: string }>;
+}
+
+/** Pre-render every supported locale so help pages never need request-time rendering. */
+export function generateStaticParams() {
+  return routing.locales.map((locale) => ({ locale }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -60,7 +66,10 @@ export default async function HelpPage({ params }: PageProps) {
   }));
   // TOC-Zähler: Basis-Themen + generierte Indikatoren/Metriken je Kategorie
   const indicatorCount = Object.keys(chart.indicators ?? {}).length;
-  const metricCount = Object.keys(help.metrics ?? {}).length;
+  const metricCount = Object.values(help.metrics ?? {}).reduce(
+    (total, group) => total + Object.keys(group).length,
+    0,
+  );
   const toc = [
     ...(['gettingStarted', 'charts', 'data', 'troubleshooting'] as const).map((cat) => ({
       id: cat,
@@ -76,7 +85,9 @@ export default async function HelpPage({ params }: PageProps) {
       term: `${def.name} – ${def.short}`,
       description: def.hint,
     })),
-    ...Object.values(help.metrics).map((def) => ({ term: def.name, description: def.body })),
+    ...Object.values(help.metrics).flatMap((group) =>
+      Object.values(group).map((def) => ({ term: def.name, description: def.body })),
+    ),
   ];
 
   return (

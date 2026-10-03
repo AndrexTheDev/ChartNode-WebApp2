@@ -1,64 +1,31 @@
-# Adsterra Popunder-Kit (Landing + Web-App)
+# Adsterra Popunder and Smartlink Kits
 
-Zwei eigenständige Vanilla-ES6+-Skripte, 0 Dependencies, produktionsreif:
+These standalone vanilla JavaScript files have no runtime package dependencies. They can load third-party Adsterra scripts or sponsored destinations, so “zero dependencies” does **not** mean zero third-party requests. Delivery, availability, content, tracking, and popup behavior depend on the ad provider, browser settings, region, and configured placement; this kit makes no delivery or revenue guarantee.
 
-| Datei | Zweck |
+## Popunder kit
+
+| File | Purpose |
 |---|---|
-| `landing-popunder.js` | Head-Script-Injection (Anti-Adblock-Signal `pu:adblocked`), First-Click-Popunder (1×/Session), Dual-Action-CTA (`#launch-terminal-btn`: Popunder synchron im User-Event + nahtlose Navigation), Exit-Intent (1×/Session) |
-| `app-popunder.js` | Delayed First-Interaction im Terminal, Frequency-Cap 1×/15 min (konfigurierbar), geblockte Versuche mit eigenem Retry-Fenster, Exit-Versuche via visibilitychange/pagehide/beforeunload |
+| `landing-popunder.js` | Optional landing-page popunder hooks, session limits, and `pu:*` events. |
+| `app-popunder.js` | Optional terminal popunder attempts with a configurable cooldown and retry window. |
 
-## Konfiguration (jeweils `CONFIG` am Dateianfang)
-| Variable | Bedeutung | Standard |
-|---|---|---|
-| `ADSTERRA_HEAD_SCRIPT_SRC` | echtes Adsterra-Popunder-Delivery-Skript nodechart.cc (Head-Injection) | `globalimmaturelunatic.com/00/ca/4a/…js` |
-| `ADSTERRA_POPUNDER_URL` | Popunder-/Smartlink-URL, die das Kit selbst öffnet | `globalimmaturelunatic.com/ufhc3mt24s?key=…` |
-| `APP_URL` | Dual-Action-Ziel (NodeChart: `/de/terminal`) | `/app` |
-| `LAUNCH_BTN_SELECTOR` | CTA-Selektor | `#launch-terminal-btn` |
-| `COOLDOWN_MINUTES` | Frequency-Cap im Terminal | `15` |
-| `BLOCKED_RETRY_MINUTES` | Retry-Fenster nach geblocktem Versuch | `5` |
-| `RESPECT_DNT` / `SKIP_BOTS` | DNT- und WebDriver-Guard (QA/CI bleibt sauber) | `true` |
-| `DEBUG` | Console-Logs | `false` |
+Configure each script through its `CONFIG` object. The bundled defaults point to the NodeChart publisher placements; replace or disable them before reuse on another site. Popunders are attempted only from the script's configured triggers. Browsers, extensions, consent choices, or network failures may block them.
 
-## Einbindung
-```html
-<script src="landing-popunder.js" defer></script>   <!-- Landing, vor </body> -->
-<script src="app-popunder.js" defer></script>        <!-- Web-App, vor </body> -->
-```
-Events zum Andocken eigener UI: `pu:fired`, `pu:blocked`, `pu:adblocked`
-(Debug/QA: `window.PopunderLanding` / `window.PopunderApp`).
+## Sponsored-link kit
 
-## Design-Regeln (bewusst NICHT umgesetzt)
-- Kein synthetisches Klicken, keine Iframe-/Redirect-Tricks gegen Popup-Blocker:
-  `window.open` läuft ausschließlich in echten User-Events (click) – der von
-  Browsern erlaubte Pfad. Exit-Trigger ohne Geste sind bewusst nur *Versuche*.
-- `win.opener = null` nach jedem Open (Reverse-Tabnabbing-Schutz).
-- Storage-Zugriffe komplett try/catch (Private Mode), Fallbacks session→memory.
-
----
-
-# Adsterra Smartlink-Kit (Landing + Terminal)
-
-| Datei | Zweck |
+| File | Purpose |
 |---|---|
-| `landing-smartlinks.js` | Landing: Auto-Enhancement für `[data-smartlink]`-CTAs (Anker nativ / Buttons via `openSmartlink`), `[data-smartlink-card]`-Teaser (primary = Smartlink mit Badge, `toast` = echte Aktion + Offer-Toast), Fallback-Modal bei Popup-Blockade, Cap 3/h |
-| `app-smartlinks.js` | Terminal: `mountSponsorBar('#sponsor-strip')` (gelabelte Angebots-Leiste), `hookActionOffer('.js-export-chart')` (Post-Action-Toast NACH der Feature-Aktion, niemals davor), Cap 3/h + 10-min-Toast-Interval |
-| `smartlinks.css` | Dark/Cyberpunk-Styling: `nc-sl-*` (CTA clip-path neon, Badge, Strip, Toast, Modal) |
-| `smartlinks-demo.html` | Live-Demo beider Teile: `npx serve ads-kit` → `/smartlinks-demo.html` |
+| `landing-smartlinks.js` | Adds visible labels to configured sponsored links, handles button-based links, and provides a direct-link fallback if a new tab is blocked. |
+| `app-smartlinks.js` | Mounts a labelled sponsor strip and can display a delayed sponsored-link prompt after a host-page action. |
+| `smartlinks.css` | Styling for labels, strips, fallback dialogs, and toasts. |
+| `smartlinks-demo.html` | Local mock page for manual testing; the text and target are examples, not descriptions or guarantees of an actual offer. |
 
-## Smartlink-Konfiguration (`CONFIG` am Dateianfang)
-| Variable | Bedeutung | Standard |
-|---|---|---|
-| `SMARTLINK_MAIN_URL` | fester Adsterra-Direct-Link | `globalimmaturelunatic.com/ufhc3mt24s?key=…` |
-| `MAX_TRIGGERS_PER_HOUR` | Opportunistic-Opens pro Stunde | `3` |
-| `MIN_TOAST_INTERVAL_MINUTES` | Mindestabstand Offer-Toasts | `10` |
-| `LABEL` | Disclosure-Text (DE `Anzeige`, ES `Patrocinado`) | `Sponsored` |
-| `OFFER_DELAY_MS` | Verzögerung Post-Action-Toast (nur App) | `800` |
-| `RESPECT_DNT` / `SKIP_BOTS` | DNT-/WebDriver-Guard (QA/CI sauber) | `true` |
-| `DEBUG` | Console-Logs | `false` |
+Configuration is at the top of each script. The default label is `Sponsored`; hosts can localize the visible label and fallback copy with the supported `data-config` override. The scripts add `rel="sponsored noopener"` to generated external anchors. A label describes the commercial relationship; it does not verify the destination, its terms, or the advertiser's claims.
 
-Events: `sl:opened` / `sl:blocked` / `sl:capped` / `sl:toast`; Debug-API `window.SmartlinksLanding` / `window.SmartlinksApp`.
+## Disclosure and implementation notes
 
-## Compliance-Regeln (fest eingebaut, nicht verhandelbar)
-- Jedes Smartlink-Element trägt ein sichtbares Badge (`rel="sponsored noopener"` auf allen Ankern – auch Google-konform für Paid Links).
-- Keine Funktions-Tarnung („Exchange API Sync“ o. ä. ohne Funktion) und kein Klick-Hijacking vor Feature-Aktionen: beides = Schleichwerbung/Invalid Traffic (UWG/UCP-Richtlinie/FTC; Adsterra-Anti-Fraud sperrt Accounts; Safe-Browsing flaggt Domains).
-- „100 % immun gegen Adblocker“ gibt es nicht; maximale legale Deliverability = echte Anker + User-Geste + Fallback-Modal.
+- Make the commercial nature of an ad or partner link clear before the user opens it. Do not describe a sponsored destination as a product feature or imply a bonus, return, contest entry, or other benefit unless the current destination and terms support that exact claim.
+- The demo intentionally uses generic sponsor-link language. It does not promise a bonus, leverage, trading result, or verified share.
+- The feature-action hook is intended to run after the host action and should not replace, delay, or imitate that action. Actual host-page behavior still needs testing.
+- Popup blocking, ad blocking, consent settings, browser privacy controls, and provider changes can affect delivery. No script guarantees that a placement will load or bypass a blocker.
+- This repository provides implementation labels and link attributes; it does not certify legal compliance. Review the applicable advertising, privacy, platform, and ad-network requirements for the deployment region.

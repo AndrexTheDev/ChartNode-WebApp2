@@ -1,12 +1,12 @@
 # NodeChart
 
-> **NodeChart – Decode the Market. Free, Fast, Decentralized.**
+> **NodeChart — Browser charts and market research for selected crypto venues.**
 
-A 100 % free, client-side TradingView alternative for **CEX & DEX** markets:
-**12 centralised exchanges** over WebSocket, **33 chains / 700+ DEXes** over REST, region-aware
-venue routing and multi-provider scam audits — all key-less, all in the browser.
-Next.js App Router (SSG) · Tailwind cyberpunk design system · Zustand · next-intl (5 locales) ·
-deployed to Cloudflare via `@opennextjs/cloudflare` — **$0 backend cost**.
+A browser-based charting and research workspace for selected centralized-exchange markets and decentralized-exchange pools. Core charting is available without an account or recurring subscription; third-party ads and sponsored links may appear. Two themes unlock when a prepared share composer opens (publication is not verified), while selected Pro features require qualifying support verified on supported networks.
+
+The project configures 12 CEX adapter identifiers and mappings for 33 chain IDs; this does not guarantee that every pair, endpoint, history range, or region is covered. Market requests may go directly to providers or through allowlisted Next.js serverless proxy routes. No separately operated backend or paid API is required by the current design; hosting plans, provider terms, rate limits, and availability can change.
+
+Next.js App Router · Tailwind design system · Zustand · next-intl (5 locales) · Cloudflare OpenNext deployment.
 
 ---
 
@@ -14,18 +14,18 @@ deployed to Cloudflare via `@opennextjs/cloudflare` — **$0 backend cost**.
 
 | Concern | Decision | Why |
 | --- | --- | --- |
-| Framework | **Next.js 16** (App Router) | Turbopack build, `proxy.ts`, fully static prerendering of all 5 locales |
-| Deployment adapter | **`@opennextjs/cloudflare`** | `@cloudflare/next-on-pages` is frozen (caps Next at `<=15.5.2`) and unmaintained. OpenNext is the official successor, runs the Node.js runtime on Workers and supports GitHub → Cloudflare builds. Same $0 free tier. |
-| i18n | **next-intl** | `localePrefix: 'always'` ⇒ `/en /de /es /zh /ru`, perfect canonical + hreflang + `og:locale` per language |
-| Language auto-detection | **edge `proxy.ts`** (Accept-Language / NEXT_LOCALE cookie) + client `navigator.languages` banner as fallback | No JS needed for the common case; banner only asks once per session and never force-redirects |
+| Framework | **Next.js 16** (App Router) | Webpack production build (`next build --webpack`), `proxy.ts`, and static generation where configured |
+| Deployment adapter | **`@opennextjs/cloudflare`** | The app uses the Cloudflare OpenNext adapter and Node.js-compatible Worker routes. Confirm current platform quotas, plan terms, and costs before deployment. |
+| i18n | **next-intl** | `localePrefix: 'always'` serves `/en /de /es /zh /ru` paths with locale-aware metadata and language links. |
+| Language auto-detection | **`proxy.ts`** (Accept-Language / NEXT_LOCALE cookie) + client `navigator.languages` banner as fallback | Server routing handles the initial request; the optional banner can suggest a browser language. |
 | State | **Zustand** (`useAppStore`) with `persist` + `skipHydration` | Selector-scoped subscriptions ⇒ no re-render storms; persisted to localStorage |
 | Styling | **Tailwind CSS 3** with a CSS-variable theme layer | Swapping `<html data-theme>` re-skins the whole app without re-rendering React |
-| Charts (landing/terminal preview) | deterministic inline-SVG `MockChart` → `LiveCandles` once a feed is live | Seeded PRNG ⇒ SSR markup === client markup, zero hydration mismatch, zero image bytes |
-| CEX market data | **direct WebSockets** (Binance · Bybit · OKX) | No backend, no API key, no proxy cost — the browser talks to the exchange |
-| DEX market data | **DexScreener + GeckoTerminal REST**, merged & deduped | Covers EVM (ETH/Base/BSC/Arbitrum/Polygon/…) and Solana with one client-side call each |
-| Token security | **RugCheck** (Solana) + **GoPlus** (EVM) | Free, key-less audits → instant Safe / Scam-Honeypot verdicts in the search dropdown |
-| Rate limiting | global 429 cooldown (`beginCooldown` → overlay → retry) | Public APIs are shared; one 429 blocks *all* callers for 5 s instead of hammering |
-| Whale stream | trade channels on the same sockets, ≥ $10 000 notional | Zero extra connections: candles and trades are multiplexed per endpoint |
+| Charts (landing/terminal preview) | deterministic inline-SVG `MockChart` → `LiveCandles` when a supported feed returns candles | The seeded preview is stable between server and client renders and does not require a separate chart image. |
+| CEX market data | **WebSockets** (Binance · Bybit · OKX and other configured adapters) | Browser streams and REST history are provider-dependent; selected REST/API requests use the first-party serverless relay. |
+| DEX market data | **DexScreener + GeckoTerminal REST**, merged and deduplicated | Network mappings are configured in the app; provider listings, pair coverage, quotas, and regional access vary. |
+| Token risk indicators | **RugCheck** (Solana) + **GoPlus** (EVM), with selected simulation checks | Third-party flags and simulations cover supported networks only. “No flags” is not proof of safety; unavailable checks are shown as unknown. |
+| Rate limiting | global 429 cooldown (`beginCooldown` → overlay → retry) | A provider 429 can pause shared requests briefly before the client retries; repeated limits and failures remain possible. |
+| Trade-size stream | trade channels on shared sockets, ≥ $10,000 notional | Reuses configured exchange connections where the venue exposes the required trade channel. |
 
 ### Why `proxy.ts` and not `middleware.ts`?
 Next.js 16 renamed the file convention (`middleware.ts` → `proxy.ts`, `middleware()` → `proxy()`).
@@ -33,11 +33,10 @@ next-intl's `createMiddleware` is used unchanged; only the file name/export cont
 
 ### Why a `/terminal` route?
 The Part-1 brief requires a working **"Launch Terminal"** CTA — a CTA that 404s is a defect. The
-route is therefore a complete product surface, not a placeholder: live candle streams from 12 venues
-(REST + WebSocket), the canvas chart engine (lightweight-charts) with **34 indicator kinds**, drawing
-tools, multi-pane grid with synced crosshair/zoom/timeframe, whale-flow, script engine,
-replay/backtest/screener/risk and the wave-2…7 edge tools (Liq Radar, Clock Edge, Lag Oracle, bar
-magnifier, volume profile …).
+route includes a chart workspace, drawing tools, multi-pane layouts, indicators, scripts,
+replay/backtest, screener, risk calculations, and additional research tools. Live feeds depend on
+provider, symbol, interval, region, browser connectivity, and current endpoint availability; derived
+or locally calculated values can differ from exchange data.
 It is **indexable** and listed in `sitemap.xml` like every other locale page; only shared parameter
 variants (`?ticker=…&price=…`) stay `noindex` so they cannot compete with the canonical terminal URL.
 
@@ -52,16 +51,13 @@ nodechart/
 ├── scripts/
 │   ├── check-i18n.mjs            # key + ICU-placeholder parity check across locales
 │   ├── run-harness.mjs           # esbuild runner for the smoke-test entries
-│   ├── ws-smoke.entry.ts         # 12-adapter fixtures + CandleDeriver + live WS proof
-│   ├── api-smoke.entry.ts        # live DexScreener/GeckoTerminal/GoPlus/RugCheck/honeypot.is,
-│   │                             #   region detection, venue ranking + live probe proof
-│   ├── chart-smoke.entry.ts      # Part 4: indicator math vs technicalindicators, sync bus,
-│   │                             #   drawings store, device gate, precision, persistence
-│   └── browser-check.mjs         # Part 4 (dev-only): real headless-Chrome proof of the
-│                                 #   terminal (needs `npm i --no-save puppeteer`), screenshots
-│                                 #   land in artifacts/
+│   ├── ws-smoke.entry.ts         # configured adapter fixtures + CandleDeriver checks
+│   ├── api-smoke.entry.ts        # provider client, parsing and venue-selection checks
+│   ├── chart-smoke.entry.ts      # indicator math, sync bus, drawings, precision, persistence
+│   └── browser-check.mjs         # Puppeteer browser checks; a compatible browser binary is required
 ├── public/
-│   └── og.png                    # 1200×630 social card
+│   ├── og.png                    # social card
+│   └── brand/                    # optimized WebP variants from nodechart_logo.png
 ├── src/
 │   ├── proxy.ts                  # edge locale detection + routing (Next 16 proxy convention)
 │   ├── i18n/
@@ -69,22 +65,26 @@ nodechart/
 │   │   ├── navigation.ts         # locale-aware Link / useRouter / usePathname
 │   │   └── request.ts            # per-request message + locale resolution (must return `locale`)
 │   ├── app/
-│   │   ├── sitemap.ts  robots.ts  manifest.ts  icon.svg
+│   │   ├── sitemap.ts  robots.ts  manifest.ts  icon.png  apple-icon.png
 │   │   └── [locale]/
 │   │       ├── layout.tsx        # <html lang>, fonts, metadata, providers, boot script
 │   │       ├── page.tsx          # landing
 │   │       ├── not-found.tsx
-│   │       ├── help/page.tsx     # interactive help center (search + filter + accordion)
+│   │       ├── help/page.tsx     # static localized Help content
 │   │       ├── terminal/page.tsx # workspace shell + dynamic OG metadata
-│   ├── api/og/route.ts           # edge social card (SVG 1200×630, sanitised)
-│   │       └── legal/[doc]/page.tsx   # terms | disclaimer | privacy × 5 locales
-│   ├── api/                      # ── Part 2: REST data layer ─────────────────
+│   │       ├── cluster/page.tsx  # standalone NodeCluster tool
+│   │       └── legal/[doc]/page.tsx # terms | disclaimer | privacy by locale
+│   │   └── api/
+│   │       ├── og/route.ts       # social card (SVG 1200×630, sanitized)
+│   │       ├── proxy/[provider]/route.ts # allowlisted serverless provider proxy
+│   │       └── verify-donation/route.ts # qualifying on-chain verification
+│   ├── api/                      # ── provider client/data layer ─────────────
 │   │   ├── http.ts               # the ONLY fetch entry point (timeout, 429, cache, dedupe)
 │   │   ├── rateLimit.ts          # global cooldown controller (5 s) driving the overlay
 │   │   ├── dexscreener.ts        # /latest/dex/search + /tokens/{addr}
 │   │   ├── geckoterminal.ts      # /search/pools + /networks/{n}/tokens/{addr}/pools
 │   │   ├── security.ts           # GoPlus + honeypot.is (EVM) / RugCheck (Solana) → verdict
-│   │   ├── exchangeProbe.ts      # measures real latency/reachability of all 12 venues
+│   │   ├── exchangeProbe.ts      # samples endpoint/handshake reachability for configured venues
 │   │   ├── search.ts             # smartSearch(): CEX universe ∥ DEX aggregators
 │   │   └── types.ts              # DexPair · SecurityAudit · SearchHit · AuditProvider
 │   ├── websockets/               # ── Part 2: CEX streaming layer ─────────────
@@ -114,7 +114,7 @@ nodechart/
 │   │   ├── whales/    WhaleTicker (sticky bottom stream)
 │   │   ├── overlays/  RateLimitOverlay (CSS glitch + 5 s countdown)
 │   │   ├── chart/     PriceChart (lightweight-charts wrapper) · ChartGrid (1x1/2x1/2x2) ·
-│   │   │              IndicatorModal (unlimited instances, editable params) ·
+│   │   │              IndicatorModal (editable indicator instances and parameters) ·
 │   │   │              DrawingToolbar (tools + mobile gate) · primitives (watermark, drawings)
 │   │   ├── market/    MarketDataProvider (mounts feeds, reroutes, renders nothing)
 │   │   └── terminal/  TerminalShell · LiveCandles · ExchangePicker (venue dropdown)
@@ -178,11 +178,11 @@ npm run dev            # http://localhost:3000  (Turbopack)
 
 ---
 
-## 4. Deploy: GitHub → Cloudflare (free tier)
+## 4. Deploy: GitHub → Cloudflare Workers
 
-> **Idiotensichere Komplett-Anleitung (Deutsch, Klick für Klick):** [`VEROEFFENTLICHEN.md`](VEROEFFENTLICHEN.md)
+> **Deployment guide (German):** [`VEROEFFENTLICHEN.md`](VEROEFFENTLICHEN.md)
 
-1. Push this repository to GitHub (or use the zero-config auto-deploy: `.github/workflows/deploy.yml` + `VEROEFFENTLICHEN.md` §3b).
+1. Push this repository to GitHub. The optional `.github/workflows/deploy.yml` workflow requires GitHub Actions to be enabled and the documented Cloudflare secrets to be configured (`VEROEFFENTLICHEN.md` §3b).
 2. Cloudflare dashboard → **Workers & Pages** → **Create** → connect the repo.
 3. Build settings:
 
@@ -198,9 +198,9 @@ npm run dev            # http://localhost:3000  (Turbopack)
    assets) and
    publishes a Worker with static assets on `workers.dev`.
 
-4. Point `nodechart.cc` at the Worker (dashboard → custom domain). SSL is automatic.
-5. Done: every locale is prerendered HTML served from the edge; only language detection and the
-   (future) API routes touch compute.
+4. Connect `nodechart.cc` to the Worker through the dashboard, then follow the DNS/certificate status and any steps shown there. Propagation and certificate timing depend on the domain configuration and platform.
+5. Landing, Help, and Legal routes are generated where configured; terminal and allowlisted API
+   routes may use request-time Worker compute. Current platform quotas and costs depend on the plan.
 
 > `wrangler.jsonc` already contains the correct `main`, `assets`, `compatibility_flags`
 > (`nodejs_compat`) and commented-out KV/D1 bindings for Part 2. Committing it prevents Wrangler
@@ -208,33 +208,35 @@ npm run dev            # http://localhost:3000  (Turbopack)
 
 ---
 
-## 5. i18n & SEO guarantees
+## 5. i18n & SEO implementation notes
 
-* **5 locales** — `en de es zh ru`, each with a complete message bundle (**976 keys**, parity-checked by `npm run check:i18n`).
-* **Static** — 25 vorgerenderte Locale-Seiten (5 Sprachen × 5 Routen) plus `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, `icon.svg`, `llms.txt`; das **Terminal** rendert pro Request (Live-Daten) und liegt `s-maxage=300` im Edge-Cache.
+* **5 locales** — `en de es zh ru`, with message-key and ICU-placeholder parity checked by `npm run check:i18n`; that command reports the current key count.
+* **Rendering** — Landing, Help, and Legal pages are generated for the five locales; the terminal and API routes may render or fetch at request time. Sitemap, robots, manifest, icons, and `llms.txt` are also generated.
 * **`<html lang>`** — exact BCP-47 tags: `en`, `de-DE`, `es-ES`, `zh-Hans`, `ru-RU`.
 * **hreflang** — `x-default` + all 5 languages on every page and in `sitemap.xml`.
 * **canonical / og:url / og:locale** — per-locale, absolute, derived from `NEXT_PUBLIC_SITE_URL`.
 * **Fonts** — self-hosted via `next/font` (Exo 2 + Manrope + JetBrains Mono cover Latin & Cyrillic;
   CJK falls back to system fonts to avoid shipping megabytes).
-* **robots/sitemap/manifest/icon.svg** — at build time; `sitemap.xml` listet 30 URLs (6 Routen × 5 Sprachen) mit `hreflang` + `x-default`, `robots.txt` erlaubt alle Bots und verweist auf die Sitemap.
+* **robots/sitemap/manifest/icons** — generated from the configured routes/locales; localized sitemap entries carry `hreflang` + `x-default`, and `robots.txt` links to the sitemap. Route and locale counts can change with configuration.
 
 ---
 
 ## 6. Live data layer (Parts 2–3)
 
-Everything below runs **in the browser** — no server, no API keys, $0 infra.
+Chart interaction and many calculations run in the browser. Public data is fetched directly where supported or through allowlisted Next.js serverless routes for selected APIs and RPC methods. No separate backend service or paid API is required by this design; provider quotas, platform costs, regional access, and endpoint behavior still apply.
 
-### 6.1 Endpoints (all verified against production)
+### 6.1 Configured public endpoints
+
+Provider documentation and availability can change. A successful probe or cached response is a point-in-time observation, not a coverage or uptime guarantee.
 
 | Feed | Endpoint | Notes |
 | --- | --- | --- |
-| DEX search | `api.dexscreener.com/latest/dex/search`, `/tokens/{addr}` | 300 req/min/IP, results cached 30 s, 33 chains |
-| DEX search | `api.geckoterminal.com/api/v2/search/pools`, `/networks/{n}/tokens/{addr}/pools` | 30 calls/min — the tightest limit in the stack, 80 networks |
+| DEX search | `api.dexscreener.com/latest/dex/search`, `/tokens/{addr}` | Public provider endpoint; documented limits, caching, supported networks, and returned pairs may change. |
+| DEX search | `api.geckoterminal.com/api/v2/search/pools`, `/networks/{n}/tokens/{addr}/pools` | Provider limits and network coverage vary; the app maps provider network identifiers to supported chains. |
 | EVM audit | `api.gopluslabs.io/api/v1/token_security/{chainId}` | every flag is a **string** (`"1"`/`"0"`); 19 EVM chains (list verified via `/supported_chains`) |
-| EVM audit (2nd opinion) | `api.honeypot.is/v2/IsHoneypot?address=…&chainID=…` | key-less on-chain **simulation**; chains 1/56/8453/42161/81457 |
+| EVM risk simulation | `api.honeypot.is/v2/IsHoneypot?address=…&chainID=…` | A provider simulation on selected chains; it is a snapshot and does not guarantee future trade behavior. |
 | Solana audit | `api.rugcheck.xyz/v1/tokens/{mint}/report/summary` | `score_normalised` 0–100, **higher = riskier** |
-| CEX candle seed | see §6.3 per venue | 300–1000 candles, normalised to ascending open time |
+| CEX candle seed | see §6.3 per venue | Requests a venue-specific amount of history and normalizes returned rows; depth and intervals vary. |
 | KuCoin socket URL | `api.kucoin.com/api/v1/bullet-public` | token + `instanceServers[0].endpoint`, POST, no auth |
 
 The manager opens **one socket per (exchange, endpoint)** and reference-counts channels, so
@@ -251,17 +253,17 @@ lets OKX use two endpoints transparently.
   selection layer reroutes to the next-ranked exchange (§6.4). The feed chip shows `feed.region`.
 * **Pair not listed** — an empty/404 seed marks that symbol as unsupported on that venue
   (`unsupported[exchange]`), and the picker skips it for this pair only.
-* **Rate limits** — any 429 flips `useRateLimitStore` → `<RateLimitOverlay/>` renders the CSS-glitch
-  `RATE LIMIT EXCEEDED / BYPASSING…` panel with a 100 ms-accurate 5 s countdown; the blocked fetch
-  *awaits* the cooldown and then retries (2 attempts). Concurrent 429s join the running cooldown
-  instead of stacking overlays, and a safety timer guarantees nothing can hang.
+* **Rate limits** — a 429 can activate `useRateLimitStore` and the cooldown overlay. Requests may
+  retry after the cooldown; providers can continue to reject, delay, or omit data. The timer is a
+  client-side retry aid, not a promise that an endpoint will recover.
 
-### 6.3 Exchange coverage — 12 CEX venues
+### 6.3 Configured CEX adapters — 12 identifiers
 
-All public, key-less and free. **Every** one was captured live; the wire payloads are replayed as
-fixtures in `npm run ws:smoke`.
+The adapters target public endpoints and include recorded fixtures for `npm run ws:smoke`. Live
+reachability, symbols, intervals, rate limits, and regional access vary and can change; a past smoke
+run is not a current availability guarantee.
 
-| Venue | WebSocket | Candles | Trades | Quirk (verified) |
+| Venue | WebSocket | Candles | Trades | Implementation note (earlier probe) |
 | --- | --- | --- | --- | --- |
 | Binance | `wss://data-stream.binance.vision/ws` | `<pair>@kline_1m` | `@aggTrade` | market-data mirror — `stream.binance.com` answers **HTTP 451** for many regions |
 | OKX | `wss://ws.okx.com:8443/ws/v5/{business\|public}` | `candle1m` | `trades` | `candle*` on the *public* endpoint answers `error 60018` |
@@ -276,13 +278,13 @@ fixtures in `npm run ws:smoke`.
 | KuCoin | token URL from `bullet-public` | **derived** from `/market/match` | `/market/match` | both kline topics answer `404 topic does not exist`; ns timestamps; ping every 18 s |
 | CoinEx | `wss://socket.coinex.com/` | **derived** from `deals.update` | `deals.subscribe` | v2 `candlesticks.subscribe` = "method not found"; REST klines are **v1** (`/v1/market/kline`) |
 
-**Derived candles** — Coinbase, KuCoin and CoinEx expose no public candle channel. `derive.ts`
-buckets their trade stream into OHLCV (`CandleDeriver`) and continues the REST-seeded candle instead
-of starting a new bucket, so the chart is gap-free and identical in shape to a native feed. The
-smoke test asserts rollover *and* seed-continuation.
+**Derived candles** — Coinbase, KuCoin, and CoinEx adapters construct OHLCV candles from returned
+trade messages where configured candle channels are unavailable. Trade gaps, delayed messages,
+provider history, and bucket boundaries can make derived candles incomplete or different from a
+venue-native candle. The smoke test covers rollover and seed-continuation logic.
 
-**Deliberately skipped** (measured, not guessed): MEXC (IP-blocked 403), Bitstamp (invalid
-subscription answer), AscendEX (403 on the public socket), Upbit (binary protobuf protocol).
+**Not configured as adapters in the current registry:** MEXC, Bitstamp, AscendEX, and Upbit. The
+connection/protocol notes above reflect earlier probes and can become stale if providers change.
 
 ### 6.4 Region-aware routing
 
@@ -291,12 +293,12 @@ proxy.ts  →  cf-ipcountry header mirrored into the nc_country cookie (7 d, lax
            ↘ fallback in the browser: Intl.DateTimeFormat().resolvedOptions().timeZone
 ```
 
-`detectRegion()` returns `{ country, source }` (`edge` or `timezone`), `isRestrictedIn(exchange,
-country)` knows the public geo-blocks (Binance/Bybit/OKX/Gate/HTX/Bitget in the US, Binance in CA/UK
-derivatives regions, …), and `exchangeProbe.ts` measures the **real** latency of every venue for the
-current pair (REST seed where available, WebSocket handshake for Crypto.com) once per session.
+`detectRegion()` returns `{ country, source }` (`edge` or `timezone`). `isRestrictedIn()` applies
+an in-code list of known restrictions, which may not match a provider's current terms. The venue
+probe observes a reachable REST endpoint or WebSocket handshake where possible and caches the
+result; it is a client-side sample, not guaranteed execution latency or service availability.
 
-Ranking (`exchange-select.ts`) — lower score wins:
+Ranking (`exchange-select.ts`) — lower observed score wins; scores are a routing heuristic, not an execution-quality guarantee:
 
 | Contribution | Value |
 | --- | --- |
@@ -308,15 +310,15 @@ Ranking (`exchange-select.ts`) — lower score wins:
 | latency | `+0 … +0.4` (capped at 1500 ms) |
 | liquidity preference rank | `+0.05` per step (binance → okx → bybit → …) |
 
-So a venue one rank down the liquidity list must be ~190 ms faster to win — deep books chart
-better, but a genuinely closer exchange (the usual case for non-US users) takes over automatically.
-A manual choice in `<ExchangePicker/>` always wins unless that venue is blocked or cannot chart the
-timeframe; the picker then shows a "rerouted" chip. **No exchange is ever hidden** — restricted
-venues stay selectable because their public market data usually still works.
+Liquidity rank and sampled latency contribute to the score; those inputs do not establish actual
+book depth or execution quality. A manual venue selection is retained unless the app marks that
+venue unavailable for the selected pair or interval, in which case the picker can report a reroute.
+A listed venue may still fail to provide data in a particular region or session.
 
-### 6.5 DEX coverage — 33 chains, 700+ venues
+### 6.5 DEX network mappings — 33 configured chain IDs
 
-`src/lib/chains.ts` holds four mapping tables, each verified against a live API response:
+`src/lib/chains.ts` holds provider/network mapping tables. Their identifiers describe configured
+lookups, not guaranteed token or pool availability:
 `GECKO_NETWORK_TO_CHAIN` (80 slugs, incl. `avax`/`xdai`/`sei-network`/`sui-network`),
 `CHAIN_TO_GECKO_NETWORK`, `GOPLUS_CHAIN_ID` (19 EVM chains), `HONEYPOT_CHAIN_ID` (5), and
 `DEXSCREENER_TO_CHAIN` (34 ids — note Sei is `seiv2`).
@@ -332,17 +334,17 @@ universe (~50 instruments) plus both DEX aggregators.
 | --- | --- |
 | `danger` (red, pulsing skull) | GoPlus: `is_honeypot`, `cannot_buy`, `cannot_sell_all`, `can_take_back_ownership`, `hidden_owner` = `"1"` or tax > 5 % · honeypot.is: `isHoneypot` or buy/sell tax > 5 % · RugCheck: any risk `level === 'danger'` or `score_normalised > 60` |
 | `warn` (amber) | tax > 0, mintable, proxy, not open-source, < 50 holders · RugCheck `score_normalised > 25` or `level === 'warn'` |
-| `safe` (green glow) | audited and none of the above |
+| `safe` (green glow) | no configured risk flags returned by the selected provider checks; this is not proof of safety or a complete audit |
 | `unknown` (muted) | audit failed / chain not supported — never blocks the search |
 
-Pipeline per chain: **GoPlus** (static flags, 19 EVM chains) → if it answers `danger`, `unknown` or
-returns no data, **honeypot.is** simulates a real buy+sell on-chain (5 major chains) → **worst-of
-merge** (honeypot beats static flags; a simulation that passed adds `simulation-passed`, taxes above
-threshold escalate). Solana uses **RugCheck**. `provider` records who decided, and the UI shows
-"unaudited" rather than a wrong green badge on chains nobody covers (Sui, Aptos, TON, …).
+Pipeline per supported chain: **GoPlus** returns provider-supplied flags; selected EVM checks may
+also call **honeypot.is** for a buy/sell simulation. Solana uses **RugCheck** where supported. The
+merge favors the higher reported risk; simulations and static flags can miss behaviors, change over
+time, or be unavailable. `provider` records the source, and unsupported or failed checks remain
+unknown rather than being presented as a clean assessment.
 
-Audits are cached 10 min, in-flight duplicates are deduped, and failures resolve to `null` — a dead
-auditor can never break the dropdown.
+Results are cached for a limited period and duplicate requests are deduplicated. Provider errors
+remain possible and do not establish that a token is safe or unsafe.
 
 ### 6.7 Whale tracker
 
@@ -358,7 +360,8 @@ npm run smoke        # ws + api
 ```
 
 `ws:smoke` replays recorded wire payloads for all 12 adapters, unit-tests `CandleDeriver` and the
-HTX gzip path, and then opens **real** sockets (concurrency 4, 14 s per venue):
+HTX gzip path, and can open public sockets for a time-limited reachability check. The transcript
+below is an earlier sample run only; current endpoints may behave differently:
 
 ```
 — live public streams (12 venues) —
@@ -369,35 +372,33 @@ HTX gzip path, and then opens **real** sockets (concurrency 4, 14 s per venue):
   … 12/12 venues streaming
 ```
 
-`api:smoke` runs the real search + audit + rate-limit + whale + region + ranking paths: multi-chain
-CA lookups (Base `AERO`, Sui `CETUS`), live GoPlus audits on `ethereum`/`base`/`berachain`, the
-honeypot.is simulation for `PEPE`, timezone→country detection, the scoring unit tests, and finally
-`probeAllExchanges` against all 12 venues with the auto-pick assertion. The harnesses are bundled
-with esbuild so the production TS sources run unmodified; they are dev-only and never shipped.
+`api:smoke` exercises the search, audit, rate-limit, whale, region, and ranking code paths. Where
+network access is available it also probes selected public providers and configured venues; those
+results describe the test environment and time only. The harnesses bundle the production TypeScript
+sources with esbuild and are dev-only.
 
 ---
 
 ## 7. Chart engine (Part 4)
 
-The terminal at `/terminal` renders real exchange data on
-[`lightweight-charts`](https://github.com/tradingview/lightweight-charts) v5 (the open-source
-TradingView canvas engine) — no iframe, no paid widget, no backend. Indicator mathematics comes
-from [`technicalindicators`](https://www.npmjs.com/package/technicalindicators); every series the
-UI draws is recomputed client-side from the raw candle stream.
+The terminal at `/terminal` renders returned market candles with
+[`lightweight-charts`](https://github.com/tradingview/lightweight-charts) v5. Indicator
+mathematics uses [`technicalindicators`](https://www.npmjs.com/package/technicalindicators);
+series are calculated in the browser from the loaded candle buffer. Feeds and calculations can be
+incomplete, delayed, or unavailable, and the browser client is user-modifiable.
 
-### 7.1 Uncroppable watermark
+### 7.1 Canvas-integrated watermark
 
-A single TradingView-style text line — **`www.NodeChart.cc`** — is painted by a custom
-`IPrimitivePaneView` *into the chart canvas itself* (vector paths, ~12 % alpha). It sits centred
-in every pane, auto-fits to ~72 % of the pane width, and panes smaller than 120×48 px skip it, so
-it never collides with the price scale, series or legend chips. Because it lives inside the canvas
-bitmap, every screenshot, screen recording and the built-in PNG export (`chart.takeScreenshot()`)
-carries it — cropping the DOM around the chart cannot remove it. Each pane host also exposes
-`data-watermark="www.NodeChart.cc"` for automated verification.
+A `www.NodeChart.cc` text watermark is drawn by a custom `IPrimitivePaneView` into the chart
+canvas. The position, size, and visibility vary with pane dimensions. App-generated screenshots
+and exports may include it, and pane hosts expose `data-watermark="www.NodeChart.cc"` for tests.
+Because this is client-side rendering, it is not tamper-proof or DRM; users can modify the page or
+exported image.
 
-### 7.2 Indicators — unlimited, editable, multi-pane
+### 7.2 Indicators — editable, multi-pane
 
-* Any number of indicator instances per pane (`useChartStore.indicators`), each with its own
+* Indicator instances can be added per pane within the app's state and rendering constraints,
+  each with its own parameters; instances can render as overlay lines or in an oscillator pane.
   parameters; instances render as overlay lines (EMA/SMA/Bollinger/VWAP…) or in their own
   oscillator pane (RSI/MACD/Stochastic/ATR/Williams %R/AO/ROC) — `chart.addSeries(def, opts,
   paneIndex)` keeps time scale and crosshair shared with the price pane.
@@ -434,22 +435,21 @@ the force flag persist per device).
 
 ### 7.6 Browser seeding & the CORS reality
 
-Browsers enforce CORS on `fetch`, Node does not — four venues (`bybit`, `kucoin`, `coinex`,
-`bitfinex`) answer their public REST history **without** `Access-Control-Allow-Origin`, so a page
-can never read it, while their WebSocket streams work fine (sockets are not CORS-bound).
-NodeChart handles this in two places:
+Browsers enforce CORS on `fetch`, while WebSocket connections follow different browser rules.
+Some configured CEX history endpoints have returned no `Access-Control-Allow-Origin` header in
+prior probes; CORS behavior can change. The first-party proxy is allowlisted for selected public
+APIs and does not make every exchange history endpoint readable.
 
-1. `exchangeProbe` treats a CORS rejection (`TypeError`) as inconclusive and falls back to a
-   WebSocket-handshake probe, so such venues are ranked by real stream reachability, not
-   condemned as dead.
-2. `CexSocketManager.seedWithFallback()` seeds the history from the nearest CORS-friendly venue
-   (`CORS_FRIENDLY_SEEDS`: binance → okx → kraken → gate → bitget → htx) when the chosen venue's
-   REST is unreachable *from the page*. Live updates keep flowing over the chosen venue's socket;
-   the status chip discloses the substitute: `Live · Historie via binance`.
+1. `exchangeProbe` treats a CORS rejection as inconclusive and can fall back to a WebSocket
+   handshake probe. That result indicates connection reachability at probe time, not data quality
+   or execution latency.
+2. `CexSocketManager.seedWithFallback()` can use a configured CORS-friendly venue to seed history
+   when the selected venue's REST history is unavailable in the browser. If the chosen venue's
+   WebSocket connects, later updates come from that stream; the status chip reports a substitute
+   seed where one was used. Both the seed and live feed can still fail or differ.
 
-A second subtlety fixed here: channels added while a socket is **already open** (e.g. a timeframe
-switch) never see the on-open hook, so they are seeded explicitly — otherwise the chart would sit
-empty until two live candles accumulate.
+Channels added to an already-open socket are seeded explicitly because they do not receive that
+socket's initial open callback.
 
 ### 7.7 Verification
 
@@ -466,12 +466,13 @@ popunder, and the lazy injection after crossing the breakpoint.
 
 ---
 
-## 8. On-chain signals (free, keyless, live)
+## 8. On-chain signals from public providers
 
-Toolbar toggle **ON-CHAIN** (Radar icon) docks a right-hand panel with real
-on-chain readings from seven keyless, CORS-enabled sources. The panel fetches
-only while open (15 s heartbeat; per-group deadlines below); closed = zero
-requests. Every group fails soft (OFFLINE LED + last good reading).
+Toolbar toggle **ON-CHAIN** (Radar icon) docks a right-hand panel with provider-supplied network,
+market, and token data. Selected requests use direct provider endpoints or the first-party
+serverless proxy. The panel refreshes while open; refresh intervals below are targets, not freshness
+or availability guarantees. When a request fails, a group can show an offline state or a prior
+reading, so check its status and timestamp.
 
 | Group | Source | Signals | Refresh |
 | --- | --- | --- | --- |
@@ -482,41 +483,43 @@ requests. Every group fails soft (OFFLINE LED + last good reading).
 | DEX heat | `api.geckoterminal.com` + `api.dexscreener.com` | trending pools (eth/solana/base/bsc, h24 Δ + volume), top boosted tokens | 2 min |
 | Token forensics | `api.gopluslabs.io` | holder count, buy/sell tax, top-10 holder share, locked LP share, mintable/honeypot badge — for the active DEX token | 10 min |
 
-Implementation notes: `src/api/onchain.ts` (all parsers defensive → `null` on
-malformed payloads), `src/store/useOnChainStore.ts` (memory-only, in-flight
-guards, per-group deadlines), `src/components/onchain/OnChainPanel.tsx`.
-RPC calls go through `fetchJson` with `body` support (POST) added in
-`src/api/http.ts`, so timeout + 4 MiB cap + 429 cooldown apply to them too.
-Rate-limit budget stays far below every provider's public limit
-(≈ 12 req/min worst case while open).
+Implementation notes: `src/api/onchain.ts`, `src/store/useOnChainStore.ts`, and
+`src/components/onchain/OnChainPanel.tsx`. Selected public API and RPC requests use the bounded,
+allowlisted route in `src/app/api/proxy/[provider]/route.ts`; other public feeds may be requested
+directly. Route timeouts and response-size limits reduce exposure but do not guarantee provider
+availability or freshness. Public provider limits can change.
 
 ---
 
-## 9. PRO metrics & premium chart analytics (free)
+## 9. Market metrics and locally calculated chart tools
 
-Toolbar toggle **PRO** (Gauge icon) docks the metrics paid terminals sell:
+The **PRO** panel presents selected provider metrics when available. Some Pro features require
+qualifying on-chain support verified on supported networks; core charting has no recurring
+subscription. Provider outages, caching, regional restrictions, pair support, and endpoint limits
+can affect data. Ratios, snapshots, model outputs, and chart simulations are descriptive or
+heuristic and are not financial advice or a guarantee of future results.
 
 | Group | Source | Signals | Refresh |
 | --- | --- | --- | --- |
 | Derivatives | `api.gateio.ws` + `www.okx.com` | funding rate (+ annualised), **next-funding countdown**, mark/index + premium %, open interest (USD), long/short (accounts / taker / top traders), liquidations per 5 m (long vs short), **OI / L-S-taker / funding-history sparklines** (30 × 5 m stats + 24 × 8 h settled funding) | 60 s |
 | Order flow | `api.gateio.ws` book + **live tape** | best bid/ask, spread (bps), book imbalance (top 50 levels), **cumulative depth chart** (±0.5 % around mid, SVG), session **CVD** + Δ60 s from the whale trade stream (throttled 600 ms) | 15 s |
-| Market breadth | `api.gateio.ws` spot tickers | advancers vs decliners across **all ~2 000 quoted USDT pairs**, advancer share bar, median 24 h change (shares the cached heatmap response – zero extra calls) | 5 min |
+| Market breadth | Gate, with OKX fallback | Advancers/decliners and median 24 h change across pairs returned by the selected provider; returned coverage varies. | 5 min target |
 | Global market | `api.coingecko.com` + `api.alternative.me` | total market cap + 24 h Δ, volume, BTC/ETH dominance, coin count, Fear & Greed + 14-day sparkline | 5 min |
 | Heatmap | `api.gateio.ws` spot tickers | top-28 USDT pairs as intensity tiles (change × volume) | 5 min |
-| Options & IV | `www.deribit.com` | DVOL implied-vol index (BTC/ETH) + 24 h Δ, put/call open interest, **max pain** computed from the full chain (~950 strikes), pain distance to spot, **IV smile** (OI-weighted mark IV per 10 % moneyness bucket, nearest expiry) + **IV term structure** (ATM band across 10 expiries) | 10 min |
+| Options & IV | `www.deribit.com` | Provider-reported volatility and option fields; max-pain, smile, and term-structure values are computed from returned instruments and model assumptions. Coverage can be partial. | 10 min target |
 
 Implementation: `src/api/prometrics.ts`, `src/store/useProStore.ts` (same
 open-only-fetch lifecycle as the on-chain panel), `src/components/pro/ProMetricsPanel.tsx`.
-CVD accumulates from `tradeBus` in `src/websockets/manager.ts` – zero extra requests.
+CVD uses `tradeBus` in `src/websockets/manager.ts` rather than a separate HTTP request; it depends on an active trade feed and its coverage.
 
-### Premium chart tools (computed locally, in-canvas)
+### Additional chart tools (computed locally where applicable)
 
-* **Volume Profile Visible Range** – chip `VP`: price-binned volume histogram
-  anchored to the pane edge, POC line + dashed VAH/VAL (70 % value area),
-  painted by `VolumeProfilePrimitive` so screenshots keep it.
+* **Volume Profile Visible Range** – chip `VP`: estimates volume by price from the loaded
+  candle data in the visible range, with POC and 70% value-area levels. It is not a full
+  trade-by-trade volume profile.
 * **Anchored VWAP** – chip `aVWAP`: arm, click a candle, get the session VWAP
   from that anchor (click chip cycles arm → anchored → cleared).
-* **34 indicator kinds** (unlimited instances each): the 7 classics plus
+* **Indicator library + Script Lab** (instance limits depend on the workspace): the 7 classic kinds plus
   Supertrend, Keltner, Donchian, Parabolic SAR, StochRSI, OBV, MFI, CCI,
   ADX/DMI, TRIX, PPO, DPO, Bollinger %B, Aroon – wave 2: **Ichimoku Cloud,
   VWAP, Williams %R, Hull MA, TEMA, DEMA, Guppy MMA (6-EMA ribbon), TTM
@@ -525,57 +528,45 @@ CVD accumulates from `tradeBus` in `src/websockets/manager.ts` – zero extra re
   parameter modals, all computed locally.
 * **Script Lab** – toolbar chip `Skripte` (or the CUSTOM tile in the indicator
   modal): write per-candle formulas (`o h l c v` plus `ema sma rsi atr stoch
-  vwap highest lowest change` + math helpers), test them against the live
-  buffer (last/min/max), save up to 50 locally, **import from any https raw
-  URL** – `github.com/…/blob/…` and gist links are rewritten to their raw
+  vwap highest lowest change` + math helpers), test them against the loaded
+  buffer (last/min/max), save up to 50 locally, import from HTTPS raw URLs that
+  permit browser CORS access – `github.com/…/blob/…` and gist links are rewritten to their raw
   hosts automatically (≤20 KB) – and plot the result as its own pane or as a
   price overlay. Engine: `src/lib/scripts.ts` (`new Function` sandbox without
   DOM/network bindings, 4000-char cap, memoised helper series); UI:
-  `src/components/tools/ScriptLabModal.tsx`. This is Pine Script territory –
-  tradingview locks custom scripts behind paid plans, here they are free.
-* **Auto support/resistance** – chip `S/R Auto`: fractal pivots clustered by
-  proximity into the strongest levels, drawn as dashed S/R price lines with
-  touch counts (`supportResistance()` in `src/lib/premium.ts`).
-* **RSI divergence markers** – chip `Divergenzen`: classic bullish/bearish
-  price-vs-RSI(14) pivot divergences rendered as `DIV+`/`DIV−` arrows via
-  `createSeriesMarkers` (`divergences()` in `src/lib/premium.ts`).
-* **Price alerts** – chip `Alert`: arm, click any price level, the chart draws
-  a dotted ALERT line and fires a neon toast (10 s) the moment the last price
-  crosses it. Session-only by design (never persisted); chip cycles
-  arm → `Alerts (n)` → clear-all.
-* **Compare overlay** – `Vergleich` select: any CEX seed symbol as a
-  normalized %-line on its own overlay scale; its kline feed is
-  reference-counted through the same `cexManager.ensureFeed` pipeline.
+  `src/components/tools/ScriptLabModal.tsx`. Script formulas are user-provided code executed in a
+  browser-side sandbox; the sandbox is best-effort isolation, not a security boundary.
+* **Auto support/resistance** – chip `S/R Auto`: clusters pivot points from loaded candles using
+  configured rules and displays historical levels and touch counts. Levels can fail and are not
+  guaranteed support or resistance.
+* **RSI divergence markers** – chip `Divergenzen`: compares price and RSI(14) pivots in loaded
+  candles and renders heuristic markers. A divergence may persist and does not confirm a reversal.
+* **Price alerts** – chip `Alert`: client-side alert lines and notifications while the terminal is
+  open and receiving updates. Feed delays, browser suspension, or a closed tab can delay or prevent
+  an alert. Alerts are session-only.
+* **Compare overlay** – `Vergleich` select: a supported CEX symbol can be shown as a normalized
+  percentage line when its feed is available.
 * **Session strip** – today's UTC change %, range-position marker and
   annualized **realized volatility** straight from the candle buffer
   (`sessionStats()` / `realizedVolPct()`).
-* **Bar replay on every timeframe** – chip `Replay`: play/pause/step/10×
-  transport that hides candles from the right edge while **all 33 indicators,
-  the volume profile and S/R recompute live** on the sliced buffer
-  (TradingView sells intraday replay as a subscription).
-* **Strategy lab (backtester)** – chip `Backtest`: six zero-config strategies
-  (EMA cross, RSI reversion, Bollinger reversion, Supertrend flip, MACD cross,
-  Donchian breakout) with fees per side, mark-to-market equity curve, win
-  rate, profit factor, max drawdown, exposure, and one click to paint every
-  round trip onto the chart (`src/lib/backtest.ts`). Deep backtesting is
-  Premium/Ultimate territory on TradingView.
-* **Market screener** – chip `Screener`: all ~2 000 quoted Gate USDT pairs,
-  sortable (price / 24 h % / volume / range position), filterable
-  (gainers / losers / whale volume / near high), searchable, CSV-exportable –
-  and every row opens a real chart, including ad-hoc pairs outside the seed
-  list.
-* **Live watchlist** – chip `Watchlist`: unlimited symbols with live quotes
-  from the shared ticker sweep (zero extra requests); TradingView caps the
-  free tier at one list of 30.
-* **Risk & position calculator** – chip `Risk`: account, risk %, entry, stop,
-  target, leverage → size, notional, margin, R:R and account impact
-  (`src/lib/risk.ts`).
-* **QoL pack** – log & percent price scales, countdown to bar close in the
-  legend, baseline chart type, OHLCV **CSV export** per pane (TradingView
-  charges for data export).
-* **Real DEX candles** – DEX tokens chart genuine OHLCV history from
-  GeckoTerminal (`fetchDexCandles`), with 15 s retry backoff when the public
-  rate limit bites on shared IPs; refresh every 60 s while mounted.
+* **Bar replay** – chip `Replay`: steps through candles already loaded in the chart buffer and
+  recomputes enabled indicators and overlays on the visible slice. It does not fetch missing history.
+* **Strategy lab (backtester)** – chip `Backtest`: six candle-based strategy simulations with
+  configured fees and summary statistics. Results use simplified fills and omit factors such as
+  slippage, funding, liquidity, and real execution; historical simulations do not predict results.
+* **Market screener** – chip `Screener`: filters and sorts returned Gate USDT spot rows (up to
+  150 shown by the interface). Pair coverage, refresh success, and chart history depend on the
+  provider and selected instrument.
+* **Watchlist** – chip `Watchlist`: saves supported symbols locally and reuses available market
+  feeds. Quote freshness, saved-item limits, and provider availability depend on the current app
+  configuration and browser storage.
+* **Risk & position calculator** – chip `Risk`: derives size, notional, margin, R:R, and account
+  impact from user inputs (`src/lib/risk.ts`). This is a calculator, not an execution estimate or
+  financial recommendation; actual fills, fees, and losses may differ.
+* **Chart controls** – log and percent price scales, an estimated bar-close countdown, a baseline
+  chart type, and OHLCV CSV export per pane.
+* **DEX candles** – supported DEX tokens can use GeckoTerminal OHLCV history. Pool coverage,
+  available intervals, history depth, rate limits, and refresh timing depend on the provider.
 
 ---
 
@@ -591,20 +582,25 @@ CVD accumulates from `tradeBus` in `src/websockets/manager.ts` – zero extra re
 
 ---
 
-## 11. Monetization & survival (ads + donations, no paywalls)
+## 11. Access, advertising, and support
 
-NodeChart stays free to use – no paywalls, no accounts, nothing hidden behind a
-plan. Keeping it alive is not free: one dev, server-less but hungry, funded by
-Adsterra ad formats plus optional crypto donations; growth comes from a
-share-to-unlock loop. Everything here is client-side or edge-side – the
-Cloudflare free tier is never left.
+Core charting is available without an account or recurring subscription. Third-party ads and
+sponsored links may appear on designated surfaces and may lead to external sites with their own
+content and terms. Two themes unlock when a prepared X or Telegram composer opens; the app does not
+verify that a post is published. Selected Pro features require a qualifying on-chain support
+transaction verified on supported networks. A self-reported support badge is cosmetic and does not
+verify payment or unlock Pro. Local JavaScript and browser storage can be inspected or modified, so
+local export markers are best-effort deterrence, not secure DRM. Provider, hosting, and ad-network
+availability and terms can change.
 
-### 10.1 Adsterra (AdManager)
+### 11.1 Third-party ads (AdManager)
 
-Placements are configured purely through environment variables (`.env.example`):
+Environment variables in `.env.example` can override ad placements. Several delivery URLs are
+also bundled as source defaults, so an empty deployment environment does not necessarily disable
+third-party requests. Check the production build configuration before launch.
 
-Adsterra bids mobile and desktop traffic separately, so **every format has two
-placements and the UI has two containers** (`<AdSlot variant="mobile|desktop"/>`):
+The UI separates mobile and desktop ad containers where configured; a specific device placement can
+be supplied for each slot, with supported shared/default fallbacks:
 
 | Container / format | Desktop (≥ lg) | Mobile (< lg) |
 | --- | --- | --- |
@@ -621,76 +617,55 @@ single-value variables (`…_NATIVE`, `…_SOCIALBAR`, `…_POPUNDER`) still wor
 fallback for both devices. `NEXT_PUBLIC_*` values are inlined at build time –
 set them in the Cloudflare dashboard **before** building.
 
-`src/lib/ads/adsterra.ts` injects each script exactly once from `useEffect`
-(never during render) – server and client HTML stay identical, so there are no
-hydration errors and no `next/script` strategy surprises. Containers remember
-their script in `data-ad-src`, so breakpoint flips never double-inject, and a
-shared fallback URL can serve both slots. Unfilled slots keep a tiny
-"GESPONSERT" corner tag so a blocked script never looks like a broken layout. The popunder script
-is appended *inside* the multi-chart click handler because Adsterra arms its
-popunder on the next observed gesture; a sessionStorage flag caps it at one per
-session. With no variables set `ADS_ENABLED` is false: zero slots, zero calls.
+`src/lib/ads/adsterra.ts` injects configured scripts from client-side effects; third-party scripts
+may change the DOM or fail to load, so test the deployed page. Containers track their placement to
+avoid duplicate injection during breakpoint changes. Unfilled slots can retain a visible sponsored
+label. The popunder is attempted from configured user interactions and is subject to browser and
+provider behavior. Current source defaults include Adsterra delivery URLs; use build-time overrides
+or change the defaults if a deployment should not request those third parties.
 
-### 10.2 Ad-block soft-wall & donations
+### 11.2 Ad-block prompt and support
 
-`src/lib/ads/adblock.ts` combines two signals (DOM bait classes + a self-hosted
-`/ads.js` script bait that filter lists cancel). A blocked visitor sees the
-cyberpunk soft-wall **"NodeChart is free. Support the rebellion."** after first
-paint – never before, never blocking any feature:
+`src/lib/ads/adblock.ts` checks for blocked ad resources and may show a support prompt after the
+initial render. Detection can be imperfect; dismissing the prompt or making a self-reported support
+claim is not on-chain verification. The prompt is separate from core chart access and from the Pro
+support-verification flow.
 
-* **I have donated** → two-step trust flow (`DonatedFlow`): the button asks for a
-  rough size – **up to $5** or **over $5** (self-declared; a $0 backend cannot
-  attribute on-chain transactions, and NodeChart keeps no accounts). Either
-  choice sets the permanent cosmetic `supporter` badge **and** starts the
-  ask-free grace window: **48 h** for any donation, **5 days** above $5.
-  While the grace runs, *every* donation ask stays silent – nudge toasts,
-  milestone cards, tool nudge, celebration ribbon **and** the soft-wall
-  (even via `?adwall=1`): one gate, `donationGraceActive()` in
-  `src/store/useViralStore.ts`. Pre-grace legacy profiles migrate once into a
-  48-h window instead of being asked again immediately.
+* A self-reported support choice sets a local cosmetic badge and reminder cooldown. It does not
+  verify a transaction and does not grant Pro access. The separate donation-verification route
+  checks supported public-chain transactions against configured recipients and confirmation rules;
+  availability and provider responses can affect verification.
 * **Dismiss** → 7-day cooldown (`wallDismissedAt`).
 * Three donation wallets (SOL / BTC / ETH) with copy-to-clipboard (Clipboard API
   + `execCommand` fallback) and neon "Copied!" feedback.
 * `?adwall=1` force-opens the wall (used by the browser proof and for demos).
 
-### 10.3 Viral loop & share-to-unlock
+### 11.3 Share-composer theme unlock
 
-The **Share** button in the terminal toolbar opens a modal that previews the
-exact post: *"Found an insane setup for $TICKER on NodeChart. Zero fees,
-real-time on-chain data. #Crypto #Trading"* + deep link. X (`intent/tweet`) and
-Telegram (`t.me/share/url`) buttons open the intent **and** flip
-`useViralStore.shareUnlocked` (persisted as `nc-viral-v1`), which permanently
-unlocks the two premium skins **Matrix Green** and **Miami Vice Pink**
-(`PREMIUM_THEMES` in `src/lib/theme.ts`). Locked skins show a lock icon in the
-theme picker / command palette and open the share modal instead of applying –
-the modal immediately offers to apply the freshly unlocked theme.
+The **Share** modal prepares localized text and a deep link for X or Telegram. When the user opens
+either composer, the browser unlocks Matrix Green and Miami Vice locally. NodeChart does not check
+whether the user publishes a post, and local browser state can be edited or cleared. Shared links
+may include a ticker and a price snapshot from the time of sharing; the value can become stale and
+is not a current quote.
 
-Shared links carry `?ticker=SOL&price=…`; the terminal reads them at mount and
-opens exactly the chart that was posted.
-
-### 10.4 Premium themes
+### 11.4 Themes
 
 `[data-theme='matrix']` (phosphor CRT, heavy scanlines) and
 `[data-theme='miami']` (sunset noir pink/cyan) are full token sets in
 `globals.css`; `chart-theme.ts` derives the lightweight-charts options from the
 same CSS variables, so candles, watermark and drawings recolour instantly.
 
-### 10.5 Open-Graph edge card (`/api/og`)
+### 11.5 Open-Graph card (`/api/og`)
 
-`generateMetadata` on `/terminal` emits `og:image` / `twitter:card` pointing at
-`/api/og?ticker=…&price=…&locale=…`. The route (`runtime = 'edge'`) renders a
-1200×630 cyberpunk card as **pure SVG** (`src/lib/og.ts`, all inputs sanitised +
-XML-escaped) – no wasm, no fonts, free-tier safe. Telegram/Discord/Reddit unfurl
-it today; swapping the SVG body for a Satori PNG (X/Facebook) is the documented
-upgrade path without touching route or meta wiring.
+`generateMetadata` on `/terminal` points social metadata at `/api/og`. The serverless handler
+renders a 1200×630 SVG from sanitized ticker/price parameters. A displayed price is explicitly
+labelled as a share-time snapshot; feed availability and social-platform rendering vary.
 
-### 10.6 Verification
+### 11.6 Verification
 
-`chart-smoke` pins the pure logic (share-text template, intent URLs, OG
-sanitiser/escaper, premium gating, unlock flow). `browser-check.mjs` proves the
-running product: soft-wall copy + wallets + clipboard + cooldown, share modal +
-X intent + unlock banner, matrix application, `/api/og` response, dynamic
-`og:image` meta and the `?ticker=` deep link.
+`chart-smoke` covers share text, intent URLs, OG sanitization, theme gating, and the local unlock
+state. Browser checks exercise the prompt, share composer, and social card when their test setup is
+available; those checks do not validate provider uptime or whether a user publishes a post.
 
 ---
 
@@ -708,7 +683,11 @@ Hardening pass (audited + fixed, all gates re-run green):
 | Sharing | Share modal encodes tweet/URL (`encodeURIComponent`), popups use `noopener`; clipboard via in-page stub in tests. |
 | Deps | `npm audit --omit=dev`: **0 vulnerabilities**. The 3 dev-only highs sit in `sharp` under `miniflare` ← `wrangler` (local Cloudflare emulator, never shipped, never processes untrusted input). Not force-fixed: `audit fix --force` would pull `wrangler` outside the range supported by `@opennextjs/cloudflare` 1.20.6. |
 
-Test matrix (all green as of this commit):
+Historical test counts below are from an earlier audit snapshot, not this accuracy-copy revision.
+Run the listed checks against the current checkout before release; a prior PASS does not validate
+current copy, provider availability, or deployment configuration.
+
+Test matrix (historical snapshot):
 
 | Gate | Command | Result |
 | --- | --- | --- |
@@ -726,50 +705,41 @@ Test matrix (all green as of this commit):
 
 ## 13. SEO programme (systematic, audited)
 
-Everything below is verified per locale by `scripts/seo-audit.mjs` against a
-running production build – SEO here is measured, not hoped for.
+These are implementation notes, not promises of search ranking or rich-result display. Re-run the
+SEO checks against the current production build after copy or metadata changes.
 
-1. **Language mesh** – every route emits canonical + `hreflang` alternates for
-   all five locales plus `x-default` (head links *and* sitemap alternates), so
-   each language ranks independently instead of cannibalising the others.
-   `og:locale` + four `og:locale:alternate` tags tell social platforms the same.
-2. **Metadata discipline** – per-locale titles/descriptions from the message
-   bundles (descriptions kept inside the 70–170 char snippet window), keyword
-   sets, `robots` with `max-image-preview: large` / unlimited snippets,
-   Twitter summary-large-image with the dynamic `/api/og` card; the terminal is
-   indexable as the product page, only its shared parameter variants are not.
-3. **Structured data graph** (`src/lib/jsonld.ts` + `<JsonLd/>`):
-   `Organization` + `WebSite` site-wide, `SoftwareApplication` (free offer,
-   full featureList) on the landing, `FAQPage` + `DefinedTermSet`
-   glossary (all 34 indicators + 42 metrics) + `BreadcrumbList` on help,
-   `BreadcrumbList` on legal docs. Rich-result eligible: FAQ, glossary,
-   breadcrumbs, software.
-4. **Visible, crawlable content** – the landing stays deliberately short
-   (no FAQ/story sections; measured text length < 6k chars per locale), while
-   the help centre carries the zero-JS `<details>` FAQ in six keyword-rich Q/As
-   per locale (funding model, venue coverage, script lab, privacy,
-   TradingView comparison) plus 100+ glossary terms — all mirrored 1:1 into
-   schema so nothing is cloaked.
-5. **Crawler hygiene** – `robots.ts` (allow all + sitemap + host),
-   `sitemap.ts` (30 URLs, lastmod, change frequencies, hreflang),
-   self-hosted `next/font` subsets (no external font requests, no CLS),
-   semantic landmarks, exactly one `h1` per indexed page, breadcrumb navs as
-   internal links, `llms.txt` so AI answer engines cite NodeChart correctly.
-6. **Performance = ranking** – static prerender for all indexed routes,
-   canvas-only chart paint (no DOM churn), zero third-party scripts on
-   indexed pages (ads load client-side on the terminal only).
+1. **Language metadata** – routes emit canonical and `hreflang` alternates for the configured
+   locales; the presence of these tags does not guarantee indexing or ranking. Social metadata
+   includes locale fields where configured.
+2. **Metadata** – per-locale titles, descriptions, robots directives, Twitter cards, and the
+   dynamic `/api/og` route are implemented. Search engines may rewrite snippets or choose not to
+   index a route; terminal parameter variants have separate indexing rules.
+3. **Structured data** (`src/lib/jsonld.ts` + `<JsonLd/>`): localized Organization, WebSite, and
+   SoftwareApplication descriptions; the landing feature list includes the implemented access
+   details. Help and legal routes include FAQ, glossary, and breadcrumb entities. Markup describes
+   page content but does not guarantee a rich result.
+4. **Visible content** – localized landing copy and a static Help centre describe access, provider
+   coverage, tools, and limitations. Structured data is generated from visible localized content
+   where applicable; no competitor pricing comparison is used as a feature claim.
+5. **Crawler configuration** – `robots.ts`, `sitemap.ts`, semantic landmarks, localized page
+   metadata, and `llms.txt` provide site information. Crawlers and answer engines decide how to
+   use it; no citation, indexing, or performance outcome is guaranteed.
+6. **Rendering and third parties** – static generation is used where configured; terminal/API
+   routes may use serverless compute. Third-party ad and data-provider requests can occur on
+   designated surfaces and are subject to their own behavior.
 
-## 14. Edge Suite (wave 7) — four signals no classic chart app ships
+## 14. Edge Suite (wave 7) — locally calculated research tools
 
-Everything below runs 100 % client-side on the candles your feed already
-delivers. No exchange positioning data, no paid tiers, no keys.
+These tools calculate heuristic outputs from loaded candles and, where enabled, provider metrics.
+They do not use exchange liquidation-position data and do not forecast or guarantee market moves.
+Source feeds can be delayed, incomplete, or unavailable.
 
 | Engine | What it does | Where |
 | --- | --- | --- |
-| **Liq Radar** | Projects where 10x/25x/50x/100x positions opened in the last 400 candles would liquidate, weights them by volume + exponential recency decay and draws the strongest clusters as magnet bands on the canvas (leverage tags left, intensity right). Modal lists the three nearest long/short magnets with distance + strength. | `src/lib/liqradar.ts`, `LiqMagnetPrimitive` in `primitives.ts` |
-| **Lag Oracle** | Cross-correlates your chart against a leader feed (default BTC on a major CEX, loaded only while the modal is open) to find the best candle lag, correlation, beta and jump hit-rate — then raises a live pulse when the leader has moved ≥1.5 σ and your coin has covered <40 % of the expected reaction. | `src/lib/leadlag.ts` |
-| **Regime Compass** | Fuses ADX, short/long realized-vol ratio, 50-bar slope and (when live) funding, breadth and 5-min liquidation volume into one of five regimes with confidence + drivers, a rolling regime-history strip and one-click tool recommendations (e.g. liq-storm → Liq magnets + alerts). | `src/lib/regime.ts` |
-| **Clock Edge** | Splits your loaded candles by UTC hour and weekday, computes win-rate + mean forward return per slot with a t-statistic gate (n ≥ 30, |t| ≥ 2) and highlights the current hour/weekday — your personal seasonality, never a sold indicator. | `src/lib/seasonality.ts` |
+| **Liq Radar** | Estimates hypothetical liquidation-price bands from recent loaded candles and volume for configured leverage settings. The bands are a model, not reported exchange positions or verified liquidation levels. | `src/lib/liqradar.ts`, `LiqMagnetPrimitive` in `primitives.ts` |
+| **Lag Oracle** | Compares a chart with an available leader feed to calculate sample lag, correlation, beta, and threshold events. The pulse is a heuristic based on past candle relationships, not a forecast of a follower's price. | `src/lib/leadlag.ts` |
+| **Regime Compass** | Combines candle-derived indicators and available provider metrics into one of five heuristic regimes with drivers, a history strip, and tool suggestions. Scores are not probabilities or safety assessments. | `src/lib/regime.ts` |
+| **Clock Edge** | Groups loaded candles by UTC hour and weekday and summarizes historical returns with configured sample-size/statistic filters. Historical patterns can be noisy and do not predict future performance. | `src/lib/seasonality.ts` |
 
 All four live behind the neon **Edge** dropdown in the toolbar row
 (`ToolMenu id="edge"`), are documented in the help center (category
@@ -787,61 +757,36 @@ All four live behind the neon **Edge** dropdown in the toolbar row
   Coinbase/KuCoin/CoinEx), REST seeds for all of them, 33-chain DEX registry, honeypot.is as a second
   audit opinion, region-aware venue ranking + live latency probe + `<ExchangePicker/>`,
   `useExchangeStore` / `useExchangeSelection`, `proxy.ts` country cookie, 96 smoke assertions.
-* **Wave 3 ✅ shipped (TV-premium killer)** – bar replay with live indicator
-  recomputation, strategy-lab backtester, 2 000-pair screener with ad-hoc
-  charts, unlimited live watchlist, risk calculator, CSV export, log/% axes,
-  bar-close countdown, baseline charts; plus the survival UX (tip-jar modal,
-  rotating nudges, session milestones, premium-celebration ribbon, SUPPORTER
-  badge) and the landing survival section – see §9 and `src/components/support/`.
-* **Wave 4 ✅ shipped (TV-ultimate killer)** – exotic chart types (Renko,
-  Three-Line-Break, Kagi, Point & Figure) on every timeframe, auto chart-pattern
-  scanner with on-chart markers + confidence list (TV: Ultimate $239.95),
-  six-timeframe technical-ratings matrix with gauge, market heatmap treemap
-  (click-to-load), bar magnifier over the raw trade tape (taker delta + whale
-  prints), unlimited persisted multi-condition alerts with browser
-  notifications + beep, trade journal with stats & CSV (TV has none), custom
-  N-minute intervals (TV: Essential+), regional source fallbacks (Gate→OKX) and
-  the usage-based tip nudge after six tools per session – see §9, §11 and
-  `src/components/tools/`.
-* **Wave 5 ✅ shipped (scripting & docs)** – TradingView-style canvas watermark
-  showing exactly `www.NodeChart.cc` (centred, auto-fitted, collision-free,
-  `data-watermark` for tests), the **Script Lab**: write per-candle indicator
-  formulas, test them live, import via https raw URLs (GitHub blob/gist links
-  auto-rewritten), save locally and plot them as CUSTOM line or price overlay –
-  Pine without the paywall; and the help center now documents **every one of
-  the 34 indicators, all 42 market metrics and the lab itself in all five
-  languages** (searchable + category-filterable, generated from the i18n
-  bundles so nothing can drift) – see §7.1, §9 and `src/lib/scripts.ts`,
-  `src/components/tools/ScriptLabModal.tsx`, `src/components/help/`.
-* **Wave 7 ✅ shipped (Edge Suite)** – four in-house signal engines that turn
-  your own candles into edges classic charting does not sell at any tier:
-  **Liq Radar** (liquidation-magnet bands on the canvas, 10x–100x projection
-  with recency-decayed volume mass), **Lag Oracle** (leader/follower lag,
-  beta + live "jump only partly followed" pulse), **Regime Compass**
-  (five market regimes with confidence, drivers, history strip + one-click
-  tool recommendations) and **Clock Edge** (t-gated hour/weekday seasonality
-  heatmaps). Toolbar `Edge` menu, help center category, 41 offline smoke
-  checks and full ×5-locale copy – see §14.
-* **Wave 6 ✅ shipped (clarity + search dominance)** – the terminal toolbar is
-  grouped into three accessible dropdown menus (`ToolMenu`: Analyse · Tools ·
-  Mehr, `role="menu"` + `aria-pressed` toggles, Escape/outside-click close,
-  neon engaged-state on the trigger) so ~26 chips became ~12 calm controls;
-  and a systematic SEO programme: JSON-LD graph (Organization, WebSite,
-  SoftwareApplication on the landing, FAQPage + DefinedTermSet glossary +
-  BreadcrumbList on help/legal), keyword-rich FAQ in the help centre
-  (zero-JS `<details>`, ×5 locales), og:locale alternates, trimmed meta
-  descriptions, visual breadcrumbs, `llms.txt` for AI answer engines – audited
-  by `scripts/seo-audit.mjs` (90 checks across 5 locales × 4 routes) and
-  `scripts/seo-check.mjs` (Deploy-Gate) – see §13.
-* **Part 4 ✅ shipped (chart engine)** — `lightweight-charts` canvas terminal with uncroppable
-  watermark, unlimited editable indicators (technicalindicators) incl. oscillator panes, 1x1/2x1/2x2
+* **Wave 3 ✅ shipped** – bar replay, a strategy-lab simulation, a provider-fed screener (up to
+  150 rows shown), watchlist, risk calculator, CSV export, log/% axes, and bar-close countdown;
+  plus support prompts and a cosmetic self-reported badge – see §9 and `src/components/support/`.
+* **Wave 4 ✅ shipped** – additional chart types, heuristic pattern markers, a multi-timeframe
+  technical summary, a market heatmap, trade-tape view where provider history is available,
+  browser-side alerts, a local trade journal, custom intervals, regional source fallbacks, and
+  support prompts – see §9, §11 and `src/components/tools/`.
+* **Wave 5 ✅ shipped (scripting & docs)** – canvas-integrated `www.NodeChart.cc` watermark
+  (`data-watermark` is a test hook, not DRM), the **Script Lab** for per-candle formulas, HTTPS
+  raw imports where browser CORS permits, local storage, and CUSTOM overlays; plus localized Help
+  entries for the configured indicator and market-metric set, plus the lab – see §7.1, §9 and
+  `src/lib/scripts.ts`, `src/components/tools/ScriptLabModal.tsx`, `src/components/help/`.
+* **Wave 7 ✅ shipped (Edge Suite)** – four in-house heuristic research views from loaded candles
+  and available provider data: **Liq Radar** (modelled liquidation-price bands, not exchange
+  positions), **Lag Oracle** (sampled leader/follower statistics), **Regime Compass** (rule-based
+  market labels and tool suggestions), and **Clock Edge** (historical hour/weekday summaries).
+  Outputs are not forecasts or guarantees; see §14.
+* **Wave 6 ✅ shipped (navigation and metadata)** – the terminal toolbar uses accessible dropdown
+  menus (`ToolMenu`, `role="menu"`, keyboard dismissal, and pressed states) and the site includes
+  localized metadata, JSON-LD, Help content, breadcrumbs, and `llms.txt`. QA scripts cover these
+  structures; they do not guarantee indexing, rankings, rich results, or citations – see §13.
+* **Part 4 ✅ shipped (chart engine)** — `lightweight-charts` canvas terminal with a chart watermark,
+  editable indicators (technicalindicators) including oscillator panes, 1x1/2x1/2x2
   grid with zoom/crosshair/timeframe sync, data-space drawing tools with persistence, mobile
   force-enable gate, CORS-aware browser seeding; browser-verified via Puppeteer (§7).
-* **Monetization ✅ shipped** — Adsterra AdManager (native/social bar/popunder, hydration-safe,
-  env-gated), ad-block soft-wall + donation wallets, share-to-unlock premium themes,
-  OG edge card (§10).
-* **Part 5 (next)** — order book + depth ladder, optional KV-backed watchlist sync (free tier),
-  price alerts via service worker, Satori-PNG upgrade for `/api/og`.
+* **Monetization ✅ shipped** — third-party Adsterra ad placements and sponsored links, an
+  ad-block prompt, donation wallets, composer-triggered theme unlocks, and the share card (§11).
+  Bundled ad defaults and external-provider behavior are described above.
+* **Part 5 (planned)** — order book + depth ladder, optional KV-backed watchlist sync (subject to
+  platform availability and plan limits), and other research features.
 
 ---
 

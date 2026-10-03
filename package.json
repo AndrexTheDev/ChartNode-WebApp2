@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "UNLICENSED",
-  "description": "NodeChart – Decode the Market. Free, Fast, Decentralized. A 100% free, client-side TradingView alternative for CEX & DEX.",
+  "description": "NodeChart – browser-based crypto charts and research tools for selected CEX and DEX markets. Coverage depends on providers; ads and selected verified-support features apply.",
   "author": "AndrexTheDev <hippie.highho@gmail.com>",
   "engines": {
     "node": ">=20.9.0"
@@ -19,8 +19,14 @@
   ],
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
+    "dev:visual": "next dev --webpack -H 0.0.0.0 -p 4173",
+    "predev": "npm run build:nodecluster",
+    "prebuild": "npm run build:nodecluster",
+    "prestart": "npm run build:nodecluster",
     "build": "next build --webpack",
     "start": "next start -H 0.0.0.0 -p 3000",
+    "build:nodecluster": "node scripts/build-nodecluster.mjs",
+    "test:visual": "npm run build:nodecluster && playwright test --config=playwright.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "cf:build": "opennextjs-cloudflare build",
@@ -31,7 +37,10 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "api:smoke": "node scripts/run-harness.mjs api-smoke.entry.ts",
     "chart:smoke": "node scripts/run-harness.mjs chart-smoke.entry.ts",
-    "smoke": "npm run ws:smoke && npm run api:smoke && npm run chart:smoke && npm run edge:smoke && npm run smoke:modules",
+    "nodecluster:smoke": "node scripts/nodecluster-smoke.mjs",
+    "market-signals:smoke": "node scripts/run-harness.mjs market-signals-smoke.entry.ts",
+    "proxy:smoke": "node scripts/run-harness.mjs proxy-smoke.entry.ts",
+    "smoke": "npm run ws:smoke && npm run api:smoke && npm run chart:smoke && npm run nodecluster:smoke && npm run market-signals:smoke && npm run proxy:smoke && npm run edge:smoke && npm run smoke:modules",
     "smoke:modules": "node scripts/run-harness.mjs modules-smoke.entry.ts",
     "beta": "node scripts/beta-test.mjs",
     "edge:smoke": "node scripts/run-harness.mjs edge-smoke.entry.ts",
@@ -60,7 +69,7 @@
     "clsx": "2.1.1",
     "lightweight-charts": "^5.2.1",
     "lucide-react": "1.43.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "next-intl": "4.14.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -69,18 +78,24 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@fontsource/exo-2": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/manrope": "5.3.0",
+    "@fontsource/orbitron": "5.3.0",
     "@opennextjs/cloudflare": "1.20.6",
+    "@playwright/test": "^1.63.0",
     "@types/node": "22.20.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "autoprefixer": "10.5.5",
+    "esbuild": "^0.25.12",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.8",
     "postcss": "8.5.28",
-    "puppeteer": "^24.43.1",
+    "puppeteer": "25.12.0",
     "tailwindcss": "3.4.19",
     "tailwindcss-animate": "1.0.7",
     "typescript": "5.9.3",
-    "wrangler": "4.130.0"
+    "wrangler": "4.147.0"
   }
 }

@@ -1,7 +1,6 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 'use client';
 
-import { timeoutSignal } from '@/lib/abort';
 import type { Timeframe } from '@/store/types';
 import { REACH_TTL_MS, SLOW_MS, useExchangeStore } from '@/store/useExchangeStore';
 import { ADAPTERS, EXCHANGE_PREFERENCE } from '@/websockets/registry';
@@ -17,7 +16,8 @@ export interface ProbeOutcome {
   note: string | null;
 }
 
-const PROBE_TIMEOUT_MS = 8_000;
+const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_RETRIES = 1;
 const CONCURRENCY = 4;
 
 /**
@@ -74,34 +74,43 @@ async function probeSocketOf(exchange: ExchangeId): Promise<ProbeOutcome> {
 }
 
 async function probeHttp(exchange: ExchangeId, url: string, signal?: AbortSignal): Promise<ProbeOutcome> {
-  const startedAt = performance.now();
-  try {
-    const response = await fetch(url, {
-      cache: 'no-store',
-      signal: signal ?? timeoutSignal(PROBE_TIMEOUT_MS),
-    });
-    const ms = Math.round(performance.now() - startedAt);
+  for (let attempt = 0; attempt <= PROBE_RETRIES; attempt += 1) {
+    if (signal?.aborted) return { exchange, status: 'error', ms: null, note: 'aborted' };
+    const startedAt = performance.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+    const forwardAbort = () => controller.abort();
+    signal?.addEventListener('abort', forwardAbort, { once: true });
 
-    if (response.ok) {
-      return { exchange, status: ms > SLOW_MS ? 'slow' : 'ok', ms, note: null };
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      const ms = Math.round(performance.now() - startedAt);
+      if (response.status >= 500 && response.status <= 599 && attempt < PROBE_RETRIES) {
+        await response.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      if (response.ok) return { exchange, status: ms > SLOW_MS ? 'slow' : 'ok', ms, note: null };
+      if (response.status === 401 || response.status === 403 || response.status === 451) {
+        return { exchange, status: 'blocked', ms, note: `HTTP ${response.status}` };
+      }
+      if (response.status === 429) return { exchange, status: 'slow', ms, note: 'HTTP 429' };
+      return { exchange, status: 'error', ms, note: `HTTP ${response.status}` };
+    } catch (error) {
+      if (signal?.aborted) return { exchange, status: 'error', ms: null, note: 'aborted' };
+      const timedOut = controller.signal.aborted || (error instanceof DOMException && error.name === 'TimeoutError');
+      if ((timedOut || error instanceof TypeError) && attempt < PROBE_RETRIES) continue;
+      return {
+        exchange,
+        status: 'error',
+        ms: null,
+        note: timedOut ? 'timeout' : error instanceof Error ? error.name : 'unreachable',
+      };
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', forwardAbort);
     }
-    if (response.status === 401 || response.status === 403 || response.status === 451) {
-      return { exchange, status: 'blocked', ms, note: `HTTP ${response.status}` };
-    }
-    if (response.status === 429) {
-      // Reachable, just busy – still usable.
-      return { exchange, status: 'slow', ms, note: 'HTTP 429' };
-    }
-    return { exchange, status: 'error', ms, note: `HTTP ${response.status}` };
-  } catch (error) {
-    const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
-    return {
-      exchange,
-      status: 'error',
-      ms: null,
-      note: timedOut ? 'timeout' : error instanceof Error ? error.name : 'unreachable',
-    };
   }
+  return { exchange, status: 'error', ms: null, note: 'unreachable' };
 }
 
 function probeSocket(exchange: ExchangeId, url: string): Promise<ProbeOutcome> {

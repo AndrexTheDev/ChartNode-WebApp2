@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { RefreshCw } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
-import { fetchRatingMatrix, type RatingScore } from '@/lib/ratings';
+import { fetchRatingMatrix, RATING_TIMEFRAMES, type RatingScore } from '@/lib/ratings';
 import type { ExchangeId } from '@/websockets/types';
 import { useViralStore } from '@/store/useViralStore';
 
@@ -26,21 +26,26 @@ const SUMMARY_STYLE: Record<string, string> = {
 };
 
 /**
- * Multi-timeframe technical ratings — six timeframes scored in parallel.
- * TradingView shows one gauge behind an ad break; this is a full matrix,
- * computed in the browser from live REST seeds.
+ * Displays available multi-timeframe ratings calculated from provider-seeded
+ * candle data. Readings are heuristic and may be absent when data is missing.
  */
 export function RatingsModal({ exchange, symbol, open, onClose }: RatingsModalProps) {
   const t = useTranslations('tools');
   const [rows, setRows] = useState<RatingScore[] | null>(null);
   const [error, setError] = useState(false);
+  const [noData, setNoData] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
     setError(false);
+    setNoData(false);
+    setRows(null);
     fetchRatingMatrix(exchange, symbol)
-      .then((result) => setRows(result.length ? result : null))
+      .then((result) => {
+        setRows(result.length ? result : null);
+        setNoData(result.length === 0);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   };
@@ -89,6 +94,12 @@ export function RatingsModal({ exchange, symbol, open, onClose }: RatingsModalPr
 
         {error && <p className="font-mono text-2xs text-bear">{t('ratings.err')}</p>}
         {!error && !rows && loading && <p className="font-mono text-2xs text-faint">{t('ratings.loading')}</p>}
+        {!error && noData && !loading && <p className="font-mono text-2xs text-faint">{t('ratings.noData')}</p>}
+        {rows && rows.length < RATING_TIMEFRAMES.length && (
+          <p className="font-mono text-2xs text-warning">
+            {t('ratings.partialData', { available: rows.length, total: RATING_TIMEFRAMES.length })}
+          </p>
+        )}
 
         {rows && (
           <table className="w-full border-collapse font-mono text-2xs">

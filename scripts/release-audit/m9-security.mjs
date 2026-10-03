@@ -99,7 +99,9 @@ export async function run() {
   }
 
   /* S7 · Invalid Locale + unbekannter Token */
-  const r404 = await fetch(BASE + '/xx/terminal');
+  // Inspect the redirect itself rather than Node fetch's default auto-follow,
+  // otherwise a safe 307 to the default locale would appear as a 200 page.
+  const r404 = await fetch(BASE + '/xx/terminal', { redirect: 'manual' });
   check('Invalid Locale /xx: 404 oder Redirect (nie 5xx)', r404.status === 404 || (r404.status >= 300 && r404.status < 400), 'status=' + r404.status);
   {
     const p = await newPage(browser);

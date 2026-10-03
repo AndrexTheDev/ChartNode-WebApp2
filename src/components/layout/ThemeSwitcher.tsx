@@ -34,7 +34,7 @@ export function ThemeSwitcher() {
 
   const items: DropdownItem[] = ALL_THEMES.map((id) => {
     const Icon = ICONS[id];
-    // Share-to-unlock: locked premium skins open the share modal instead.
+    // Locked share-gated themes open the composer prompt instead.
     const locked = isPremiumTheme(id) && !unlocked;
     return {
       id,
