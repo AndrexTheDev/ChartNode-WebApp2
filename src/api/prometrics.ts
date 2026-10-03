@@ -2,9 +2,9 @@
 'use client';
 
 /**
- * PRO metrics – derivatives, order flow, global market, heatmap and options
- * intelligence from free, keyless, CORS-enabled sources. These are the numbers
- * paid terminals sell; every endpoint here was live-verified first.
+ * Additional market metrics – derivatives, order flow, global market, heatmap
+ * and options data from selected external providers. Coverage, access, freshness
+ * and endpoint behavior vary; live checks are point-in-time observations.
  *
  *   - api.gateio.ws        → funding, mark/index premium, long-short ratios,
  *                           liquidations per interval, open interest, order book
@@ -14,8 +14,9 @@
  *   - www.deribit.com      → DVOL implied-vol index, put/call open interest,
  *                           max pain from the full options chain
  *
- * All parsers are defensive (malformed payload → null, never a throw) and all
- * requests inherit timeout + 4 MiB cap + 429 cooldown from `fetchJson`.
+ * Parsers handle malformed payloads where possible, and requests use the
+ * timeout, response-size cap and rate-limit handling in `fetchJson`. Upstream
+ * errors can still occur and are handled by the calling UI.
  */
 
 import { fetchJson } from './http';

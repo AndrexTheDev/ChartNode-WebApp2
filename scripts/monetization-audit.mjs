@@ -14,7 +14,7 @@
  *      kein kritisches Rect unter ihnen liegen (Reserve-Paddings wirken).
  *  · TRANSIENTE Overlays (Offer-/Nudge-Toasts, <10 s, dismissbar) dürfen
  *    während ihrer Anzeige keine BUTTONS/LINKS/CTAs überdecken; die Chart-
- *    Fläche dürfen sie kurz streifen (Standard-Toast-UX, TradingView gleich).
+ *    Fläche dürfen sie kurz streifen, solange keine Aktion verdeckt wird.
  *  · Modals sind exklusiv (Backdrop) – dort gilt: eigene Controls klickbar,
  *    Panel im Viewport, fremde Ad-Overlays pausieren (body.nc-modal-open).
  *

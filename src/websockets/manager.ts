@@ -475,7 +475,7 @@ class ExchangeConnection {
 /**
  * App-wide singleton. Mount <MarketDataProvider/> once and call ensure/release
  * from effects – the manager owns sockets, backoff, seeding, candle derivation
- * and whale routing across all twelve venues.
+ * and whale routing across configured venue adapters.
  */
 class CexSocketManager {
   private readonly connections = new Map<ExchangeId, ExchangeConnection>();

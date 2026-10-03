@@ -14,10 +14,9 @@ import { selectActiveToken, useAppStore } from '@/store/useAppStore';
 import type { Token } from '@/store/types';
 
 /**
- * Market screener over every quoted Gate USDT pair (~2 000 rows) – sortable,
- * filterable, searchable, CSV-exportable, and every row opens a real chart
- * (ad-hoc symbols included). TradingView meter-gates refresh and export;
- * NodeChart does neither.
+ * Market screener built from the provider rows returned for the selected
+ * quote-currency dataset. Results can be incomplete or unavailable; sorting,
+ * filtering and CSV export operate on the rows currently loaded in the browser.
  */
 
 type SortKey = 'quoteVolumeUsd' | 'changePct' | 'rangePos' | 'last';

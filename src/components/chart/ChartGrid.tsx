@@ -25,6 +25,9 @@ import { CHART_LAYOUTS } from '@/store/presets';
 import { selectActiveToken, selectChartType, selectLayout, selectPanes, selectTimeframe, useAppStore } from '@/store/useAppStore';
 import { selectDexQuote, useMarketStore } from '@/store/useMarketStore';
 import { fetchDexCandles } from '@/api/geckoterminal';
+import { fetchProtocolTvl, type ProtocolTvl } from '@/api/market-signals';
+import { selectExtremeWhaleTrades, useWhaleStore } from '@/store/useWhaleStore';
+import { selectProUnlocked, useProAccessStore } from '@/store/useProAccessStore';
 import { downloadCsv } from '@/lib/export';
 import { CHAIN_LABEL, type ChainId } from '@/lib/chains';
 import { EXCHANGE_META } from '@/lib/exchanges';
@@ -171,6 +174,40 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
   const hasData = candles.length > 1;
   const isDexQuote = !isCex && dexQuote?.tokenId === token.id;
   const status = feed?.status ?? (isDexQuote ? 'open' : 'idle');
+  const proUnlocked = useProAccessStore(selectProUnlocked);
+  const extremeWhales = useWhaleStore(selectExtremeWhaleTrades);
+  const selectedExchange = selection?.exchange;
+  const whaleTrades = useMemo(() => {
+    if (!proUnlocked || !isCex || !selectedExchange) return [];
+    return extremeWhales
+      .filter((trade) => trade.symbol === token.symbol && trade.exchange === selectedExchange && trade.notional > 500_000)
+      .slice(0, 48)
+      .map(({ ts, price, notional, side }) => ({ ts, price, notional, side }));
+  }, [proUnlocked, isCex, selectedExchange, token.symbol, extremeWhales]);
+  const protocolTvlKey = proUnlocked && token.venue === 'DEX' && token.contract
+    ? `${token.id}:${token.chain ?? ''}:${token.contract}`
+    : '';
+  const [protocolTvlResult, setProtocolTvlResult] = useState<{ key: string; value: ProtocolTvl | null } | null>(null);
+  const protocolTvl = protocolTvlKey && protocolTvlResult?.key === protocolTvlKey ? protocolTvlResult.value : null;
+
+  useEffect(() => {
+    if (!protocolTvlKey) return;
+    let alive = true;
+    const controller = new AbortController();
+    const refresh = () => {
+      void fetchProtocolTvl(token.base, controller.signal)
+        .then((result) => { if (alive) setProtocolTvlResult({ key: protocolTvlKey, value: result }); })
+        .catch(() => { if (alive) setProtocolTvlResult({ key: protocolTvlKey, value: null }); });
+    };
+    const initialFetch = window.setTimeout(refresh, 0);
+    const interval = window.setInterval(refresh, 30 * 60_000);
+    return () => {
+      alive = false;
+      controller.abort();
+      window.clearTimeout(initialFetch);
+      window.clearInterval(interval);
+    };
+  }, [protocolTvlKey, token.base]);
 
   // DEX tokens: pull real OHLCV history (and refresh it) from GeckoTerminal.
   // Public rate limits on shared IPs can bite – a failed load retries after
@@ -206,8 +243,7 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
 
   const ticker = `$${token.base}`;
   const venue = isCex ? (selection?.exchange ?? '—') : (dexQuote?.chain ?? token.chain ?? 'dex');
-  // Klartext-Name der Datenquelle: Händler müssen auf einen Blick sehen,
-  // welche Börse/Chain das Pane speist (TradingView-Standard: Exchange-Label)
+  // Show the venue or chain that currently supplies this pane's data.
   const dexChain = dexQuote?.chain ?? token.chain;
   const venueName = isCex
     ? (EXCHANGE_META[selection?.exchange ?? 'binance']?.name ?? venue)
@@ -360,6 +396,8 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
               status={status}
               compareCandles={isCex ? compareCandles : undefined}
               compareTicker={isCex && compareCandles && compareCandles.length > 1 ? compareToken?.base : undefined}
+              whaleTrades={whaleTrades}
+              tvl={protocolTvl}
             />
             </div>
           ) : (
@@ -487,8 +525,8 @@ function PanePlaceholder({
 /* --------------------------------- bar replay ------------------------------- */
 
 /**
- * Bar replay transport (TradingView gates intraday replay behind paid plans;
- * here every timeframe replays with all indicators recomputing live).
+ * Bar replay transport. Playback uses the currently loaded candles and
+ * recomputes chart indicators as the replay position advances.
  */
 function ReplayBar() {
   const t = useTranslations('chart');

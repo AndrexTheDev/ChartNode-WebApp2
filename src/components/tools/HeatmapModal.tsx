@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Modal } from '@/components/ui/Modal';
+import { fetchJson } from '@/api/http';
 /* M9: Nur Paare zeigen, die sich auch laden lassen. Vorher kam die Liste roh
    von der Börse (bis zu 64 Paare), `pickSymbol` konnte aber nur auflösen, was
    im CEX-Katalog steht – Kacheln außerhalb liefen ins Leere (CI-Befund
@@ -88,13 +89,13 @@ export function HeatmapModal({ open, onClose, onPick }: HeatmapModalProps) {
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    /* M8-Härtung: 12-s-Deckel wie im zentralen Fetch-Layer – sonst bleibt der
-       Dialog bei einer hängenden Verbindung dauerhaft im Ladezustand. */
-    const fromBinance = fetch('https://api.binance.com/api/v3/ticker/24hr', { signal: AbortSignal.timeout(12_000) }).then(
-      (response) => (response.ok ? response.json() : Promise.reject(new Error('http'))),
-    );
-    const fromOkx = fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT', { signal: AbortSignal.timeout(12_000) })
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('http'))))
+    const controller = new AbortController();
+    const fromBinance = fetchJson<unknown>('https://api.binance.com/api/v3/ticker/24hr', {
+      source: 'binance', cacheTtlMs: 0, signal: controller.signal,
+    });
+    const fromOkx = fetchJson<unknown>('https://www.okx.com/api/v5/market/tickers?instType=SPOT', {
+      source: 'okx', cacheTtlMs: 0, signal: controller.signal,
+    })
       /* M5-Fix: Der Fallback-Promise wird erst im catch() von Binance angehängt.
          Scheitern beide Börsen, meldete der Browser bis dahin eine unbehandelte
          Rejection („Failed to fetch" im Konsolen-Log). Jetzt sofort behandeln –
@@ -149,6 +150,7 @@ export function HeatmapModal({ open, onClose, onPick }: HeatmapModalProps) {
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
+      controller.abort();
     };
   }, [open]);
 

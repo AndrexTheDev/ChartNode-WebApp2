@@ -6,8 +6,8 @@
  *
  * What lives in here:
  *   • main series (candles / bars / line / area / Heikin-Ashi) + volume overlay
- *   • unlimited indicator series – overlays in pane 0, oscillators each in their
- *     own pane (`addSeries(def, opts, paneIndex)`), computed by `lib/indicators`
+ *   • indicator series – overlays in pane 0, oscillators each in their own pane
+ *     (`addSeries(def, opts, paneIndex)`), computed by `lib/indicators`
  *   • the NodeChart watermark (`www.NodeChart.cc`) painted into the canvas below
  *     the series, so it is part of `takeScreenshot()` and cannot be cropped
  *   • drawing tools + the mirrored crosshair, both as canvas primitives
@@ -50,7 +50,7 @@ import { readChartTheme, withAlpha, type ChartTheme } from '@/lib/chart-theme';
 import { crosshairBus, rangeBus, rangesEqual } from '@/lib/chart-sync';
 import { hitTestDrawings, type XY } from '@/lib/drawings';
 import { cn } from '@/lib/cn';
-import { minMoveFor, pricePrecision, safeLocale } from '@/lib/format';
+import { compactUsd, minMoveFor, pricePrecision, safeLocale } from '@/lib/format';
 import {
   INDICATOR_LIBRARY,
   SERIES_COLORS,
@@ -105,9 +105,12 @@ import {
   VolumeProfilePrimitive,
   LiqMagnetPrimitive,
   WatermarkPrimitive,
+  WhaleBubblePrimitive,
   type CrosshairSource,
   type DraftShape,
+  type WhaleBubbleTrade,
 } from './primitives';
+import type { ProtocolTvl } from '@/api/market-signals';
 import { anchoredVwap, divergences, supportResistance, volumeProfile } from '@/lib/premium';
 import { buildLiqMap } from '@/lib/liqradar';
 
@@ -146,6 +149,10 @@ export interface PriceChartProps {
   /** Optional compare overlay: normalized % line of another symbol. */
   compareCandles?: Candle[];
   compareTicker?: string;
+  /** Verified-Pro overlays only: fresh >$500k prints for this exact CEX pair. */
+  whaleTrades?: WhaleBubbleTrade[];
+  /** Verified-Pro DeFiLlama protocol TVL strip shown below supported DEX token charts. */
+  tvl?: ProtocolTvl | null;
   ref?: React.Ref<PriceChartHandle>;
 }
 
@@ -249,6 +256,8 @@ export function PriceChart({
   status,
   compareCandles,
   compareTicker,
+  whaleTrades,
+  tvl,
   ref,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -270,6 +279,8 @@ export function PriceChart({
   const watermarkPrimRef = useRef<WatermarkPrimitive | null>(null);
   const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
   const liqPrimRef = useRef<LiqMagnetPrimitive | null>(null);
+  const whaleBubblePrimRef = useRef<WhaleBubblePrimitive | null>(null);
+  const tvlCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const avwapRef = useRef<AnySeries | null>(null);
   const compareRef = useRef<AnySeries | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
@@ -380,7 +391,7 @@ export function PriceChart({
   const lastCandle = candles[candles.length - 1] ?? null;
   const shown = hover ?? lastCandle;
 
-  // TradingView-style countdown to the bar close (basic there, polished here).
+  // Countdown based on the selected interval and latest candle timestamp.
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 1000);
@@ -489,7 +500,7 @@ export function PriceChart({
     main.attachPrimitive(crosshairPrim);
     crosshairPrimRef.current = crosshairPrim;
 
-    // Volume Profile Visible Range – premium analytics, painted in-canvas.
+    // Volume Profile Visible Range – locally computed analytics, painted in-canvas.
     const vpPrim = new VolumeProfilePrimitive();
     main.attachPrimitive(vpPrim);
     vpPrimRef.current = vpPrim;
@@ -498,6 +509,10 @@ export function PriceChart({
     const liqPrim = new LiqMagnetPrimitive();
     main.attachPrimitive(liqPrim);
     liqPrimRef.current = liqPrim;
+
+    const whaleBubbles = new WhaleBubblePrimitive();
+    main.attachPrimitive(whaleBubbles);
+    whaleBubblePrimRef.current = whaleBubbles;
 
     /* --------------------------------- syncing ------------------------------- */
     const timeScale = chart.timeScale();
@@ -571,6 +586,8 @@ export function PriceChart({
       watermarkPrimRef.current = null;
       vpPrimRef.current = null;
       liqPrimRef.current = null;
+      whaleBubblePrimRef.current = null;
+      tvlCanvasRef.current = null;
       avwapRef.current = null;
       compareRef.current = null;
       markersRef.current = null;
@@ -1064,12 +1081,18 @@ export function PriceChart({
     );
   }, [compareTicker, compareCandles, chartId]);
 
+  /* -------------------------- >$500k whale bubbles -------------------------- */
+
+  useEffect(() => {
+    whaleBubblePrimRef.current?.setTrades(whaleTrades ?? []);
+  }, [whaleTrades, chartId]);
+
   /* -------------------------------- watermark ------------------------------- */
 
   useEffect(() => {
     watermarkPrimRef.current?.setSource({
-      // TradingView-style centre mark – the URL only, fitted to the pane so
-      // it never overlaps the legend, axes or pane chrome.
+      // Centre mark – the URL only, fitted to the pane to avoid the legend,
+      // axes and pane chrome.
       ticker: 'www.NodeChart.cc',
       caption: '',
       primary: chartTheme.primary,
@@ -1257,6 +1280,83 @@ export function PriceChart({
     return () => window.removeEventListener('keydown', onKey);
   }, [lockChart, setTool]);
 
+  /* ----------------------- protocol TVL mini-chart ------------------------- */
+
+  useEffect(() => {
+    const canvas = tvlCanvasRef.current;
+    if (!canvas || tvl?.status !== 'ok' || tvl.points.length < 2) return;
+
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2.5);
+      const width = Math.max(1, Math.round(rect.width * ratio));
+      const height = Math.max(1, Math.round(rect.height * ratio));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, rect.width, rect.height);
+      context.fillStyle = chartTheme.bg;
+      context.fillRect(0, 0, rect.width, rect.height);
+
+      const values = tvl.points.map((point) => point.value).filter((value) => Number.isFinite(value) && value >= 0);
+      if (values.length < 2) return;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = Math.max(1, max - min);
+      const left = 112;
+      const right = Math.max(left + 20, rect.width - 80);
+      const top = 13;
+      const bottom = rect.height - 4;
+      const points = tvl.points.map((point, index) => ({
+        x: left + (right - left) * index / Math.max(1, tvl.points.length - 1),
+        y: bottom - ((point.value - min) / range) * (bottom - top),
+      }));
+      const accent = chartTheme.accent;
+      context.save();
+      context.strokeStyle = withAlpha(chartTheme.grid, 0.4);
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(left, bottom + 0.5);
+      context.lineTo(right, bottom + 0.5);
+      context.stroke();
+      const fill = context.createLinearGradient(0, top, 0, bottom);
+      fill.addColorStop(0, withAlpha(accent, 0.2));
+      fill.addColorStop(1, withAlpha(accent, 0));
+      context.beginPath();
+      context.moveTo(points[0]!.x, bottom);
+      for (const point of points) context.lineTo(point.x, point.y);
+      context.lineTo(points[points.length - 1]!.x, bottom);
+      context.closePath();
+      context.fillStyle = fill;
+      context.fill();
+      context.beginPath();
+      points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+      context.strokeStyle = accent;
+      context.lineWidth = 1.5;
+      context.shadowColor = accent;
+      context.shadowBlur = 4;
+      context.stroke();
+      context.shadowBlur = 0;
+      context.font = '600 8px ui-monospace, SFMono-Regular, Menlo, monospace';
+      context.textBaseline = 'middle';
+      context.textAlign = 'left';
+      context.fillStyle = chartTheme.muted;
+      context.fillText(`TVL · ${(tvl.protocolName ?? symbol).toUpperCase()}`, 8, 11, left - 12);
+      context.textAlign = 'right';
+      context.fillStyle = chartTheme.text;
+      context.fillText(compactUsd(tvl.points.at(-1)?.value ?? null), rect.width - 8, 11);
+      context.restore();
+    };
+
+    draw();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(draw) : null;
+    observer?.observe(canvas);
+    return () => observer?.disconnect();
+  }, [tvl, chartTheme, symbol]);
+
   /* -------------------------------- handle --------------------------------- */
 
   useImperativeHandle(
@@ -1266,7 +1366,18 @@ export function PriceChart({
         const chart = chartRef.current;
         if (!chart) return null;
         try {
-          return chart.takeScreenshot(true, true).toDataURL('image/png');
+          const chartCanvas = chart.takeScreenshot(true, true);
+          const tvlCanvas = tvlCanvasRef.current;
+          if (!tvlCanvas || tvlCanvas.width <= 0 || tvlCanvas.height <= 0) return chartCanvas.toDataURL('image/png');
+          const output = document.createElement('canvas');
+          const tvlHeight = Math.round(tvlCanvas.height * chartCanvas.width / Math.max(1, tvlCanvas.width));
+          output.width = chartCanvas.width;
+          output.height = chartCanvas.height + tvlHeight;
+          const context = output.getContext('2d');
+          if (!context) return chartCanvas.toDataURL('image/png');
+          context.drawImage(chartCanvas, 0, 0);
+          context.drawImage(tvlCanvas, 0, chartCanvas.height, output.width, tvlHeight);
+          return output.toDataURL('image/png');
         } catch {
           return null;
         }
@@ -1288,13 +1399,24 @@ export function PriceChart({
     >
       <div
         ref={containerRef}
-        className={cn('h-full w-full', drawingActive && 'cursor-crosshair')}
+        className={cn('absolute inset-x-0 top-0', tvl?.status === 'ok' && 'bottom-10', tvl?.status !== 'ok' && 'bottom-0', drawingActive && 'cursor-crosshair')}
         style={{ touchAction: drawingActive ? 'none' : 'pan-y' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
+      {tvl?.status === 'ok' && (
+        <div className="absolute inset-x-0 bottom-0 h-10 border-t border-line/60 bg-bg/90" data-tvl-strip="">
+          <canvas
+            ref={tvlCanvasRef}
+            className="block h-full w-full"
+            role="img"
+            aria-label={`DeFiLlama protocol TVL history for ${tvl.protocolName ?? symbol}`}
+            data-testid="protocol-tvl-strip"
+          />
+        </div>
+      )}
 
       {/* legend – DOM on purpose: selectable, translatable, screen-reader friendly */}
       <div data-nc-legend="" className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-micro-10 leading-tight">
@@ -1326,7 +1448,7 @@ export function PriceChart({
       </div>
 
       {status !== 'open' && (
-        <div className="pointer-events-none absolute bottom-1.5 left-2 z-10 font-mono text-micro-10 uppercase tracking-cyber text-faint">
+        <div className={cn('pointer-events-none absolute bottom-1.5 left-2 z-10 font-mono text-micro-10 uppercase tracking-cyber text-faint', tvl?.status === 'ok' && 'bottom-11')}>
           {status}
         </div>
       )}

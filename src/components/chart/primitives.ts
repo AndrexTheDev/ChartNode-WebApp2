@@ -403,6 +403,112 @@ export interface WatermarkSource {
   alpha: number;
 }
 
+export interface WhaleBubbleTrade {
+  ts: number;
+  price: number;
+  notional: number;
+  side: 'buy' | 'sell';
+}
+
+/** Animated, screenshot-safe bubbles for strict >$500k prints on the active pair. */
+export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
+  private chart: IChartApi | null = null;
+  private series: ISeriesApi<SeriesType, Time> | null = null;
+  private notify: () => void = () => {};
+  private rafId: number | null = null;
+  private trades: WhaleBubbleTrade[] = [];
+  private readonly lifetimeMs = 8_000;
+  private view: IPrimitivePaneView = {
+    zOrder: () => 'top' as PrimitivePaneViewZOrder,
+    renderer: () => ({ draw: (target: CanvasRenderingTarget2D) => this.paint(target) }),
+  };
+  private views: readonly IPrimitivePaneView[] = [this.view];
+
+  attached(param: SeriesAttachedParameter<Time, SeriesType>): void {
+    this.chart = param.chart;
+    this.series = param.series;
+    this.notify = param.requestUpdate;
+  }
+
+  detached(): void {
+    this.chart = null;
+    this.series = null;
+    this.notify = () => {};
+    if (this.rafId !== null) window.cancelAnimationFrame(this.rafId);
+    this.rafId = null;
+  }
+
+  paneViews(): readonly IPrimitivePaneView[] {
+    return this.views;
+  }
+
+  setTrades(trades: WhaleBubbleTrade[]): void {
+    this.trades = trades.filter((trade) => Number.isFinite(trade.ts)
+      && Number.isFinite(trade.price) && trade.price > 0
+      && Number.isFinite(trade.notional) && trade.notional > 500_000);
+    this.animate();
+  }
+
+  private animate = (): void => {
+    this.notify();
+    if (this.rafId !== null) return;
+    if (!this.trades.some((trade) => Date.now() - trade.ts < this.lifetimeMs)) return;
+    this.rafId = window.requestAnimationFrame(() => {
+      this.rafId = null;
+      this.animate();
+    });
+  };
+
+  private paint(target: CanvasRenderingTarget2D): void {
+    if (!this.chart || !this.series || this.trades.length === 0) return;
+    const now = Date.now();
+    const visible = this.trades.filter((trade) => now >= trade.ts && now - trade.ts < this.lifetimeMs);
+    if (visible.length === 0) return;
+
+    target.useMediaCoordinateSpace((scope) => {
+      const ctx = scope.context;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '600 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+      for (const trade of visible) {
+        const x = num(this.chart?.timeScale().timeToCoordinate(Math.floor(trade.ts / 1000) as Time));
+        const y = num(this.series?.priceToCoordinate(trade.price));
+        if (x === null || y === null) continue;
+
+        const age = now - trade.ts;
+        const fade = Math.max(0, 1 - age / this.lifetimeMs);
+        const pulse = 0.82 + (Math.sin(now * 0.006 + trade.ts) + 1) * 0.09;
+        const radius = Math.max(7, Math.min(18, 8 + Math.log10(trade.notional / 500_000) * 4));
+        const color = trade.side === 'buy' ? '#39FF14' : '#FF4D78';
+        ctx.globalAlpha = fade * pulse;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12 + radius * 0.6;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * (0.92 + pulse * 0.08), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = fade * 0.92;
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.arc(x, y, radius + 3 + (1 - fade) * 5, 0, Math.PI * 2);
+        ctx.stroke();
+        if (radius >= 11) {
+          const label = trade.notional >= 1_000_000
+            ? `$${(trade.notional / 1_000_000).toFixed(1)}M`
+            : `$${Math.round(trade.notional / 1_000)}K`;
+          ctx.globalAlpha = fade;
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillText(label, x, y - radius - 12);
+        }
+      }
+      ctx.restore();
+    });
+  }
+}
+
 const WATERMARK_DEFAULTS: WatermarkSource = {
   ticker: '',
   caption: 'NODECHART',
@@ -460,7 +566,7 @@ export class WatermarkPrimitive implements ISeriesPrimitive<Time> {
       // Tiny pane (mobile split): skip the mark instead of colliding.
       if (width < 120 || height < 48) return;
 
-      // TradingView-style: one quiet centred line, shrunk to fit inside 72%
+      // One quiet centred line, shrunk to fit inside 72%
       // of the pane width so it never touches axes, legend or pane borders,
       // and vertically centred in the free area behind the series.
       const maxWidth = width * 0.72;
@@ -497,7 +603,7 @@ export interface VolumeProfileSource {
 }
 
 /**
- * Volume Profile Visible Range – the paywalled classic.
+ * Volume Profile Visible Range primitive.
  *
  * Horizontal volume bars anchored to the right pane edge (like the real VPVR),
  * drawn *inside* the canvas so screenshots keep them. Bars inside the 70 %

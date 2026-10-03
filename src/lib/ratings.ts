@@ -1,8 +1,8 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Wave-4 multi-timeframe technical ratings. TradingView shows a single
- * "Technicals" gauge; NodeChart scores every timeframe at once (5m → 1w)
- * from live REST seeds — no account, no paywall, no ad break.
+ * Multi-timeframe technical ratings derived from available REST-seeded candles
+ * (5m–1w). The scores are heuristic summaries, not forecasts; missing or
+ * incomplete provider data can leave some readings unavailable.
  */
 import type { Candle } from '@/websockets/types';
 import type { ExchangeId } from '@/websockets/types';

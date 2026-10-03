@@ -1,8 +1,8 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
 // MODUL 8 — AD-UNITS TIEFENPRÜFUNG: Native Banner 4:1 (Header-Zone, alle
 // Seiten außer Terminal) + Smartlinks (Kit, Badges, echte Anker, Toasts,
-// Cap 3/h, kein Click-Hijacking). Fill-Pfade per Request-Interception,
-// No-Fill/Kollaps im Sandbox-Netz, CLS-Messung, Overlap-Rects, Console-Scan.
+// Cap 3/h, kein Click-Hijacking). Fill- und No-Fill-Pfade per
+// Request-Interception, stabile Reserve/CLS, Overlap-Rects, Console-Scan.
 import { BASE, LOCALES, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait, withFixtures } from './lib.mjs';
 
 export const META = { id: 'M8', name: 'Native Banner + Smartlinks (Tiefe)' };
@@ -19,6 +19,7 @@ const NB_FILL_BUILD = Boolean(
   process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_DESKTOP || process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE,
 );
 const NB_CONTAINER = '#container-2cedab945cb896ea179b566a413d953b';
+const NB_LOADER_FRAGMENT = '2cedab945cb896ea179b566a413d953b/invoke.js';
 const SL_KEY_FRAG = 'ufhc3mt24s'; // fester Smartlink-Pfad aus config/Kit-Default
 
 const nbState = (page) =>
@@ -27,14 +28,32 @@ const nbState = (page) =>
     const r = c ? c.getBoundingClientRect() : null;
     const header = document.querySelector('header')?.getBoundingClientRect();
     const main = document.querySelector('main')?.getBoundingClientRect();
+    const fallback = c?.querySelector('[data-ad-fallback]') ?? null;
     return {
       present: !!c,
-      filled: (c?.childElementCount || 0) > 0,
+      filled: (c?.childElementCount || 0) > 0 && !fallback,
+      fallback: !!fallback,
+      fallbackText: fallback?.textContent?.trim() ?? '',
       h: r ? Math.round(r.height) : 0,
       betweenHeaderAndMain: !!(r && header && main && r.top >= header.bottom - 4 && r.bottom <= main.top + 4),
       mainTop: main ? Math.round(main.top) : null,
     };
   }, NB_CONTAINER);
+
+/** Return a successful but empty ad script so the no-fill UI is deterministic. */
+async function interceptNativeNoFill(page) {
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    if (request.url().includes(`${NB_CONTAINER.slice(1)}/invoke.js`) && request.resourceType() === 'script') {
+      return request.respond({
+        status: 200,
+        contentType: 'application/javascript',
+        body: '/* deterministic no-fill fixture */',
+      }).catch(() => {});
+    }
+    return request.continue().catch(() => {});
+  });
+}
 
 export async function run() {
   const rep = makeReporter(META.id, META.name);
@@ -45,16 +64,28 @@ export async function run() {
   for (const route of ['/', '/help', '/legal/terms']) {
     const p = await newPage(browser);
     const errs = [];
+    let loaderRequests = 0;
+    p.on('request', (request) => {
+      if (request.url().includes(NB_LOADER_FRAGMENT)) loaderRequests += 1;
+    });
     attachConsole(p, errs);
     await gotoSafe(p, BASE + '/de' + (route === '/' ? '' : route));
     await wait(2000);
+    // Cold Webpack compilation can finish after DOMContentLoaded. Wait for the
+    // actual request (bounded) instead of falsely failing the first route.
+    const requestDeadline = Date.now() + 15_000;
+    while (loaderRequests === 0 && Date.now() < requestDeadline) await wait(100);
     const s = await nbState(p);
     check(
       `NB de${route}: Container in Header-Zone (zwischen Header & Main)`,
       NB_FILL_BUILD ? s.present && s.betweenHeaderAndMain : true,
       NB_FILL_BUILD ? JSON.stringify(s) : 'übersprungen – kein Native-Placement in diesem Build (Auslieferung)',
     );
-    const injected = await p.evaluate((frag) => performance.getEntriesByType('resource').filter((e) => e.name.includes(frag)).length, '2cedab945cb896ea179b566a413d953b/invoke.js');
+    const performanceRequests = await p.evaluate(
+      (frag) => performance.getEntriesByType('resource').filter((entry) => entry.name.includes(frag)).length,
+      NB_LOADER_FRAGMENT,
+    );
+    const injected = Math.max(loaderRequests, performanceRequests);
     check(`NB de${route}: invoke.js-Loader angefordert`, injected >= 1, 'n=' + injected);
     check(`NB de${route}: Console sauber`, errs.length === 0, errs.slice(0, 1).join('|'));
     await p.close();
@@ -74,15 +105,22 @@ export async function run() {
     await p.close();
   }
 
-  /* ---------------- NB: No-Fill-Kollaps (Sandbox) ---------------- */
+  /* ---------------- NB: No-Fill behält Reserve ohne CLS (Sandbox) -------- */
   {
     const p = await newPage(browser);
+    await interceptNativeNoFill(p);
     await gotoSafe(p, BASE + '/de');
     await wait(1500);
     const early = await nbState(p);
-    await wait(8000);
+    await wait(8500);
     const late = await nbState(p);
-    check('NB No-Fill: reservierte Box kollabiert (~6 s)', early.present && (late.h === 0 || !late.present), `early h=${early.h} late h=${late.h}`);
+    const stableReserve =
+      early.present && late.present && late.h > 0 && Math.abs(late.h - early.h) <= 1 && early.mainTop === late.mainTop;
+    check(
+      'NB No-Fill: Reserve bleibt stabil mit zugänglichem Hinweis (kein CLS)',
+      stableReserve && !late.filled && late.fallback && late.fallbackText.length > 0,
+      JSON.stringify({ earlyH: early.h, lateH: late.h, earlyMainTop: early.mainTop, lateMainTop: late.mainTop, fallback: late.fallback }),
+    );
     await p.close();
   }
 
@@ -122,16 +160,21 @@ export async function run() {
     await p.close();
   }
 
-  /* ---------------- NB: Mobile ohne Overflow ---------------- */
+  /* ---------------- NB: Mobile No-Fill-Reserve ohne Overflow ------------ */
   {
     const p = await newPage(browser, { width: 390, height: 844, mobile: true });
+    await interceptNativeNoFill(p);
     await gotoSafe(p, BASE + '/de');
     await wait(1500);
     const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check('NB Mobile 390: kein Horizontal-Overflow', overflow <= 0, 'overflow=' + overflow);
-    await wait(7000);
+    await wait(8500);
     const late = await nbState(p);
-    check('NB Mobile: No-Fill-Kollaps greift auch mobil', late.h === 0 || !late.present, 'h=' + late.h);
+    check(
+      'NB Mobile: No-Fill erhält die responsive Reserve + Hinweis',
+      late.present && late.h > 0 && !late.filled && late.fallback && late.fallbackText.length > 0,
+      JSON.stringify({ h: late.h, fallback: late.fallback, text: late.fallbackText }),
+    );
     await p.close();
   }
 

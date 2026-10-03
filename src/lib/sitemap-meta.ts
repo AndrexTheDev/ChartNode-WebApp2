@@ -16,15 +16,16 @@ export interface RouteSeo {
 }
 
 export const ROUTE_SEO: RouteSeo[] = [
-  // Landing: UI-/SEO-Runde (Dropdown-Fit, Venue-Klartext, SEO M1/M2)
-  { path: '', priority: 1, changeFrequency: 'weekly', lastmod: '2026-09-14' },
-  // Terminal: Chart-Engine live ⇒ indexierbare Produktseite (Basispfad;
-  // ?ticker/-price-Varianten bleiben noindex + canonical auf Basis)
-  { path: '/terminal', priority: 0.9, changeFrequency: 'weekly', lastmod: '2026-09-14' },
-  // Help: Indikator-/Metrik-Glossar + FAQ (SEO-M2-Graph)
-  { path: '/help', priority: 0.8, changeFrequency: 'monthly', lastmod: '2026-09-13' },
-  // Legal: Lizenz-/Compliance-Stand (Wave ad0009f), ändert sich selten
-  { path: '/legal/terms', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-08-01' },
-  { path: '/legal/privacy', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-08-01' },
-  { path: '/legal/disclaimer', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-08-01' },
+  // Landing: copy, access-model and metadata accuracy review.
+  { path: '', priority: 1, changeFrequency: 'weekly', lastmod: '2026-10-02' },
+  // Terminal: chart tools, data limitations and access descriptions updated.
+  { path: '/terminal', priority: 0.9, changeFrequency: 'weekly', lastmod: '2026-10-02' },
+  // Standalone NodeCluster holder-analysis tool.
+  { path: '/cluster', priority: 0.75, changeFrequency: 'weekly', lastmod: '2026-10-02' },
+  // Help: localized calculation notes and provider/access limitations.
+  { path: '/help', priority: 0.8, changeFrequency: 'monthly', lastmod: '2026-10-02' },
+  // Legal: access, privacy and data-limit copy reviewed.
+  { path: '/legal/terms', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-10-02' },
+  { path: '/legal/privacy', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-10-02' },
+  { path: '/legal/disclaimer', priority: 0.2, changeFrequency: 'yearly', lastmod: '2026-10-02' },
 ];

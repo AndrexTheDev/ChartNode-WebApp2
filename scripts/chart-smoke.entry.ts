@@ -6,7 +6,7 @@
  *   1. indicator maths from `technicalindicators` is re-checked against
  *      independent reference implementations written in this file
  *   2. warm-up alignment, Heikin-Ashi, price precision
- *   3. chart store: unlimited indicator instances, param clamping, drawings,
+ *   3. chart store: indicator instances, param clamping, drawings,
  *      per-pane timeframes
  *   4. drawing geometry: fib levels, hit tests, translation, ray projection
  *   5. the cross-chart sync bus (echo suppression + epsilon comparison)
@@ -382,7 +382,7 @@ console.log('\n— alignment, warm-up & robustness —');
 
 /* ================================ chart store =============================== */
 
-console.log('\n— chart store (unlimited indicators, drawings, sync) —');
+console.log('\n— chart store (indicator instances, drawings, sync) —');
 
 const store = useChartStore;
 const PANE = 'pane-1';
@@ -568,7 +568,7 @@ console.log('\n— cross-chart sync bus —');
   crosshairBus.clear();
 }
 
-/* ===================== wave 2: premium analytics + 12 new kinds ============== */
+/* ===================== wave 2: advanced analytics + 12 new kinds ============ */
 
 console.log('\n— wave 2: indicator library coverage —');
 
@@ -666,7 +666,7 @@ console.log('\n— wave 2: new oscillator maths —');
   check('ICHIMOKU cloud spans are finite', lastValue(ichi?.spanA ?? []) != null && lastValue(ichi?.spanB ?? []) != null);
 }
 
-console.log('\n— wave 2: premium analytics (S/R, divergences, risk) —');
+console.log('\n— wave 2: advanced analytics (S/R, divergences, risk) —');
 
 {
   const premium = await import('@/lib/premium');
@@ -814,13 +814,16 @@ const themeLib = await import('@/lib/theme');
 check('baseSymbol strips the quote asset', viral.baseSymbol('BTC/USDT') === 'BTC' && viral.baseSymbol('sol') === 'SOL');
 
 const tweet = viral.buildShareText(
-  'Found an insane setup for {ticker} on NodeChart. Zero fees, real-time on-chain data. #Crypto #Trading',
+  'Exploring {ticker} on NodeChart: browser-based charts and market tools for selected venues. Coverage and freshness depend on providers. #Crypto',
   'SOL/USDT',
 );
-check('share text matches the spec template', tweet === 'Found an insane setup for $SOL on NodeChart. Zero fees, real-time on-chain data. #Crypto #Trading');
+check(
+  'share text qualifies selected-provider coverage and freshness',
+  tweet === 'Exploring $SOL on NodeChart: browser-based charts and market tools for selected venues. Coverage and freshness depend on providers. #Crypto',
+);
 
 const links = viral.buildShareLinks(tweet, 'https://nodechart.app/de/terminal?ticker=SOL');
-check('X intent carries text + url', links.x.startsWith('https://twitter.com/intent/tweet?text=') && decodeURIComponent(links.x.split('text=')[1] ?? '').includes('#Crypto #Trading https://nodechart.app/de/terminal?ticker=SOL'));
+check('X intent carries qualified text + url', links.x.startsWith('https://twitter.com/intent/tweet?text=') && decodeURIComponent(links.x.split('text=')[1] ?? '').includes('#Crypto https://nodechart.app/de/terminal?ticker=SOL'));
 check('telegram intent carries url + text', links.telegram.startsWith('https://t.me/share/url?url=') && links.telegram.includes('text='));
 
 const shareUrl = viral.buildShareUrl('https://nodechart.app', 'de', 'SOL/USDT', 149.987654321);
@@ -833,16 +836,17 @@ check('og price sanitiser rejects junk', og.sanitizePrice('abc') === null && og.
 const svg = og.buildOgSvg({ ticker: '<img src=x onerror=alert(1)>', price: '150', changePct: -2.5, locale: 'de' });
 check('og svg reduces hostile ticker to cashtag chars', svg.includes('IMGSRCXONE') && !svg.includes('<img'));
 check('og svg has the social-card size', svg.includes('width="1200"') && svg.includes('height="630"'));
+check('og svg uses original optimized logo crops, not redrawn paths', svg.includes('/brand/nodechart-mark.webp') && svg.includes('/brand/nodechart-wordmark.webp'));
 check('og svg renders price + negative change', svg.includes('150') && svg.includes('-2.50%'));
 
-check('premium themes are gated', themeLib.isPremiumTheme('matrix') && themeLib.isPremiumTheme('miami') && !themeLib.isPremiumTheme('acid'));
+check('share-gated themes are distinguished from standard themes', themeLib.isPremiumTheme('matrix') && themeLib.isPremiumTheme('miami') && !themeLib.isPremiumTheme('acid'));
 
 // store flow: locked → share modal → unlock → theme applies
 useViralStore.setState({ shareUnlocked: false, shareOpen: false, supporter: false, shares: 0 });
-check('locked premium theme opens the share modal', useViralStore.getState().requestTheme('matrix') === false && useViralStore.getState().shareOpen === true && useViralStore.getState().shareReason === 'theme');
+check('locked share-gated theme opens the share composer prompt', useViralStore.getState().requestTheme('matrix') === false && useViralStore.getState().shareOpen === true && useViralStore.getState().shareReason === 'theme');
 useViralStore.getState().unlockViaShare();
-check('share unlocks permanently + counts', useViralStore.getState().shareUnlocked === true && useViralStore.getState().shares === 1);
-check('unlocked premium theme applies', useViralStore.getState().requestTheme('matrix') === true && useAppStore.getState().theme === 'matrix');
+check('composer-triggered unlock is local state and increments the share count', useViralStore.getState().shareUnlocked === true && useViralStore.getState().shares === 1);
+check('locally unlocked share-gated theme applies', useViralStore.getState().requestTheme('matrix') === true && useAppStore.getState().theme === 'matrix');
 // donation grace: any donation → 48 h silence, > $5 → 5 days
 useViralStore.getState().registerDonation(1);
 check(

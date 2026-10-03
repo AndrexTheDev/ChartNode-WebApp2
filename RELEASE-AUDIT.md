@@ -1,11 +1,11 @@
 # RELEASE-AUDIT (modular)
 
-Stand: 2026-09-29T22:19:28.165Z · **463 PASS / 0 FAIL**
+Stand: 2026-10-03T18:55:34.098Z · **518 PASS / 0 FAIL**
 
 | Modul | Bereich | PASS | FAIL |
 |---|---|---:|---:|
 | M1 | Statik & Konfiguration | 14 | 0 |
-| M2 | Routing & SEO (30 Seiten) | 310 | 0 |
+| M2 | Routing & SEO (35 localized routes) | 365 | 0 |
 | M3 | Terminal-Funktionalbatterie | 17 | 0 |
 | M4 | A11y & UX-Semantik | 48 | 0 |
 | M5 | Monetarisierung (Ad-/Smartlink-Suiten) | 2 | 0 |

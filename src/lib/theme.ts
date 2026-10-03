@@ -10,8 +10,8 @@ export const THEME_COLOR: Record<ThemeId, string> = {
 };
 
 /**
- * Share-to-unlock skins. They are part of `ThemeId` (so persisted values stay
- * valid) but `requestTheme()` gates them behind `useViralStore.shareUnlocked`.
+ * Share-composer-gated themes. They are part of `ThemeId` (so persisted values
+ * stay valid); `requestTheme()` checks the local unlock flag, not publication.
  */
 export const PREMIUM_THEMES: ThemeId[] = ['matrix', 'miami'];
 

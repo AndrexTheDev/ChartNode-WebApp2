@@ -14,11 +14,9 @@ interface SecurityBadgeProps {
 }
 
 /**
- * The visual verdict chip of the Smart Search.
- *   safe    → neon-green glow  + shield
- *   warn    → amber            + triangle
- *   danger  → neon-red glow    + skull  ("Scam / Honeypot")
- *   unknown → muted            + question shield
+ * Shows provider-returned risk status in Smart Search. The `safe` code path
+ * means no configured flags were returned; it is not a safety guarantee or
+ * full audit. Unknown or unavailable results stay explicitly unassessed.
  */
 export function SecurityBadge({ audit, pending = false, className }: SecurityBadgeProps) {
   const t = useTranslations('search');

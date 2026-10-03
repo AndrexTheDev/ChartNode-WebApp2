@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const artifacts = join(root, 'artifacts');
+const artifacts = resolve(root, process.env.SHOTS_DIR ?? 'artifacts');
 mkdirSync(artifacts, { recursive: true });
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
@@ -204,7 +204,7 @@ try {
     check('parameter editable in the modal', changed === '21', `value=${changed}`);
 
     const activeCount = await page.$$eval('[role="dialog"] ul li', (nodes) => nodes.length);
-    check('three instances listed (unlimited per chart)', activeCount === 3, `${activeCount} instances`);
+    check('three requested indicator instances are listed', activeCount === 3, `${activeCount} instances`);
 
     await shot(page, 'indicator-modal.png');
 
@@ -397,7 +397,11 @@ await wall.evaluate(() => {
   };
 });
 const wallText = await wall.evaluate(() => (document.body.textContent ?? '').toLowerCase());
-check('soft-wall shows the rebellion copy', wallText.includes('rebellion') || wallText.includes('revolution') || wallText.includes('восстание'));
+check(
+  'soft-wall explains third-party ads without gating chart features',
+  wallText.includes('dein browser blockiert möglicherweise werbung von drittanbietern') &&
+    wallText.includes('sperrt oder entsperrt keine chart-funktion'),
+);
 check('all three donation wallets listed', wallText.includes('bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f') && wallText.includes('79ksqtjjdhkfj9woxnygt') && wallText.includes('0xbc3fab34f69bc9f6661608c3fb36dddc313c42f7'));
 await wall.evaluate(() => {
   const button = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Kopieren BTC');
@@ -425,35 +429,45 @@ const viralPersist = await wall.evaluate(() => localStorage.getItem('nc-viral-v1
 check('dismiss closes the wall + persists the cooldown', wallGone && viralPersist.includes('wallDismissedAt'));
 await wall.close();
 
-// share-to-unlock: X intent + premium theme gate
+// composer-triggered theme unlock: X intent + local gate
 await page.evaluate(() => {
-  window.__opened = [];
-  const original = window.open;
-  window.open = (url, ...rest) => {
-    window.__opened.push(String(url));
-    return original.call(window, 'about:blank', ...rest);
+  window.__popup = null;
+  window.open = () => {
+    const popup = {
+      opener: window,
+      document: { createElement: () => ({}), head: { appendChild() {} } },
+      location: { href: 'about:blank' },
+      close() {},
+    };
+    window.__popup = popup;
+    return popup;
   };
 });
 await clickMenuItem(page, 'Teilen');
 await page.waitForSelector('[role="dialog"]', { timeout: 10000 });
 const sharePreview = await page.evaluate(() => document.querySelector('[role="dialog"]')?.textContent ?? '');
-check('share modal previews the spec tweet', sharePreview.includes('Found an insane setup for $BTC on NodeChart') && sharePreview.includes('#Crypto #Trading'));
+check('share modal previews qualified provider coverage', sharePreview.includes('BTC auf NodeChart ansehen') && sharePreview.includes('Abdeckung und Aktualität hängen von Anbietern ab') && sharePreview.includes('#Crypto'));
+check('share modal says opening the composer triggers a local unlock without verifying publication', /schaltet .* frei/i.test(sharePreview) && /NodeChart prüft nicht, ob du den Beitrag veröffentlichst/i.test(sharePreview));
 await page.screenshot({ path: join(artifacts, 'share-modal.png') });
 await page.evaluate(() => {
-  const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Auf X posten');
+  const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'X-Composer öffnen');
   button?.click();
 });
 await new Promise((r) => setTimeout(r, 600));
-const opened = await page.evaluate(() => window.__opened ?? []);
-const xUrl = opened[0] ?? '';
-check('X intent opens with the encoded tweet', xUrl.includes('twitter.com/intent/tweet') && decodeURIComponent(xUrl).includes('$BTC') && decodeURIComponent(xUrl).includes('#Crypto #Trading'), xUrl.slice(0, 80));
+const xUrl = await page.evaluate(() => window.__popup?.location?.href ?? '');
+const decodedTweet = decodeURIComponent(xUrl);
+check(
+  'X intent opens with the qualified provider-coverage tweet',
+  xUrl.includes('twitter.com/intent/tweet') && decodedTweet.includes('$BTC') && decodedTweet.includes('#Crypto') && !decodedTweet.includes('#Trading'),
+  xUrl.slice(0, 80),
+);
 const unlockedBanner = await page.evaluate(() => document.body.innerText.toLowerCase().includes('freigeschaltet'));
-check('share flips the unlock flag (banner visible)', unlockedBanner);
+check('opening the X composer triggers the local share-theme unlock', xUrl.startsWith('https://twitter.com/intent/tweet?text=') && unlockedBanner);
 await page.screenshot({ path: join(artifacts, 'share-unlocked.png') });
 await page.keyboard.press('Escape');
 await new Promise((r) => setTimeout(r, 300));
 
-// premium theme now applies from the switcher
+// locally unlocked share-gated theme now applies from the switcher
 await page.evaluate(() => {
   const trigger = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Design');
   trigger?.click();
@@ -493,6 +507,22 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   });
   check('touch device shows the drawing warning', gate.warned);
   check('tools are disabled by default on touch', gate.toolsLocked === true && (gate.toolsOpacity ?? 1) < 0.5, JSON.stringify(gate));
+  const touchDock = await mobile.evaluate(() => {
+    const warning = document.querySelector('.nc-touch-gate');
+    const ticker = document.querySelector('.nc-whale-ticker');
+    const actions = [...(warning?.querySelectorAll('button') ?? [])];
+    return {
+      warning: !!warning,
+      tickerHidden: !!ticker && getComputedStyle(ticker).display === 'none',
+      actionCount: actions.length,
+      overlap: !!ticker && actions.some((action) => {
+        const a = action.getBoundingClientRect();
+        const t = ticker.getBoundingClientRect();
+        return a.width > 0 && a.height > 0 && t.width > 0 && t.height > 0 && a.left < t.right && a.right > t.left && a.top < t.bottom && a.bottom > t.top;
+      }),
+    };
+  });
+  check('fixed whale ticker yields to the touch warning and its actions', touchDock.warning && touchDock.tickerHidden && touchDock.actionCount === 2 && !touchDock.overlap, JSON.stringify(touchDock));
   await shot(mobile, 'terminal-mobile-gate.png');
 
   await mobile.evaluate(() => {
@@ -505,6 +535,12 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
     return toolsGroup ? getComputedStyle(toolsGroup).pointerEvents !== 'none' : false;
   });
   check('"Force enable" unlocks the tools', forced);
+  await mobile.evaluate(() => document.querySelector('.nc-touch-gate button:last-child')?.click());
+  await mobile.waitForFunction(() => {
+    const ticker = document.querySelector('.nc-whale-ticker');
+    return !document.querySelector('.nc-touch-gate') && !!ticker && getComputedStyle(ticker).display !== 'none';
+  }, { timeout: 5000 });
+  check('whale ticker returns after the touch warning is dismissed', true);
   check('no page errors on mobile', mobileErrors.length === 0, mobileErrors.slice(0, 2).join(' | '));
 
   // 8b. drawings survive a reload (persisted per pane)
@@ -695,8 +731,8 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await wait(1200);
   check('volume profile toggles without errors', proErrors.length === 0, proErrors.slice(0, 2).join(' | '));
   await wait(600);
-  const ribbonSeen = await pro.evaluate(() => document.body.innerText.includes('Auf TradingView steckt das hinter einem Abo'));
-  check('premium-celebration ribbon fires once for a paid-elsewhere feature', ribbonSeen);
+  const chartToolsCopy = await pro.evaluate(() => document.body.innerText);
+  check('chart-tool copy contains no legacy competitor-pricing claim', !chartToolsCopy.includes('Auf TradingView steckt das hinter einem Abo'));
   await clickMenuItem(pro, 'aVWAP');
   await wait(300);
   const canvasBox = await (await pro.$('canvas'))?.boundingBox();
@@ -904,11 +940,18 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await pro.keyboard.press('Escape');
   await wait(300);
 
-  // watchlist popover: live quotes for the seeded list
+  // watchlist popover: stored symbols plus provider-aware quote fallback
   await pro.evaluate(() => { [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Watchlist')?.click(); });
   await wait(2500);
-  const watchText = await pro.evaluate(() => document.body.innerText);
-  check('watchlist popover shows live quotes', /watchlist · live/i.test(watchText) && /BTC\/USDT/.test(watchText));
+  const watchText = await pro.evaluate(() =>
+    document.querySelector('[role="dialog"][aria-label="Watchlist"]')?.innerText ?? '',
+  );
+  check(
+    'watchlist shows stored symbols and explains optional Gate quotes',
+    /BTC\/USDT/.test(watchText) && /ETH\/USDT/.test(watchText) &&
+      /Gates öffentliche USDT-Ticker/.test(watchText) && (/—/.test(watchText) || /\$\s?[\d,.]+/.test(watchText)),
+    watchText.slice(0, 180).replace(/\n/g, ' / '),
+  );
   await pro.evaluate(() => { [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Watchlist')?.click(); });
   await wait(300);
 
@@ -926,7 +969,14 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
     await heart.click();
     await pro.waitForSelector('[role="dialog"]', { timeout: 5000 });
     const tipText = await pro.$eval('[role="dialog"]', (node) => node.textContent ?? '');
-    check('tip jar tells the solo-dev funding story', tipText.includes('genau einen Entwickler') && tipText.includes('bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f') && tipText.includes('1 Pizza'));
+    check(
+      'tip jar distinguishes voluntary support from verified Pro access',
+      tipText.includes('NodeChart ist ein unabhängiges Projekt') &&
+        tipText.includes('Beiträge sind freiwillig') &&
+        tipText.includes('Keine Funktion oder Serviceleistung zugesagt') &&
+        tipText.includes('separate On-Chain-Prüfung') &&
+        tipText.includes('bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f'),
+    );
     await pro.keyboard.press('Escape');
     await wait(300);
   }
@@ -971,7 +1021,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   console.log('\n— wave-4 premium tools —');
   const w4 = await browser.newPage();
   w4.on('pageerror', (err) => errors.push(`wave4 pageerror: ${err.message}`));
-  await w4.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await w4.goto(`${BASE}/de/terminal?qa=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await w4.evaluate(() => {
     window.__errs = [];
     window.addEventListener('error', (e) => window.__errs.push(String(e.message).slice(0, 140)));
@@ -1098,15 +1148,31 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   const rated = await w4
     .waitForFunction(
       () => {
-        const text = [...document.querySelectorAll('[role="dialog"]')].pop()?.textContent ?? '';
-        return text.includes('6 Timeframes') && (text.includes('1h') || text.includes('fehlgeschlagen'));
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].pop();
+        const text = dialog?.textContent ?? '';
+        return (dialog?.querySelectorAll('tbody tr').length ?? 0) > 0 ||
+          text.includes('Für diese Börse sind nicht genügend Kerzen verfügbar') ||
+          text.includes('Bewertung fehlgeschlagen');
       },
       { timeout: 25000, polling: 1000 },
     )
     .then(() => true)
     .catch(() => false);
-  const ratedText = await dialogText();
-  check('ratings matrix scores timeframes (or degrades gracefully)', rated && (ratedText.includes('1h') || ratedText.includes('fehlgeschlagen')));
+  const ratingState = await w4.evaluate(() => {
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].pop();
+    const text = dialog?.textContent ?? '';
+    return {
+      rows: dialog?.querySelectorAll('tbody tr').length ?? 0,
+      noData: text.includes('Für diese Börse sind nicht genügend Kerzen verfügbar'),
+      partial: text.includes('Daten verfügbar für'),
+      error: text.includes('Bewertung fehlgeschlagen'),
+    };
+  });
+  check(
+    'ratings matrix scores available timeframes and discloses partial/missing data',
+    ratingState.rows >= 6 || (ratingState.rows > 0 && ratingState.partial) || ratingState.noData || ratingState.error,
+    JSON.stringify({ ...ratingState, settled: rated }),
+  );
   await closeDialog();
 
   // heatmap
@@ -1178,7 +1244,13 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   check('magnifier chip opens the bar lens', await expectDialog('Bar-Lupe'));
   await wait(3000);
   const magText = await dialogText();
-  check('magnifier shows tape stats or degrades gracefully', /Taker-Delta|nicht erreichbar|Keine Trades/.test(magText));
+  check(
+    'magnifier shows tape stats or explains provider-history limits',
+    /Taker-Delta/i.test(magText) ||
+      /Für diese Kerze oder diesen Anbieter sind keine Trades verfügbar/i.test(magText) ||
+      /Keine Trades in dieser Kerze gefunden/i.test(magText),
+    magText.slice(0, 180).replace(/\n/g, ' / '),
+  );
   await closeDialog();
 
   // alerts manager
@@ -1199,16 +1271,38 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   check('alert creates, lists and persists', /[≥≤] 1/.test(alertText) && alertPersist.includes('"alerts"'));
   await closeDialog();
 
-  // usage nudge (6 opened tools) + exotic types + custom interval
-  await wait(2500);
-  const nudgeText = await w4.evaluate(() => document.body.innerText);
-  check('usage nudge fires after six tools', nudgeText.includes('meint es ernst'));
+  // usage nudge: deterministically exercise the sixth-tool trigger, then its CTA
   await resetDialogs();
   await w4.evaluate(() => {
-    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Kaffee ausgeben');
-    button?.click();
+    const store = window.__NC__?.useViralStore;
+    if (!store) return;
+    store.setState({ sessionTools: 5, toolNudgeShown: false, supportOpen: false });
+    store.getState().bumpTool();
   });
-  check('nudge CTA opens the tip jar', await expectDialog('bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f', 6000));
+  const nudgeVisible = await w4
+    .waitForFunction(
+      () => {
+        const text = document.body.innerText;
+        return text.includes('Wenn du das Projekt unterstützen möchtest, kannst du freiwillig beitragen') &&
+          text.includes('schaltet Pro nicht frei');
+      },
+      { timeout: 7000, polling: 250 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check('usage nudge appears at six tools with voluntary/no-unlock disclosure', nudgeVisible);
+  const nudgeCtaClicked = await w4.evaluate(() => {
+    const nudge = [...document.querySelectorAll('div.fixed')].find((node) =>
+      node.textContent?.includes('Wenn du das Projekt unterstützen möchtest'),
+    );
+    const button = [...(nudge?.querySelectorAll('button') ?? [])].find((entry) => entry.textContent?.trim() === 'Optional unterstützen');
+    button?.click();
+    return Boolean(button);
+  });
+  check(
+    'nudge CTA opens the optional-support dialog',
+    nudgeCtaClicked && await expectDialog('bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f', 6000),
+  );
   await closeDialog();
 
   const pickChartType = async (label) => {
@@ -1459,7 +1553,7 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   check('edge category badge counts 4 topics', (edgeBadge ?? '').includes('4'));
   await wait(300);
   const w7HelpText = await helpText();
-  check('edge topics render (Liq Radar + Clock Edge)', w7HelpText.includes('Wie funktioniert der Liq Radar?') && w7HelpText.includes('Clock Edge'));
+  check('edge topics render (Liq Radar + Clock Edge)', w7HelpText.includes('Wie funktioniert Liq Radar?') && w7HelpText.includes('Clock Edge'));
   await helpCategory('Alle');
   await wait(200);
   await w5h.evaluate(() => {
@@ -1529,8 +1623,11 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   check('Liq Radar menu item opens the modal', await w7OpenEdgeItem('Liq Radar'));
   let liqText = await w7DialogText();
   check(
-    'Liq Radar modal explains the magnets',
-    /liq radar/i.test(liqText) && /magnete im chart einblenden/i.test(liqText),
+    'Liq Radar explains its candle-based estimates and no-position limits',
+    /Liq Radar/i.test(liqText) &&
+      /hypothetische Liquidationspreise/i.test(liqText) &&
+      /keine Börsenpositionen/i.test(liqText) &&
+      /keine Ziele oder Stops/i.test(liqText),
   );
   await w7.evaluate(() => {
     const dlg = [...document.querySelectorAll('[role="dialog"]')].pop();
@@ -1542,10 +1639,10 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   );
   check('checkbox arms the chart magnets (data-liq-radar=on)', liqAttrAfter === 'on', String(liqAttrAfter));
   liqText = await w7DialogText();
-  check(
-    'magnet list renders levels or the empty hint',
-    /liquidationen/i.test(liqText) || /noch zu wenig kerzen/i.test(liqText),
-  );
+  const liqHasModelledRows =
+    /Modellierte Short-Level/i.test(liqText) && /Modellierte Long-Level/i.test(liqText) && /\d+× [LS]/.test(liqText);
+  const liqHasEmptyHint = /Noch zu wenig Kerzen im Feed/i.test(liqText);
+  check('Liq Radar renders modelled levels or a clear insufficient-data hint', liqHasModelledRows || liqHasEmptyHint);
   await shot(w7, 'wave7-liq-modal.png');
   await w7.keyboard.press('Escape');
   await wait(400);
@@ -1585,19 +1682,19 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await w7
     .waitForFunction(() => {
       const txt = [...document.querySelectorAll('[role="dialog"]')].map((d) => d.innerText).join('\n');
-      return /Starker Trend|Schwacher Trend|Range|Volatilitäts-Expansion|Liquidations-Sturm|Noch zu wenig Kerzen/.test(txt);
+      return /Label:\s*(?:starker Trend|schwacher Trend|Seitwärtsbereich|erhöhte Schwankung|Liquidationsmetriken)|Noch zu wenig Kerzen/i.test(txt);
     }, { timeout: 20000 })
     .catch(() => {});
   const regimeText = await w7DialogText();
   check(
-    'Regime Compass names a regime or waits for data',
-    /Starker Trend|Schwacher Trend|Range|Volatilitäts-Expansion|Liquidations-Sturm/.test(regimeText) ||
+    'Regime Compass renders a heuristic label or waits for data',
+    /Label:\s*(?:starker Trend|schwacher Trend|Seitwärtsbereich|erhöhte Schwankung|Liquidationsmetriken)/i.test(regimeText) ||
       regimeText.includes('Noch zu wenig Kerzen'),
-    regimeText.slice(0, 120).replace(/\n/g, ' / '),
+    regimeText.slice(0, 160).replace(/\n/g, ' / '),
   );
   check(
-    'regime confidence renders as a percentage',
-    !regimeText.includes('Konfidenz') || /\d+ %/.test(regimeText),
+    'regime heuristic score is explicitly rendered as a percentage',
+    /Heuristischer Score:\s*\d+\s*%/i.test(regimeText),
   );
   await shot(w7, 'wave7-regime-modal.png');
   await w7.keyboard.press('Escape');
@@ -1629,11 +1726,20 @@ await page.screenshot({ path: join(artifacts, 'terminal-matrix.png') });
   await land.waitForSelector('#features', { timeout: 15000 }).catch(() => {});
   const landText = await land.evaluate(() => document.body.innerText);
   const landHtml = await land.evaluate(() => document.body.innerHTML);
-  check('landing support line keeps funding doctrine', /ein dev, eine server-rechnung|one dev, one server bill/i.test(landText));
-  check('landing frames funding instead of \"free project\"', /werbung und optionale tipps|ads and optional tips/i.test(landText) && !/100 ?% ?(kostenlos|free)/i.test(landText));
-  check('landing benefit block lists paid-elsewhere gates', /unbegrenzt indikatoren|unlimited indicators/i.test(landText) && /premium/i.test(landText) && /screener/i.test(landText));
-  check('landing benefit block lists unique tools (wave-7)', /liq radar/i.test(landText) && /clock edge/i.test(landText) && /lag oracle/i.test(landText));
-  check('landing benefit block lists unique tools (wave-3/5)', /bar-lupe|bar magnifier/i.test(landText) && /whale-flow|whale flow/i.test(landText));
+  check('landing explains core access, no account/subscription, and possible ads', /kern-charts/i.test(landText) && /ohne konto und laufendes abo/i.test(landText) && /werbung/i.test(landText));
+  check('landing separates composer-triggered themes from verified Pro access', /share-ausgelöste themen/i.test(landText) && /prüft keine veröffentlichung/i.test(landText) && /qualifizierende on-chain-unterstützung/i.test(landText));
+  check('landing contains no unsupported forever/unlimited/competitor pricing claim', !/für immer kostenlos|unbegrenzt indikatoren|tradingview|paid elsewhere/i.test(landText));
+  const benefitText = await land.$eval('#features', (node) => node.innerText);
+  check(
+    'landing benefit block describes CEX/DEX coverage limits',
+    /12 konfigurierte CEX-Kennungen/i.test(benefitText) &&
+      /DEX-Suche und Pooldaten nutzen Drittanbieter/i.test(benefitText),
+  );
+  check(
+    'landing benefit block qualifies simulations and sponsored destinations',
+    /Backtests, Ratings, Pattern-Scores und Risikoflags sind Simulationen oder Heuristiken, keine Prognosen oder Garantien/i.test(benefitText) &&
+      /Gesponserte Links und Werbung können zu Drittseiten/i.test(benefitText),
+  );
   check('landing ist schlank (keine FAQ-/Story-Sektionen)', !landHtml.includes('id="survival"') && !landHtml.includes('id="faq"') && landText.length < 12000);
   await land.evaluate(() => document.querySelector('#features')?.scrollIntoView({ block: 'start' }));
   await new Promise((r) => setTimeout(r, 700));

@@ -1,11 +1,11 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
-// MODUL 2 — ROUTING & SEO: 5 Locales × 6 Routen = 30 Seiten gegen den
+// MODUL 2 — ROUTING & SEO: configured locales × localized routes gegen den
 // Production-Build: HTTP-Status, <html lang>, genau 1 H1, Title/OG/Canonical/
 // Hreflang-Vollständigkeit, keine Missing-Translation-Artefakte, JSON-LD auf
 // der Landing parse-bar, Console-/Pageerror-Scan (CORS-Blinde gefiltert).
 import { LOCALES, ROUTES, BASE, makeReporter, launchBrowser, newPage, attachConsole, gotoSafe, wait } from './lib.mjs';
 
-export const META = { id: 'M2', name: 'Routing & SEO (30 Seiten)' };
+export const META = { id: 'M2', name: `Routing & SEO (${LOCALES.length * ROUTES.length} localized routes)` };
 
 export async function run() {
   const rep = makeReporter(META.id, META.name);
@@ -19,8 +19,19 @@ export async function run() {
     for (const route of ROUTES) {
       const url = BASE + '/' + locale + (route === '/' ? '' : route);
       const res = await gotoSafe(page, url);
-      await wait(1200);
       const tag = locale + route;
+      await wait(1200);
+      // The standalone cluster lazily requests its local runtime after
+      // hydration. Keep the page alive until that same-origin script settles;
+      // otherwise the next locale navigation can abort it and look like a
+      // production request failure in this routing-only scan.
+      if (route === '/cluster') {
+        const runtimeReady = await page.waitForFunction(
+          () => typeof window.NodeCluster === 'object' && typeof window.NodeCluster.configure === 'function',
+          { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+        check(tag + ': NodeCluster runtime loaded', runtimeReady);
+      }
       const status = res ? res.status() : 0;
       check(tag + ': HTTP 200', status === 200, 'status=' + status);
       const meta = await page.evaluate(() => {
@@ -54,7 +65,7 @@ export async function run() {
         check(tag + ': Landing trägt JSON-LD', hasLd);
       }
     }
-    check(locale + ': keine Console-/Pageerrors über 6 Routen', errs.length === 0, errs.slice(0, 2).join(' | '));
+    check(locale + ': no console/page errors across ' + ROUTES.length + ' routes', errs.length === 0, errs.slice(0, 2).join(' | '));
     await page.close();
   }
   await browser.close();

@@ -3,6 +3,7 @@
 // Modal-/Dropdown-Animationen + Layout-Jitter (CLS), Toast-Feedback.
 import puppeteer from 'puppeteer';
 import fs from 'node:fs';
+import { installFixtures } from './audit-sandbox/fixtures.mjs';
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const OUT = 'artifacts';
@@ -44,7 +45,7 @@ async function auditStates(page, label) {
       if (seen.has(sig)) { seen.set(sig, seen.get(sig) + 1); continue; }
       seen.set(sig, 1);
       el.setAttribute('data-qa-idx', String(out.length));
-      out.push({ idx: out.length, tag: el.tagName, disabled: !!el.disabled, cls: String(el.className).slice(0, 70), pressed: el.getAttribute('aria-pressed'), txt: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24) });
+      out.push({ idx: out.length, tag: el.tagName, disabled: !!el.disabled, cls: String(el.className).slice(0, 70), pressed: el.getAttribute('aria-pressed'), selected: el.getAttribute('aria-selected') === 'true', txt: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24) });
     }
     return out;
   });
@@ -107,7 +108,9 @@ async function auditStates(page, label) {
       await wait(200);
     }
     const hovered = await page.evaluate(probeFn, handle);
-    const hoverOk = hovered !== before || !receives;
+    // A selected tab's persistent selected treatment can intentionally equal its
+    // hover treatment; that is still visible feedback, not a missing hover state.
+    const hoverOk = hovered !== before || !receives || rep.selected;
     let activeOk = true;
     if (rep.tag === 'BUTTON' && !rep.disabled) {
       await page.mouse.down();
@@ -174,12 +177,15 @@ console.log('— 1: Interaktive States auf Landing (/de) —');
 console.log('\n— 1b: Interaktive States im Terminal (/de/terminal) —');
 {
   const { page, errors } = await newPage();
+  // Use the same deterministic, free fixture feed as the release/browser suite;
+  // otherwise an offline run never draws the chart canvas this interaction audit exercises.
+  await installFixtures(page);
   await page.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30000 });
   await wait(3500);
   const st = await auditStates(page, 'terminal');
   fs.writeFileSync(`${OUT}/qa-interaction-gaps-terminal.json`, JSON.stringify(st.gaps, null, 1));
-  ok(`Terminal: alle ${st.total} Kontroll-Klassen zeigen Hover- UND Active-Feedback`, st.gaps.length === 0, JSON.stringify(st.gaps.map((g) => `${g.tag}:${g.cls.slice(0, 40)} h=${g.hoverOk}`)));
+  ok(`Terminal: alle ${st.total} Kontroll-Klassen zeigen Hover/Active- oder Selected-Feedback`, st.gaps.length === 0, JSON.stringify(st.gaps.map((g) => `${g.tag}:${g.cls.slice(0, 40)} h=${g.hoverOk}`)));
   ok('Terminal: Disabled-Buttons einheitlich inert', st.disabledCount === 0 || st.disabledOk, `n=${st.disabledCount}`);
 
   // Suchmaske: Neon-Border bei Fokus (Wrapper mit focus-within)
@@ -258,6 +264,9 @@ console.log('\n— 2: Modal- & Dropdown-Animationen (Jitter/CLS) —');
       for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
     }).observe({ type: 'layout-shift', buffered: true });
   });
+  // The animation/layout probes also require a real chart canvas; keep them
+  // deterministic and runnable offline just like the terminal interaction pass.
+  await installFixtures(page);
   await page.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30000 });
   await wait(3500);
@@ -360,6 +369,7 @@ console.log('\n— 3: Feedback & Toasts (Wallet kopieren) —');
   const context = browser.defaultBrowserContext();
   await context.overridePermissions(BASE, ['clipboard-write', 'clipboard-sanitized-write']);
   const { page, errors } = await newPage();
+  await installFixtures(page);
   await page.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30000 });
   await wait(3000);
@@ -402,6 +412,7 @@ console.log('\n— 3: Feedback & Toasts (Wallet kopieren) —');
     try { Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }); } catch { /* Clipboard-API eben erreichbar – execCommand-Stub greift dann */ }
     try { document.execCommand = () => false; } catch { /* ignore */ }
   });
+  await installFixtures(p2);
   await p2.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded' });
   await p2.waitForSelector('canvas', { timeout: 30000 });
   await wait(3000);

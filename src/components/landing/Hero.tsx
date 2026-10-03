@@ -22,7 +22,7 @@ export async function Hero({ locale }: HeroProps) {
     { key: 'cost', value: t('stats.cost.value'), label: t('stats.cost.label') },
     { key: 'locales', value: t('stats.locales.value'), label: t('stats.locales.label') },
     { key: 'layouts', value: t('stats.layouts.value'), label: t('stats.layouts.label') },
-    { key: 'trackers', value: t('stats.trackers.value'), label: t('stats.trackers.label') },
+    { key: 'keys', value: t('stats.keys.value'), label: t('stats.keys.label') },
   ] as const;
 
   return (
@@ -42,16 +42,23 @@ export async function Hero({ locale }: HeroProps) {
         <p className="max-w-xl text-base leading-relaxed text-muted sm:text-lg">{t('subtitle')}</p>
 
         <div className="flex flex-wrap items-center gap-3">
-          <NeonButton href={ROUTES.terminal} size="lg" pulse leading={<Terminal className="size-4" aria-hidden />}>
-            {t('ctaPrimary')}
+          <NeonButton
+            href={ROUTES.terminal}
+            size="lg"
+            pulse
+            className="max-w-full"
+            leading={<Terminal className="size-4" aria-hidden />}
+          >
+            <span className="whitespace-normal [overflow-wrap:anywhere]">{t('ctaPrimary')}</span>
           </NeonButton>
           <NeonButton
             href="/#features"
             size="lg"
             variant="outline"
+            className="max-w-full"
             trailing={<ArrowRight className="size-4 transition-transform duration-200 group-hover/btn:translate-x-1" aria-hidden />}
           >
-            {t('ctaSecondary')}
+            <span className="whitespace-normal [overflow-wrap:anywhere]">{t('ctaSecondary')}</span>
           </NeonButton>
         </div>
 
@@ -96,7 +103,7 @@ export async function Hero({ locale }: HeroProps) {
         actions={
           <>
             <span className="nc-chip border-primary/40 text-primary">{tt('demo')}</span>
-            <StatusLed tone="ok" />
+            <StatusLed tone="idle" pulse={false} />
           </>
         }
       >

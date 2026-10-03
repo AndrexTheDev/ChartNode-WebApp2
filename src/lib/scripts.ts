@@ -1,8 +1,9 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Wave-5 Script Lab – write your own indicator scripts or import them
- * (e.g. from GitHub raw / gists). Everything executes locally in the
- * browser; nothing is uploaded, nothing is paywalled.
+ * Wave-5 Script Lab – write indicator formulas or import them from a URL.
+ * Formula calculations run in the browser against loaded candle data. Importing
+ * a remote script makes a request to that third-party host; scripts and saved
+ * settings use editable browser storage.
  *
  * A script is a single expression evaluated once per bar, Pine-style:
  *
@@ -14,6 +15,7 @@
  * Helper series are memoised per run, so a script stays O(n · series).
  */
 import type { Candle } from '@/websockets/types';
+import { timeoutSignal } from '@/lib/abort';
 import { EMA, SMA, RSI, ATR, Stochastic } from 'technicalindicators';
 
 export interface StoredScript {
@@ -309,11 +311,28 @@ export function toRawUrl(url: string): string {
 export async function importScriptSource(url: string): Promise<string> {
   const target = toRawUrl(url.trim());
   if (!/^https:\/\//i.test(target)) throw new Error('https-only');
-  /* M8-Härtung: der Import einer Nutzer-URL darf nie hängen bleiben (vorher
-     gab es weder Timeout noch Abbruch – der Dialog lud unbegrenzt weiter). */
-  const response = await fetch(target, { signal: AbortSignal.timeout(12_000) });
-  if (!response.ok) throw new Error(`http-${response.status}`);
-  const text = await response.text();
-  if (text.length > 20_000) throw new Error('too-large');
-  return text.trim();
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= 1; attempt += 1) {
+    try {
+      const response = await fetch(target, { signal: timeoutSignal(3_000) });
+      if (response.status >= 500 && response.status <= 599 && attempt === 0) {
+        await response.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      if (!response.ok) throw new Error(`http-${response.status}`);
+      const text = await response.text();
+      if (text.length > 20_000) throw new Error('too-large');
+      return text.trim();
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+      if ((timedOut || error instanceof TypeError) && attempt === 0) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('script import unavailable');
 }

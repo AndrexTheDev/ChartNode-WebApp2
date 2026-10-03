@@ -13,9 +13,9 @@ import { useToastStore } from '@/store/useToastStore';
 import type { Candle } from '@/websockets/types';
 
 /**
- * Strategy lab – the backtester TradingView reserves for Premium/Ultimate
- * (and Pine authors). Six zero-config strategies, honest fees, mark-to-market
- * equity, and one click to paint the round trips onto the chart.
+ * Runs one of six local, long-only candle simulations and can mark simulated
+ * entries and exits on the chart. Results assume same-close fills and configured
+ * fees; they omit real execution, slippage, funding and liquidity effects.
  */
 
 interface BacktestModalProps {

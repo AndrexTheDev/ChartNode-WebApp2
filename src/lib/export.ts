@@ -2,8 +2,8 @@
 'use client';
 
 /**
- * Client-side CSV export (TradingView charges for this). Builds the file in
- * memory and hands it to a temporary anchor – no backend, no blob URL leak.
+ * Client-side CSV export. Builds the file in memory and downloads it through a
+ * temporary anchor; the export does not require a NodeChart server route.
  */
 
 function escapeCell(value: string | number): string {

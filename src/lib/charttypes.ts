@@ -1,9 +1,8 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Wave-4 exotic chart types — TradingView gates intraday Renko / Kagi /
- * Line Break / Point & Figure behind Plus ($29.95). Here they are pure
- * client-side transforms over the live candle buffer, available on every
- * timeframe, for free.
+ * Alternative chart-type transforms over the currently loaded candle buffer.
+ * They run client-side and return `Candle[]` values for the chart renderer;
+ * results and available history depend on the selected symbol and provider.
  *
  * All transforms return plain `Candle[]` with strictly increasing unix-second
  * times so lightweight-charts can render them with the standard candlestick
@@ -242,7 +241,6 @@ const BASES: Array<{ minutes: number; timeframe: Timeframe }> = [
 /**
  * Feed plan for a custom interval: subscribe the largest native timeframe
  * that divides N (keeps websocket depth sane), aggregate client-side.
- * TradingView sells this as "custom timeframes" (Essential+).
  */
 export function baseForCustomInterval(minutes: number): { timeframe: Timeframe; factor: number } {
   const clamped = Math.min(Math.max(Math.round(minutes), 2), 43200);

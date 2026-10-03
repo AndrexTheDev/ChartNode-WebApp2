@@ -9,6 +9,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
+import { installFixtures } from './audit-sandbox/fixtures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
@@ -31,6 +32,7 @@ async function openTerminal(page, { init } = {}) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message.slice(0, 140)));
   if (init) await page.evaluateOnNewDocument(init);
+  await installFixtures(page);
   await page.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('canvas', { timeout: 30000 });
   await wait(4000);
@@ -184,12 +186,25 @@ console.log('\n— S2: CSV-Export (echter Download) —');
 console.log('\n— S3: locale-param-Gate (HTTP-404s) —');
 {
   const cases = [
-    ['/fr/terminal', 404], ['/xx/help', 404], ['/de-DE/terminal', 404],
-    ['/de/terminal', 200], ['/zh/help', 200], ['/en/terminal?ticker=ETH', 200],
+    { path: '/fr/terminal', expected: 307, location: '/en/terminal', finalStatus: 200 },
+    { path: '/xx/help', expected: 307, location: '/en/help', finalStatus: 200 },
+    { path: '/de-DE/terminal', expected: 307, location: '/en/de-DE/terminal', finalStatus: 404 },
+    { path: '/en/xx/terminal', expected: 404 },
+    { path: '/de/terminal', expected: 200 },
+    { path: '/zh/help', expected: 200 },
+    { path: '/en/terminal?ticker=ETH', expected: 200 },
   ];
-  for (const [path, expected] of cases) {
-    const res = await fetch(`${BASE}${path}`);
-    check(`S3 ${path} → ${expected}`, res.status === expected, String(res.status));
+  for (const { path, expected, location: target, finalStatus } of cases) {
+    // Inspect locale redirects without following them; unsupported prefixes
+    // normalize to /en, while unknown nested routes inside a valid locale 404.
+    const res = await fetch(`${BASE}${path}`, { redirect: 'manual' });
+    const location = res.headers.get('location');
+    const targetPath = location ? new URL(location, BASE).pathname : null;
+    const final = finalStatus == null ? null : await fetch(`${BASE}${path}`);
+    const passed = res.status === expected && (!target || targetPath === target)
+      && (finalStatus == null || final?.status === finalStatus);
+    const detail = `${res.status}${location ? ` ${targetPath}` : ''}${final ? ` → ${final.status}` : ''}`;
+    check(`S3 ${path} → ${expected}${target ? ` ${target}` : ''}`, passed, detail);
   }
 }
 
@@ -203,20 +218,27 @@ console.log('\n— S4: Trade-Journal (CRUD + Persistenz) —');
   const nums = await page.$$('[role="dialog"] input[type="number"]');
   check('S4b Journal-Formular hat Size/Entry/Exit/Stop-Felder', nums.length >= 4, `${nums.length} Nummer-Felder`);
   const values = ['0.5', '60000', '61000', '59000'];
-  for (let i = 0; i < 4; i += 1) {
-    await nums[i].click({ clickCount: 3 });
-    await page.keyboard.type(values[i]);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('[role="dialog"] input[type="number"]')]
+      .forEach((input, index) => input.setAttribute('data-qa-journal-number', String(index)));
+  });
+  for (let i = 0; i < values.length; i += 1) {
+    await page.locator(`[data-qa-journal-number="${i}"]`).fill(values[i]);
   }
-  const tagInput = await page.$('[role="dialog"] input[placeholder="breakout,news"]');
-  if (tagInput) await tagInput.type('qa-tag');
+  await page.locator('[role="dialog"] input[placeholder="breakout,news"]').fill('qa-tag');
   await page.evaluate(() => {
     const btns = [...document.querySelectorAll('[role="dialog"] button')];
     const add = btns.find((b) => /sichern|anlegen|hinzufügen|speichern/i.test(b.textContent ?? ''));
     add?.click();
   });
-  await wait(600);
-  const entry = await page.evaluate(() => (document.querySelector('[role="dialog"]')?.textContent ?? '').includes('qa-tag'));
-  check('S4c Eintrag erscheint mit Tag im Journal', entry);
+  await wait(900);
+  const entryState = await page.evaluate(() => ({
+    text: (document.querySelector('[role="dialog"]')?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    stored: localStorage.getItem('nc-journal-v1'),
+    values: [...(document.querySelector('[role="dialog"]')?.querySelectorAll('input') ?? [])].map((input) => input.value),
+  }));
+  const entry = entryState.text.includes('qa-tag') && entryState.stored?.includes('qa-tag');
+  check('S4c Eintrag erscheint mit Tag im Journal', entry, entry ? '' : JSON.stringify(entryState).slice(0, 170));
   await page.keyboard.press('Escape');
   await wait(300);
   await page.reload({ waitUntil: 'domcontentloaded' });

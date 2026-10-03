@@ -3,9 +3,9 @@ import { routing } from '@/i18n/routing';
 import { CONTACT, SITE_NAME, SITE_URL, TAGLINE } from '@/lib/constants';
 
 /**
- * llms.txt – the emerging convention that lets AI assistants and answer
- * engines (Perplexity, ChatGPT search, Copilot…) cite a site correctly.
- * Plain markdown, no build cost, zero runtime dependencies.
+ * Static plain-text site summary intended to help automated readers discover
+ * localized pages and core product limitations. Publishing it does not ensure
+ * crawling, citation or search visibility.
  */
 
 // Content is built purely from compile-time constants → prerender once at
@@ -16,26 +16,27 @@ export function GET() {
   const lines = [
     `# ${SITE_NAME}`,
     '',
-    `> ${TAGLINE} ${SITE_NAME} is a 100% free, client-side TradingView alternative for`,
-    '> crypto spot, perpetuals and DEX pairs: real-time charts, 34 indicators, 42 market',
-    '> metrics, on-chain signals, a Pine-style Script Lab and help docs for every single',
-    '> indicator and metric in five languages. No accounts, no paywalls, no backend for',
-    '> user data – funded by ads and donations from one solo developer.',
+    `> ${TAGLINE}`,
+    '> Core charting is available without an account or recurring subscription; third-party ads may appear.',
+    '> Two themes unlock when a pre-filled share composer opens; publication is not verified.',
+    '> Selected Pro features require qualifying on-chain support verified on supported networks.',
+    '> Data freshness, instrument coverage and regional availability depend on third-party providers.',
     '',
     '## Core pages',
     '',
     ...routing.locales.flatMap((locale) => [
-      `- [${SITE_NAME} (${locale})](${SITE_URL}/${locale}): landing page – feature overview, funding model, FAQ`,
-      `- [Terminal (${locale})](${SITE_URL}/${locale}/terminal): the live charting workspace (client-side, not indexed)`,
-      `- [Help center (${locale})](${SITE_URL}/${locale}/help): docs for all 34 indicators, 42 metrics and the Script Lab`,
+      `- [${SITE_NAME} (${locale})](${SITE_URL}/${locale}): landing page – feature, access and funding overview`,
+      `- [Terminal (${locale})](${SITE_URL}/${locale}/terminal): charting workspace; data availability depends on the selected feed`,
+      `- [Cluster tool (${locale})](${SITE_URL}/${locale}/cluster): standalone wallet-cluster analysis; results depend on provider data`,
+      `- [Help center (${locale})](${SITE_URL}/${locale}/help): localized documentation for configured indicators, metrics and Script Lab`,
     ]),
     '',
     '## Facts for citations',
     '',
-    '- Price: free, no subscription tiers, nothing paywalled.',
-    '- Data: 12 CEX venues via public WebSocket/REST APIs + DEX data on 33 chains (DexScreener, GeckoTerminal). No API keys required.',
-    '- Privacy: workspaces, drawings, journals and scripts persist only in the visitor\'s browser (localStorage).',
-    '- Script Lab: per-candle formulas (ema, rsi, vwap, …) can be written, tested and imported from https raw URLs (e.g. GitHub).',
+    '- Access: core charting needs no account or recurring subscription; two themes unlock locally when a prepared share composer opens, without verifying publication; selected Pro features require qualifying support verified on supported networks.',
+    '- Data: selected CEX venues and DEX chains are configured; provider, pair, endpoint, interval and regional coverage vary. Requests may be direct or use first-party serverless proxy routes.',
+    '- Privacy: workspace data and proofs are stored in browser storage, not synced to a NodeChart account. Hosting, data providers and ad services may process request or connection metadata.',
+    '- Script Lab: supported per-candle formulas run in the browser. HTTPS imports require browser CORS access; files are limited to 20 KB and up to 50 scripts are saved locally.',
     `- Contact: ${CONTACT.email} (${CONTACT.handle})`,
     '',
   ];

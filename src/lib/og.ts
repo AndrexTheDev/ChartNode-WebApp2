@@ -2,13 +2,10 @@
 /**
  * Open-Graph card renderer – dependency-free SVG (1200×630).
  *
- * Runs on the edge (`/api/og`), so it must stay pure string building: no DOM,
- * no wasm, no fonts to fetch. Every dynamic value is XML-escaped because the
- * ticker/price arrive from query parameters.
- *
- * Upgrade path (roadmap): swap the SVG body for Satori/`@vercel/og` PNG once
- * platforms that ignore SVG og:image (X, Facebook) matter – the route and the
- * meta wiring stay identical.
+ * Runs on the serverless `/api/og` route and stays a pure string builder:
+ * no DOM, wasm, or font fetches. Every dynamic value is XML-escaped because
+ * ticker/price arrive from query parameters. A shared price is a snapshot,
+ * not a live quote; the card says so explicitly.
  */
 
 export interface OgInput {
@@ -18,13 +15,33 @@ export interface OgInput {
   locale: string;
 }
 
-/** Card-Copy je Locale – Social-Karten sprechen die Sprache des Links. */
-const OG_STRINGS: Record<string, { tagline: string; footer: string }> = {
-  en: { tagline: 'real-time · zero fees · on-chain', footer: 'CEX + DEX terminal · no account · no keys · nodechart' },
-  de: { tagline: 'Echtzeit · keine Gebühren · On-Chain', footer: 'CEX + DEX Terminal · kein Account · keine Keys · nodechart' },
-  es: { tagline: 'tiempo real · sin comisiones · on-chain', footer: 'Terminal CEX + DEX · sin cuenta · sin claves · nodechart' },
-  ru: { tagline: 'реальное время · без комиссий · on-chain', footer: 'CEX + DEX терминал · без аккаунта · без ключей · nodechart' },
-  zh: { tagline: '实时 · 零费用 · 链上', footer: 'CEX + DEX 终端 · 无需账户 · 无需密钥 · nodechart' },
+/** Localized card copy; claims remain qualified on every share card. */
+const OG_STRINGS: Record<string, { tagline: string; footer: string; priceNote: string }> = {
+  en: {
+    tagline: 'Selected CEX/DEX markets · browser charts',
+    footer: 'No core subscription · third-party ads or links may appear',
+    priceNote: 'Price snapshot when shared; provider data may be delayed.',
+  },
+  de: {
+    tagline: 'Ausgewählte CEX/DEX-Märkte · Browsercharts',
+    footer: 'Kein Abo für Basiszugang · Drittanbieterwerbung möglich',
+    priceNote: 'Preisstand beim Teilen; Anbieterdaten können verzögert sein.',
+  },
+  es: {
+    tagline: 'Mercados CEX/DEX seleccionados · gráficos web',
+    footer: 'Sin suscripción básica · puede haber anuncios o enlaces externos',
+    priceNote: 'Precio al compartir; los datos del proveedor pueden retrasarse.',
+  },
+  ru: {
+    tagline: 'Выбранные рынки CEX/DEX · графики в браузере',
+    footer: 'Базовый доступ без подписки · возможна сторонняя реклама',
+    priceNote: 'Цена на момент отправки; данные провайдера могут запаздывать.',
+  },
+  zh: {
+    tagline: '精选 CEX/DEX 市场 · 浏览器图表',
+    footer: '核心功能无需订阅 · 可能显示第三方广告或链接',
+    priceNote: '分享时的价格快照；服务商数据可能延迟。',
+  },
 };
 
 /** Whitelist-Fallback: unbekannte/?constructor-Locales landen auf EN. */
@@ -63,7 +80,7 @@ export function buildOgSvg(input: OgInput): string {
   const change =
     input.changePct === null ? null : `${up ? '+' : ''}${input.changePct.toFixed(2)}%`;
   const changeColor = up ? '#00ff9d' : '#ff2e63';
-  const copy = OG_STRINGS[ogLocale(input.locale)] ?? OG_STRINGS.en ?? { tagline: '', footer: '' };
+  const copy = OG_STRINGS[ogLocale(input.locale)] ?? OG_STRINGS.en ?? { tagline: '', footer: '', priceNote: '' };
 
   const grid = Array.from({ length: 11 }, (_, i) => {
     const x = 60 + i * 108;
@@ -74,7 +91,7 @@ export function buildOgSvg(input: OgInput): string {
     return `<line x1="0" y1="${y}" x2="${OG_WIDTH}" y2="${y}" stroke="#123018" stroke-width="1"/>`;
   }).join('');
 
-  // A decorative candle strip – the product IS charts.
+  // Decorative candles only; these do not represent a market-data snapshot.
   const candles = Array.from({ length: 26 }, (_, i) => {
     const x = 70 + i * 42;
     const seed = Math.sin(i * 12.9898) * 43758.5453;
@@ -104,25 +121,22 @@ export function buildOgSvg(input: OgInput): string {
   <g opacity="0.5">${grid}${gridH}</g>
   <g opacity="0.55">${candles}</g>
   <rect x="0" y="0" width="${OG_WIDTH}" height="6" fill="url(#neon)"/>
-  <g transform="translate(64,64)">
-    <path d="M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z" fill="none" stroke="url(#neon)" stroke-width="4"/>
-    <rect x="14" y="20" width="6" height="24" fill="#39ff14"/>
-    <rect x="25" y="14" width="6" height="36" fill="#00f0ff"/>
-    <rect x="36" y="24" width="6" height="20" fill="#b026ff"/>
-    <text x="76" y="44" font-family="monospace" font-size="40" font-weight="700" fill="#e8ffe8" letter-spacing="6">NODE<tspan fill="#39ff14">CHART</tspan></text>
-  </g>
+  <!-- These are optimized crops of the supplied logo image, not redrawn paths. -->
+  <image href="/brand/nodechart-mark.webp" x="64" y="28" width="64" height="64" preserveAspectRatio="xMidYMid meet"/>
+  <image href="/brand/nodechart-wordmark.webp" x="143" y="33" width="270" height="61" preserveAspectRatio="xMidYMid meet"/>
   <text x="64" y="250" font-family="monospace" font-size="110" font-weight="800" fill="#f2fff2">$${ticker}</text>
   ${
     price
       ? `<text x="64" y="330" font-family="monospace" font-size="56" fill="#39ff14">$${price}</text>`
-      : `<text x="64" y="330" font-family="monospace" font-size="40" fill="#7d9c7d">${copy.tagline}</text>`
+      : `<text x="64" y="330" font-family="monospace" font-size="40" fill="#7d9c7d">${escapeXml(copy.tagline)}</text>`
   }
   ${
     change
-      ? `<text x="${price ? 64 + price.length * 34 + 40 : 64}" y="330" font-family="monospace" font-size="44" fill="${changeColor}">${change}</text>`
+      ? `<text x="${price ? 64 + price.length * 34 + 40 : 64}" y="330" font-family="monospace" font-size="44" fill="${changeColor}">${escapeXml(change)}</text>`
       : ''
   }
-  <text x="64" y="580" font-family="monospace" font-size="28" fill="#7d9c7d">${copy.footer}</text>
+  ${price ? `<text x="64" y="378" font-family="monospace" font-size="20" fill="#9bb49b">${escapeXml(copy.priceNote)}</text>` : ''}
+  <text x="64" y="580" font-family="monospace" font-size="24" fill="#9bb49b">${escapeXml(copy.footer)}</text>
   <text x="${OG_WIDTH - 40}" y="580" text-anchor="end" font-family="monospace" font-size="28" fill="#39ff14" opacity="0.8">$${ticker}</text>
 </svg>`;
 }

@@ -24,6 +24,7 @@ const SITE = (
 const CANONICAL = 'https://nodechart.cc';
 const IS_PROD = SITE === CANONICAL;
 const LOCALES = ['de', 'en', 'es', 'ru', 'zh'];
+const ROUTE_PATHS = ['', '/terminal', '/cluster', '/help', '/legal/terms', '/legal/privacy', '/legal/disclaimer'];
 const UA_BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const UA_TELEGRAM = 'TelegramBot (like TwitterBot)';
 
@@ -41,12 +42,22 @@ const skipped = (name, why) => {
 };
 
 const get = async (path, opts = {}) => {
+  const request = () => fetch(`${SITE}${path}`, {
+    redirect: opts.follow ? 'follow' : 'manual',
+    headers: { 'user-agent': opts.ua ?? UA_BROWSER, accept: opts.accept ?? 'text/html,application/xhtml+xml' },
+    signal: AbortSignal.timeout(20_000),
+  });
+
   try {
-    const res = await fetch(`${SITE}${path}`, {
-      redirect: opts.follow ? 'follow' : 'manual',
-      headers: { 'user-agent': opts.ua ?? UA_BROWSER, accept: opts.accept ?? 'text/html,application/xhtml+xml' },
-      signal: AbortSignal.timeout(20_000),
-    });
+    let res = await request();
+    if (res.status >= 500) {
+      console.log(`  RETRY ${SITE}${path} — HTTP ${res.status}; retrying in 3 s`);
+      // Free the first response's connection; a cleanup error must not prevent retry.
+      await res.body?.cancel().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      res = await request();
+    }
+
     const body = opts.body === false ? '' : await res.text();
     return { status: res.status, headers: res.headers, body };
   } catch (error) {
@@ -125,7 +136,12 @@ console.log('\n— Crawler-Hygiene —');
 const sm = await get('/sitemap.xml', { accept: 'application/xml' });
 check('sitemap.xml antwortet 200', sm.status === 200, String(sm.status));
 const locs = [...sm.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-check('Sitemap listet 30 URLs (6 Routen × 5 Sprachen)', locs.length === 30, `${locs.length}`);
+const expectedLocs = LOCALES.flatMap((locale) => ROUTE_PATHS.map((path) => `${CANONICAL}/${locale}${path}`));
+check(
+  `Sitemap enthält konfigurierte Routen je Sprache (${expectedLocs.length})`,
+  locs.length === expectedLocs.length && expectedLocs.every((url) => locs.includes(url)),
+  `actual=${locs.length}; expected=${expectedLocs.length}`,
+);
 check('Sitemap-URLs zeigen auf die kanonische Domain', locs.every((u) => u.startsWith(`${CANONICAL}/`)), locs.slice(0, 2).join(' '));
 check('Sitemap trägt hreflang + lastmod', sm.body.includes('xhtml:link') && sm.body.includes('<lastmod>'));
 check('Sitemap ist 1 h am Edge gecacht', (sm.headers.get('cache-control') ?? '').includes('s-maxage=3600'), sm.headers.get('cache-control') ?? '-');

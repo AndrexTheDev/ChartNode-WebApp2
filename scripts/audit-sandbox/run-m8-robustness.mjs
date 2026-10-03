@@ -637,8 +637,9 @@ for (const [tool, matcher] of [
 
 /*
  * S4c – beide Quellen HÄNGEN (nicht: sofort tot). Ohne Zeitlimit bliebe der
- * Dialog dauerhaft im Ladezustand; mit dem 12-s-Deckel muss er in den
- * Fehlerzustand wechseln.
+ * Dialog dauerhaft im Ladezustand. Sobald beide Versuche auslaufen, ist sowohl
+ * ein expliziter Fehler als auch der dokumentierte „keine Trades“-Leerzustand
+ * zulässig; entscheidend ist, dass der Spinner endet und keine Rejection leakt.
  */
 {
   const ctx = await browser.createBrowserContext();
@@ -659,17 +660,24 @@ for (const [tool, matcher] of [
     const state = await page.evaluate(() => {
       const dialog = document.querySelector('[role="dialog"]');
       const text = (dialog?.textContent ?? '').replace(/\s+/g, ' ').trim();
-      return { present: !!dialog, text, error: /nicht erreichbar|Fehler|error|fehlgeschlagen/i.test(text) };
+      const loading = [...(dialog?.querySelectorAll('span') ?? [])].some((node) => node.textContent?.trim() === '…');
+      return {
+        present: !!dialog,
+        text,
+        loading,
+        error: /nicht erreichbar|Fehler|error|fehlgeschlagen|timed out|timeout/i.test(text),
+        empty: /keine Trades verfügbar|keine Transaktionsdaten|no trades available/i.test(text),
+      };
     });
-    if (state.present && state.error) {
-      settled = { ...state, ms: Date.now() - t0 };
+    if (state.present && !state.loading && (state.error || state.empty)) {
+      settled = { ...state, state: state.error ? 'error' : 'empty', ms: Date.now() - t0 };
       break;
     }
   }
   check(
-    'S4c beide Quellen hängen: Dialog endet im Fehlerzustand (≤ 20 s, 12-s-Deckel)',
+    'S4c beide Quellen hängen: Dialog verlässt Ladezustand (≤ 20 s, 12-s-Deckel)',
     opened.opened && !!settled,
-    settled ? `${settled.ms} ms · ${settled.text.slice(0, 60)}` : `hängt weiter im Ladezustand (${JSON.stringify(opened)})`,
+    settled ? `${settled.ms} ms · ${settled.state}: ${settled.text.slice(0, 60)}` : `hängt weiter im Ladezustand (${JSON.stringify(opened)})`,
   );
   check('S4c hängende Quellen: 0 unbehandelte Rejections', (await rejectionsOf(page, log)).length === 0, (await rejectionsOf(page, log)).join(' | '));
   check('S4c hängende Quellen: 0 Page-Errors', log.pageErrors.length === 0, log.pageErrors.slice(0, 2).join(' | '));

@@ -9,12 +9,10 @@
  *     Chart-Header oder als Rail. Klick = neuer Tab, Terminal läuft weiter.
  *     Kein preventDefault auf App-Logik, keine Unterbrechung.
  *
- *  2. hookActionOffer(selector): Post-Action-Offer. Nach Klick auf echte
- *     Features („Export Chart“, „Share Analysis“) erscheint VERZÖGERT ein
- *     transparenter Offer-Toast – die Feature-Aktion selbst läuft immer
- *     ungestört. (Klick-Entführung vor der Aktion wäre Invalid Traffic:
- *     Adsterra-Anti-Fraud kann Auszahlungen streichen / Accounts sperren,
- *     und Safe-Browsing markiert die ganze Domain.)
+ *  2. hookActionOffer(selector): After the selected action's click handler,
+ *     a delayed, visibly sponsored link may be offered. The kit does not
+ *     intercept or replace the selected action; host-page behavior and browser
+ *     policies still apply.
  *
  *  3. Frequency-Cap: max. MAX_TRIGGERS_PER_HOUR (Default 3) Smartlink-Opens
  *     pro Stunde + Mindestabstand zwischen Toasts, via localStorage
@@ -50,16 +48,16 @@
        DEFAULT_ITEMS bleibt der Fallback für den Standalone-Betrieb. */
     ITEMS: null,
     DEFAULT_ITEMS: [
-      { icon: '🎁', label: 'Bonus Offer' },
-      { icon: '⚡', label: 'Partner Deal' },
-      { icon: '🏆', label: 'Trading Contest' },
+      { icon: '↗', label: 'Sponsored link' },
+      { icon: '◇', label: 'Visit sponsor' },
+      { icon: 'ℹ', label: 'External partner site' },
     ],
-    FALLBACK_TITLE: 'Partner-Angebot',
-    FALLBACK_TEXT: 'Dein Browser hat das neue Fenster blockiert. Öffne das Angebot direkt:',
-    FALLBACK_CTA: 'Angebot öffnen',
+    FALLBACK_TITLE: 'Gesponserter Link',
+    FALLBACK_TEXT: 'Dein Browser hat das neue Fenster blockiert. Öffne den externen Sponsor-Link nur, wenn du möchtest:',
+    FALLBACK_CTA: 'Gesponserten Link öffnen',
     FALLBACK_CLOSE: 'Schließen',
-    TOAST_TEXT: '🎁 Bonus sichern – Partner-Angebot',
-    TOAST_CTA: 'Ansehen',
+    TOAST_TEXT: 'Gesponserter externer Link',
+    TOAST_CTA: 'Link öffnen',
     RESPECT_DNT: true,
     SKIP_BOTS: true,
     DEBUG: false,

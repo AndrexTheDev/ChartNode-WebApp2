@@ -5,6 +5,8 @@ import { ALL_TIMEFRAMES, isRecord, num, pairWith, splitPair, str } from './share
 
 const QUOTES = ['USDT', 'USDC', 'USD', 'BTC', 'ETH'];
 const BULLET_URL = 'https://api.kucoin.com/api/v1/bullet-public';
+const BULLET_TIMEOUT_MS = 3_000;
+const BULLET_RETRIES = 1;
 
 let messageId = 0;
 let cached: { url: string; fetchedAt: number } | null = null;
@@ -23,25 +25,34 @@ async function resolveKucoinUrl(): Promise<string> {
   if (cached && Date.now() - cached.fetchedAt < 30 * 60_000) return cached.url;
   if (browserCorsBlocked) throw new Error('kucoin bullet-public: CORS-blocked in browser');
 
-  try {
-    const response = await fetch(BULLET_URL, { method: 'POST', signal: timeoutSignal(10_000) });
-    if (!response.ok) throw new Error(`kucoin bullet-public HTTP ${response.status}`);
-    const payload = (await response.json()) as {
-      data?: { token?: string; instanceServers?: { endpoint?: string }[] } | undefined;
-    };
-    const endpoint = payload.data?.instanceServers?.[0]?.endpoint;
-    const token = payload.data?.token;
-    if (!endpoint || !token) throw new Error('kucoin bullet-public: no endpoint/token');
+  for (let attempt = 0; attempt <= BULLET_RETRIES; attempt += 1) {
+    try {
+      const response = await fetch(BULLET_URL, { method: 'POST', signal: timeoutSignal(BULLET_TIMEOUT_MS) });
+      if (response.status >= 500 && response.status <= 599 && attempt < BULLET_RETRIES) {
+        await response.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      if (!response.ok) throw new Error(`kucoin bullet-public HTTP ${response.status}`);
+      const payload = (await response.json()) as {
+        data?: { token?: string; instanceServers?: { endpoint?: string }[] } | undefined;
+      };
+      const endpoint = payload.data?.instanceServers?.[0]?.endpoint;
+      const token = payload.data?.token;
+      if (!endpoint || !token) throw new Error('kucoin bullet-public: no endpoint/token');
 
-    const url = `${endpoint}${endpoint.endsWith('/') ? '' : '/'}?token=${token}`;
-    cached = { url, fetchedAt: Date.now() };
-    return url;
-  } catch (error) {
-    // Fetch-CORS-Rejections werfen einen nackten TypeError (nicht von HTTP-
-    // Status unterscheidbar) – einmal gemerkt, wird nie wieder gefetcht.
-    if (typeof window !== 'undefined' && error instanceof TypeError) browserCorsBlocked = true;
-    throw error;
+      const url = `${endpoint}${endpoint.endsWith('/') ? '' : '/'}?token=${token}`;
+      cached = { url, fetchedAt: Date.now() };
+      return url;
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+      if (timedOut && attempt < BULLET_RETRIES) continue;
+      // Fetch-CORS-Rejections throw a bare TypeError; retrying the known
+      // browser CORS failure only adds duplicate console noise.
+      if (typeof window !== 'undefined' && error instanceof TypeError) browserCorsBlocked = true;
+      throw error;
+    }
   }
+  throw new Error('kucoin bullet-public: request unavailable');
 }
 
 /**

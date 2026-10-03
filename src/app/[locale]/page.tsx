@@ -34,16 +34,18 @@ export default async function LandingPage({ params }: PageProps) {
   const locale = assertLocale((await params).locale);
   setRequestLocale(locale);
 
-  // featureList = exakt was die Landing sichtbar verspricht (9 bezahlte
-  // Konkurrenz-Features + 9 NodeChart-Uniques) → LD und Seite deckungsgleich
-  const tb = await getTranslations({ locale, namespace: 'benefit' });
-  const paid = tb.raw('paid') as { title: string }[];
-  const unique = tb.raw('unique') as { title: string }[];
-  const featureList = [...paid, ...unique].map((item) => item.title);
+  // Structured data mirrors the currently rendered access/details rows.
+  const [tb, tm] = await Promise.all([
+    getTranslations({ locale, namespace: 'benefit' }),
+    getTranslations({ locale, namespace: 'meta' }),
+  ]);
+  const access = tb.raw('paid') as { feat: string; gate: string }[];
+  const notes = tb.raw('unique') as string[];
+  const featureList = [...access.map((item) => `${item.feat}: ${item.gate}`), ...notes];
 
   return (
     <>
-      <JsonLd data={softwareApplicationLd(locale, featureList)} />
+      <JsonLd data={softwareApplicationLd(locale, featureList, tm('shortDescription'))} />
       <Hero locale={locale} />
       <Ticker locale={locale} />
       <BenefitSection locale={locale} />

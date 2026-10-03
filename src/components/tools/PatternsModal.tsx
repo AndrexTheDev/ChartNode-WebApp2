@@ -18,8 +18,8 @@ interface PatternsModalProps {
 }
 
 /**
- * Auto chart-pattern scanner (TradingView: Ultimate-only). Lists every
- * detection with bias + confidence and toggles the on-chart markers.
+ * Lists up to twelve heuristic matches from the loaded candle buffer and
+ * controls whether their markers are shown on the chart.
  */
 export function PatternsModal({ candles, open, onClose }: PatternsModalProps) {
   const t = useTranslations('tools');

@@ -1,10 +1,14 @@
 # AUDIT — NodeChart (nodechart.cc)
 
-Systematisches Qualitäts-/Vollständigkeitsaudit in Modulen. Dieses Dokument ist das
-Arbeitsprotokoll auf dem Weg zur finalen Version: **was geprüft wurde, was gefunden wurde,
-was bereits behoben ist und was als Nächstes dran ist.**
+**Historischer Audit-Snapshot vom 2026-09-29.** Die Messwerte und Statusangaben unten beziehen
+sich auf den damaligen Commit/Prüflauf, nicht auf den aktuellen Checkout. Die Accuracy-/Copy-
+Überarbeitung vom 2026-10-02 erfolgte danach; Prüfungen für diesen Stand müssen neu ausgeführt
+werden. Frühere PASS-Zähler belegen weder aktuelle Textgenauigkeit noch Live-Provider-Verfügbarkeit.
 
-- Stand: 2026-09-29 (Module M0–M9 abgeschlossen)
+Systematisches Qualitäts-/Vollständigkeitsprotokoll des früheren Stands: **was damals geprüft,
+gefunden und behoben wurde.**
+
+- Stand des damaligen Laufs: 2026-09-29 (Module M0–M9 abgeschlossen)
 - Geprüfter Commit: `aa809ae` (`main`) + Fixes der Durchgänge M0–M9 (Branch `arena/01a0e92c-chartnode-webapp2`, PR #1)
 - Umfang: 179 Quelldateien · ~29 200 Zeilen · 5 Locales (à 1 160 Keys) · 38 vorgebaute Routen
 
@@ -69,7 +73,7 @@ HTTP-Status, Layout-Überlauf, A11y-Basics und Screenshot.
 - **Social/SEO vollständig:** `og:title/description/url/site_name/locale` + 4× `og:locale:alternate`,
   `og:image` **mit** `width`/`height`/`alt`, `twitter:card=summary_large_image` + `twitter:image`.
 - **Routen:** `/` → 307 auf `/en`; `/en /de /es /ru /zh`, `/help`, 15 Rechtsseiten, `/terminal`,
-  `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest`, `/llms.txt`, `/icon.svg`, `/api/og` → alle 200.
+  `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest`, `/llms.txt`, `/icon.png`, `/apple-icon.png`, `/brand/nodechart-logo.webp`, `/api/og` → alle 200.
 - **A11y-Basics:** keine unbenannten Buttons/Links, Touch-Targets in Ordnung (einzige
   „kleine" Fläche ist der absichtliche Skip-Link, der bei Fokus groß wird).
 - **Light-Theme vollständig:** Landing, Terminal und Hilfe sind auch in „Daylight" korrekt

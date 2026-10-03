@@ -83,13 +83,15 @@ export function HelpExplorer() {
       question: `${doc.name} — ${doc.short}`,
       answer: doc.hint,
     }));
-    const metricDocs = t.raw('metrics') as Record<string, MetricDoc>;
-    const metricTopics: HelpTopic[] = Object.entries(metricDocs).map(([key, doc]) => ({
-      id: `met-${key}`,
-      category: 'metrics',
-      question: doc.name,
-      answer: doc.body,
-    }));
+    const metricGroups = t.raw('metrics') as Record<string, Record<string, MetricDoc>>;
+    const metricTopics: HelpTopic[] = Object.entries(metricGroups).flatMap(([group, docs]) =>
+      Object.entries(docs).map(([key, doc]) => ({
+        id: `met-${group}.${key}`,
+        category: 'metrics',
+        question: doc.name,
+        answer: doc.body,
+      })),
+    );
     const scriptTopics = t.raw('scriptTopics') as HelpTopic[];
     const edgeTopics = (t.raw('edgeTopics') ?? []) as HelpTopic[];
     return [...base, ...indicatorTopics, ...metricTopics, ...scriptTopics, ...edgeTopics];

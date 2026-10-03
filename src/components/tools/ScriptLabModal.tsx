@@ -21,9 +21,9 @@ const input =
   'mt-1 w-full border border-line bg-surface/60 px-2 py-1.5 font-mono text-xs text-fg outline-none transition-[border-color,box-shadow] duration-200 focus:border-secondary/70 focus:shadow-neon-sm';
 
 /**
- * Wave-5 Script Lab: write a per-bar formula, test it on the live buffer,
- * import sources (GitHub blob/raw, gists, any https raw file) and lay the
- * result on the chart as a CUSTOM indicator. All local, all free.
+ * Script Lab for browser-side formulas over the loaded candle buffer. Remote
+ * imports make requests to their source host; saved scripts remain in editable
+ * local browser storage and are not account-synced.
  */
 export function ScriptLabModal({ candles, open, onClose }: ScriptLabModalProps) {
   const t = useTranslations('tools');

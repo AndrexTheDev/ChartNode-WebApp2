@@ -1,10 +1,8 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Wave-4 automatic chart-pattern recognition. TradingView ships "Auto Chart
- * Patterns" only on Ultimate ($239.95/mo). This detector runs fully client
- * side over the visible candle buffer and marks classics on the chart:
- * double top/bottom, head & shoulders (±), ascending/descending triangles,
- * bull/bear flags — each with a confidence score.
+ * Heuristic chart-pattern candidates from the currently loaded candle buffer.
+ * Matches and confidence scores describe rule-based shapes, not forecasts or
+ * likely outcomes; provider history and the selected window affect results.
  */
 import type { Candle } from '@/websockets/types';
 

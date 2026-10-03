@@ -2,13 +2,11 @@
 import type { Candle } from '@/websockets/types';
 
 /**
- * Strategy backtester – the feature TradingView locks behind Premium/Ultimate
- * (and Pine Script), here as zero-config maths on the candle buffer.
+ * Local strategy simulations over the loaded candle buffer.
  *
- * Every strategy is long-only and signals on the candle close; fills happen at
- * that same close (documented, conservative). Fees are charged per side in
- * basis points. The equity curve is mark-to-market per candle so the drawdown
- * numbers are honest, not just trade-end snapshots.
+ * Strategies are long-only and signal on candle close; simulated fills use that
+ * same close as a simplifying assumption. Fees are charged per side in basis
+ * points. Slippage, funding, liquidity and real execution are not modeled.
  */
 
 export type StrategyId = 'emaCross' | 'rsiReversion' | 'bbReversion' | 'supertrend' | 'macdCross' | 'donchian';

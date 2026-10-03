@@ -12,6 +12,7 @@
 //
 // Nutzung: node scripts/qa-i18n-layout.mjs   (Server auf :3000 muss laufen)
 import puppeteer from 'puppeteer';
+import { installFixtures } from './audit-sandbox/fixtures.mjs';
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const LOCALES = ['de', 'en', 'es', 'ru', 'zh'];
@@ -54,9 +55,20 @@ const OVERFLOW_SCAN = () => {
       });
       continue;
     }
+    // Ignore text that intentionally sits inside a clipping/scroll container
+    // (e.g. a truncated venue label). The visible parent is the relevant box;
+    // counting its unclipped child as page overflow creates false positives.
+    let clippedByAncestor = false;
+    for (let parent = el.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      const parentStyle = getComputedStyle(parent);
+      if (['hidden', 'clip', 'auto', 'scroll'].includes(parentStyle.overflowX) || parentStyle.textOverflow === 'ellipsis') {
+        clippedByAncestor = true;
+        break;
+      }
+    }
     // uncontrolled text overflow: content wider than the box, no clipping strategy
     const overflowX = el.scrollWidth - el.clientWidth;
-    if (overflowX > 2 && style.overflowX === 'visible' && style.textOverflow !== 'ellipsis') {
+    if (!clippedByAncestor && overflowX > 2 && style.overflowX === 'visible' && style.textOverflow !== 'ellipsis') {
       // only report when text actually escapes (child inline content), not for
       // deliberate negative-margin/decoration tricks
       const text = (el.textContent ?? '').trim();
@@ -86,11 +98,13 @@ for (const locale of LOCALES) {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message.slice(0, 120)));
+    await installFixtures(page);
     await page.setViewport({ width: vp.width, height: vp.height });
 
     // landing
     await page.goto(`${BASE}/${locale}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await wait(1200);
+    await page.evaluate(() => document.fonts.ready);
     let bad = await page.evaluate(OVERFLOW_SCAN);
     check(`${locale} landing @ ${vp.name}: kein Overflow`, bad.length === 0, bad.slice(0, 3).map((b) => `${b.what} ${b.detail}`).join(' · '));
 
@@ -98,6 +112,7 @@ for (const locale of LOCALES) {
     await page.goto(`${BASE}/${locale}/terminal`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForSelector('canvas', { timeout: 30000 }).catch(() => {});
     await wait(2500);
+    await page.evaluate(() => document.fonts.ready);
     bad = await page.evaluate(OVERFLOW_SCAN);
     check(`${locale} terminal @ ${vp.name}: kein Overflow`, bad.length === 0, bad.slice(0, 3).map((b) => `${b.what} ${b.detail}`).join(' · '));
     check(`${locale} terminal @ ${vp.name}: keine Page-Errors`, errors.length === 0, errors[0] ?? '');
@@ -125,7 +140,13 @@ for (const locale of LOCALES) {
 
       // Indikatoren-Modal
       const modalOpen = await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) => /Indikator|Indicator|Indicador|Индикатор|指标/i.test(b.getAttribute('aria-label') ?? '') || /Indikator|Indicator|Indicador|Индикатор|指标/i.test(b.textContent ?? ''));
+        const btn = [...document.querySelectorAll('button')].find((b) => {
+          if (b.dataset.testid === 'goplus-security-badge'
+            || b.getClientRects().length === 0
+            || getComputedStyle(b).visibility === 'hidden') return false;
+          return /Indikator|Indicator|Indicador|Индикатор|指标/i.test(b.getAttribute('aria-label') ?? '')
+            || /Indikator|Indicator|Indicador|Индикатор|指标/i.test(b.textContent ?? '');
+        });
         btn?.click();
         return Boolean(btn);
       });

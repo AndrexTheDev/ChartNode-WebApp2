@@ -11,18 +11,18 @@ import type { ThemeId } from './types';
 export type ShareReason = 'chart' | 'theme' | null;
 
 interface ViralState {
-  /** "I have donated" was declared – the permanent SUPPORTER badge (cosmetic). */
+  /** Optional support was self-reported – the permanent local badge is cosmetic. */
   supporter: boolean;
   /**
-   * Self-declared donation (trust-based, no on-chain attribution possible
-   * client-side). `lastDonationAt` starts the ask-free grace window:
-   * 48 h for any donation, 5 days above DONATION_GRACE_BIG_USD.
+   * Self-reported optional support; no payment or on-chain attribution is
+   * verified here. `lastDonationAt` starts a local prompt-pause window:
+   * 48 h for any report, 5 days above BIG_DONATION_USD.
    */
   lastDonationAt: number | null;
   lastDonationUsd: number;
   /** Epoch ms of the last "Dismiss" – the wall respawns after 7 days. */
   wallDismissedAt: number | null;
-  /** One X/Telegram share unlocks the premium themes, forever. */
+  /** Local flag set by the X/Telegram composer action; publication is not verified. */
   shareUnlocked: boolean;
   shares: number;
   /** UI state (not persisted): the share modal + why it opened. */
@@ -43,18 +43,18 @@ interface ViralState {
   closeSupport: () => void;
   celebrate: (feature: string) => void;
   unlockViaShare: () => void;
-  /** Self-declared donation in USD – grants the badge + the grace window. */
+  /** Store a self-reported amount locally; no payment is verified. */
   registerDonation: (usd: number) => void;
   dismissWall: () => void;
-  /** Applies a theme, or turns a locked premium theme into a share invitation. */
+  /** Applies a theme or opens the composer prompt for a share-gated theme. */
   requestTheme: (theme: ThemeId) => boolean;
 }
 
 export const WALL_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Donation grace: any declared donation silences every ask for 48 h … */
+/** Any self-reported support pauses optional prompts locally for 48 h … */
 export const DONATION_GRACE_MS = 48 * 60 * 60 * 1000;
-/** … and a donation above this USD amount silences them for 5 days. */
+/** … and a report above this USD amount pauses them for 5 days. */
 export const DONATION_GRACE_BIG_MS = 5 * 24 * 60 * 60 * 1000;
 export const BIG_DONATION_USD = 5;
 

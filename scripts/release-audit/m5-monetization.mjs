@@ -46,7 +46,13 @@ export async function run() {
       out = (e.stdout || '') + (e.stderr || '');
     }
     const r = parse(out);
-    rep.check(name + ' ⇒ 0 FAIL', code === 0 && r && r.fail === 0, r ? r.pass + 'P/' + r.fail + 'F' : 'parse-fehler exit=' + code);
+    const failedCheck = out.split(/\r?\n/).find((line) => /^(?:\s*✘|\s*FAIL\b|\s*❌)/.test(line));
+    const summary = r ? r.pass + 'P/' + r.fail + 'F' : 'parse-fehler exit=' + code;
+    rep.check(
+      name + ' ⇒ 0 FAIL',
+      code === 0 && r && r.fail === 0,
+      failedCheck ? `${summary}; ${failedCheck.trim()}` : summary,
+    );
   }
   return { ...META, pass: rep.pass(), fail: rep.fail(), rows: rep.rows() };
 }

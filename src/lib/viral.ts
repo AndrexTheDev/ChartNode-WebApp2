@@ -9,11 +9,9 @@ export function baseSymbol(symbol: string): string {
 }
 
 /**
- * The pre-fabricated post text (English brand voice in every locale – the
- * template lives in i18n so communities can localise it later):
- *
- *   "Found an insane setup for $SOL on NodeChart. Zero fees, real-time
- *    on-chain data. #Crypto #Trading"
+ * Localized share text comes from the message bundles. It describes selected
+ * provider-backed charts and qualifies coverage/freshness; opening the share
+ * composer is a local theme unlock and does not confirm that a post was sent.
  */
 export function buildShareText(template: string, symbol: string): string {
   return template.replace('{ticker}', `$${baseSymbol(symbol)}`);

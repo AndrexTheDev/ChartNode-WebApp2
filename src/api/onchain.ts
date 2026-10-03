@@ -2,12 +2,12 @@
 'use client';
 
 /**
- * Free, keyless, CORS-enabled on-chain signal sources.
- *
- * Every endpoint in here was live-verified (schema + `access-control-allow-origin`)
- * before being wired in. All fetches go through `fetchJson` (timeout, 4 MiB cap,
- * 429 cooldown overlay, TTL cache + dedupe) and every parser is defensive:
- * a malformed upstream payload yields `null`, never a thrown field access.
+ * Selected external chain and market-signal sources. Availability, access,
+ * coverage and response formats can vary by provider and region; any endpoint
+ * check is a point-in-time observation. Requests use `fetchJson` for bounded
+ * timeouts, response sizes, caching and rate-limit handling where applicable.
+ * Parsers handle malformed data where possible; callers must still handle
+ * missing values and upstream failures.
  *
  * Sources:
  *   - mempool.space        → BTC mempool congestion, fee estimates, difficulty adjustment

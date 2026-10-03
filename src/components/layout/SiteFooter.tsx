@@ -1,8 +1,9 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
-import { getTranslations } from 'next-intl/server';
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { ArrowUpRight, HelpCircle, Mail, Scale, ShieldAlert, FileText } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
-import type { Locale } from '@/i18n/routing';
 import { APP_VERSION, CONTACT, ROUTES, SITE_NAME } from '@/lib/constants';
 import { cn } from '@/lib/cn';
 import { LocaleSwitcher } from './LocaleSwitcher';
@@ -27,12 +28,12 @@ interface FooterLink {
 }
 
 /**
- * Server component on purpose: every legal + support link is real, crawlable
- * HTML with a locale-prefixed href – no client-side hydration needed.
+ * Kept small and server-renderable so legal/support links remain crawlable.
+ * The route-aware parent omits it entirely from the fullscreen cluster surface.
  */
-export async function SiteFooter({ locale }: { locale: Locale }) {
-  const t = await getTranslations({ locale, namespace: 'footer' });
-  const tn = await getTranslations({ locale, namespace: 'nav' });
+export function SiteFooter() {
+  const t = useTranslations('footer');
+  const tn = useTranslations('nav');
   const year = new Date().getFullYear();
 
   const product: FooterLink[] = [
@@ -71,11 +72,11 @@ export async function SiteFooter({ locale }: { locale: Locale }) {
       <div className="container grid gap-12 py-14 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         {/* Brand */}
         <div className="flex flex-col gap-5">
-          <Logo />
+          <Logo variant="full" />
           <p className="max-w-sm text-sm leading-relaxed text-muted">{t('blurb')}</p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <StatusLed tone="ok" label={t('statusOk')} />
+            <StatusLed tone="idle" label={t('statusOk')} pulse={false} />
             <span className="nc-chip">v{APP_VERSION}</span>
           </div>
 

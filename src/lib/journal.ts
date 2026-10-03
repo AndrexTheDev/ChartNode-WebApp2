@@ -1,8 +1,8 @@
 /* © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md. */
 /**
- * Wave-4 trade journal — TradingView has no native journal at any price
- * point. Entries live in localStorage, stats are computed client-side and
- * exports go through the same CSV pipeline as the screener.
+ * Trade journal with browser-local entries and client-side summary calculations.
+ * Local storage is editable and may be cleared; entries are not account-synced.
+ * CSV exports use the same client-side pipeline as the screener.
  */
 export interface JournalEntry {
   id: string;

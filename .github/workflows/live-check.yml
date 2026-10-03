@@ -4,7 +4,7 @@
 #   GitHub → Actions → „Live check (Domain)“ → Run workflow
 #
 # Prüft nodechart.cc so, wie Crawler, Social-Bots und Browser sie sehen:
-# Sitemap (30 URLs), hreflang-Netz, Canonicals, robots/googlebot, JSON-LD,
+# Konfigurierte lokalisierte Sitemap-Routen, hreflang-Netz, Canonicals, robots, JSON-LD,
 # dynamische OG-Karte, 404-Verhalten, Cache-/Security-Header, alle fünf
 # Sprachen und die Domain-Regeln (Always HTTPS, www → apex). Kein Deploy.
 name: Live check (Domain)

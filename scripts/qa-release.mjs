@@ -3,7 +3,7 @@
 // Edge-Cases (Offline, Click-Storm, Resize-Storm, Altbrowser-Emulation) und
 // die finale Funktions-Checkliste (12 CEX, 33 Chains, Edge Suite, 5 Sprachen).
 //
-// Läuft gegen den Production-Build ohne Ad-Env auf :3000.
+// Läuft gegen den Production-Build auf :3000; gebündelte Ad-Defaults können externe Requests auslösen.
 // Nutzung: node scripts/qa-release.mjs
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -24,6 +24,14 @@ const withFeedFixtures = async (page) => {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitForChartSurface = (page, timeout = 30000) =>
+  page.waitForFunction(() => {
+    if (document.querySelector('canvas')) return true;
+    return [...document.querySelectorAll('[data-nc-pane-placeholder]')].some((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }, { timeout });
 
 let failures = 0;
 const results = [];
@@ -165,23 +173,25 @@ console.log('\n— A: Konsolen-Scan (Start + Interaktions-Batterie) —');
   check('A9 Tip-Jar öffnet per Header-Herz', jarOpen);
   await page.evaluate(() => {
     [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
-      /^(Ich habe gespendet|Supporter)$/.test((b.textContent ?? '').trim()),
+      /^(Ich habe unterstützt|Unterstützung gemeldet)$/.test((b.textContent ?? '').trim()),
     )?.click();
   });
   await wait(400);
-  const chipsUp = await page.evaluate(() =>
-    [...document.querySelectorAll('[role="dialog"] button')].some((b) => (b.textContent ?? '').trim() === 'Über $5'),
-  );
+  const chipsUp = await page.evaluate(() => {
+    const labels = [...document.querySelectorAll('[role="dialog"] button')].map((b) => (b.textContent ?? '').trim());
+    return labels.includes('≤ 5 $') && labels.includes('> 5 $');
+  });
   check('A10 Spenden-Flow Stufe 2 (Chips) klappt im Tip-Jar auf', chipsUp);
   await page.evaluate(() => {
-    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === 'Bis $5')?.click();
+    [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === '≤ 5 $')?.click();
   });
   await wait(600);
   const graceSet = await page.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('nc-viral-v1') ?? '{}');
-    return raw?.state?.lastDonationUsd === 1 && typeof raw?.state?.lastDonationAt === 'number';
+    const at = raw?.state?.lastDonationAt;
+    return raw?.state?.lastDonationUsd === 1 && typeof at === 'number' && Date.now() - at < 5_000;
   });
-  check('A11 „Bis $5" persistiert die 48-h-Grace korrekt', graceSet);
+  check('A11 „≤ 5 $" persistiert die 48-h-Grace korrekt', graceSet);
   await page.keyboard.press('Escape');
   await wait(300);
   // Grace-Rücksetzung für die Folgesektionen (sonst unterdrückt sie die Wall-Tests)
@@ -279,13 +289,31 @@ console.log('\n— B2: Kaltstart ohne Internet (alle externen Endpunkte tot) —
     ],
   });
   await page.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  const hasCanvas = await page.waitForSelector('canvas', { timeout: 30000 }).then(() => true).catch(() => false);
+  const hasChartSurface = await page.waitForFunction(() => {
+    if (document.querySelector('canvas')) return true;
+    return [...document.querySelectorAll('[data-nc-pane-placeholder]')].some((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }, { timeout: 30000 }).then(() => true).catch(() => false);
   await wait(9000);
-  const state = await page.evaluate(() => ({
-    canvases: document.querySelectorAll('canvas').length,
-    dialogs: document.querySelectorAll('[role="dialog"]').length,
-  }));
-  check('B2a Shell + Chart-Gerüst rendern trotz toter Datenquellen', hasCanvas && state.canvases >= 1, JSON.stringify(state));
+  const state = await page.evaluate(() => {
+    const placeholders = [...document.querySelectorAll('[data-nc-pane-placeholder]')].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    return {
+      canvases: document.querySelectorAll('canvas').length,
+      placeholders: placeholders.length,
+      placeholderText: placeholders.map((element) => element.textContent?.trim() ?? '').join(' '),
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+    };
+  });
+  check(
+    'B2a Shell + Canvas/No-Data-Zustand rendern trotz toter Datenquellen',
+    hasChartSurface && (state.canvases >= 1 || (state.placeholders >= 1 && state.placeholderText.length > 0)),
+    JSON.stringify(state),
+  );
   check('B2b kein Crash / keine Page-Errors im Offline-Kaltstart', rec.pageerrors.length === 0, rec.pageerrors.join(' | '));
   // Interaktion bleibt möglich
   await page.evaluate(() => {
@@ -415,8 +443,22 @@ console.log('\n— B5: Altbrowser-Emulation (API-Lücken + alte UA) —');
     legacy.copied === 'bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f' && legacy.toast,
     JSON.stringify(legacy).slice(0, 100),
   );
-  const canvases = await page.evaluate(() => document.querySelectorAll('canvas').length);
-  check('B5c Terminal rendert unter Altbrowser-Bedingungen', canvases >= 1, String(canvases));
+  const chartSurface = await page.evaluate(() => {
+    const placeholders = [...document.querySelectorAll('[data-nc-pane-placeholder]')].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    return {
+      canvases: document.querySelectorAll('canvas').length,
+      placeholders: placeholders.length,
+      placeholderText: placeholders.map((element) => element.textContent?.trim() ?? '').join(' '),
+    };
+  });
+  check(
+    'B5c Terminal rendert Canvas oder sichtbaren No-Data-Zustand unter Altbrowser-Bedingungen',
+    chartSurface.canvases >= 1 || (chartSurface.placeholders >= 1 && chartSurface.placeholderText.length > 0),
+    JSON.stringify(chartSurface),
+  );
   await page.close();
 }
 
@@ -427,12 +469,12 @@ console.log('\n— C: Finale Checkliste —');
   const exSrc = readFileSync(resolve(root, 'src/lib/exchanges.ts'), 'utf8');
   const cexIds = [...exSrc.matchAll(/id:\s*'([^']+)'/g)].map((m) => m[1]);
   const expected = ['binance', 'okx', 'bybit', 'coinbase', 'kraken', 'gate', 'bitget', 'kucoin', 'bitfinex', 'cryptocom', 'htx', 'coinex'];
-  check('C1 12 CEX-Venues im Code', cexIds.length === 12 && expected.every((e) => cexIds.includes(e)), cexIds.join(','));
+  check('C1 12 konfigurierte CEX-Adapter-IDs im Code (Feed-Abdeckung kann variieren)', cexIds.length === 12 && expected.every((e) => cexIds.includes(e)), cexIds.join(','));
 
   // C2: Multichain-DEX
   const chainsSrc = readFileSync(resolve(root, 'src/lib/chains.ts'), 'utf8');
   const chainIds = [...chainsSrc.match(/export type ChainId =([^;]+);/s)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  check('C2 Multichain-DEX: 33 Chains definiert', chainIds.length === 33, `${chainIds.length}: ${chainIds.slice(0, 8).join(',')}…`);
+  check('C2 33 konfigurierte Chain-IDs (Provider-/Datenabdeckung variiert)', chainIds.length === 33, `${chainIds.length}: ${chainIds.slice(0, 8).join(',')}…`);
 
   // C3: On-Chain-Signale (Module + Live-Beweis in anderen Suiten)
   const onchain = readFileSync(resolve(root, 'src/api/onchain.ts'), 'utf8');
@@ -457,7 +499,7 @@ console.log('\n— C: Finale Checkliste —');
   }
   check('C5 5 Sprachen: alle /terminal liefern 200 + korrektes lang-Attribut', localeResults.every((r) => r.status === 200 && r.lang && r.sample), JSON.stringify(localeResults.map((r) => `${r.loc}:${r.status}:${r.lang ? 'lang✓' : 'lang✗'}`)));
 
-  // C6: Werbeflächen (Container im Production-Build präsent, lautlos ohne Env)
+  // C6: Werbeflächen (Container im Production-Build; gebündelte Ad-Defaults können Requests auslösen)
   const adManager = readFileSync(resolve(root, 'src/components/ads/AdManager.tsx'), 'utf8');
   // Doktrin: hydration-safe MANUELLE Injection (data-cfasync=false, Retries,
   // Blocker-Detect) statt next/script + benannte Container-Slots.
@@ -479,7 +521,7 @@ console.log('\n— C: Finale Checkliste —');
     );
   const wallUp9 = async () => {
     await c9.goto(`${BASE}/de/terminal?adwall=1`, { waitUntil: 'domcontentloaded' });
-    await c9.waitForSelector('canvas', { timeout: 30000 });
+    await waitForChartSurface(c9);
     for (let i = 0; i < 8; i += 1) {
       await wait(750);
       const up = await c9.evaluate(() =>
@@ -491,22 +533,34 @@ console.log('\n— C: Finale Checkliste —');
   };
   const H = 3_600_000;
   await c9.goto(`${BASE}/de/terminal`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await c9.waitForSelector('canvas', { timeout: 30000 });
+  await waitForChartSurface(c9);
   await seed9(Date.now() - 47 * H, 10);
   check('C9a Spendensystem: laufende Grace (> $5, 47 h alt) unterdrückt jeden Aufruf', (await wallUp9()) === false);
   await seed9(Date.now() - 6 * 24 * H, 10);
   check('C9b Spendensystem: abgelaufene Grace (6 Tage) lässt den Aufruf zurückkehren', (await wallUp9()) === true);
-  // Chip-Zeile bei 320px: kein Horizontal-Overflow, Chips bleiben klickbar
+  // Chip-Zeile bei 320px: isMobile can reload Chromium's page, so wait for
+  // the forced wall to reappear before interacting with its donated flow.
   await c9.setViewport({ width: 320, height: 568, isMobile: true, hasTouch: true });
-  await wait(600);
+  await c9.waitForFunction(
+    () => [...document.querySelectorAll('[role="dialog"]')].some((dialog) => (dialog.textContent ?? '').includes('bc1q')),
+    { timeout: 10000 },
+  );
   await c9.evaluate(() => {
     [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
-      /^(Ich habe gespendet|Supporter)$/.test((b.textContent ?? '').trim()),
+      /^(Ich habe unterstützt|Unterstützung gemeldet)$/.test((b.textContent ?? '').trim()),
     )?.click();
   });
-  await wait(500);
+  await c9.waitForFunction(
+    () => [...document.querySelectorAll('[role="dialog"] button')].some((button) => (button.textContent ?? '').trim() === '> 5 $'),
+    { timeout: 5000 },
+  );
+  await c9.evaluate(() => {
+    const chip = [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === '> 5 $');
+    chip?.scrollIntoView({ block: 'center', inline: 'nearest' });
+  });
+  await wait(200);
   const mobile = await c9.evaluate(() => {
-    const chip = [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === 'Über $5');
+    const chip = [...document.querySelectorAll('[role="dialog"] button')].find((b) => (b.textContent ?? '').trim() === '> 5 $');
     const r = chip?.getBoundingClientRect();
     return {
       overflow: document.documentElement.scrollWidth - window.innerWidth,

@@ -32,7 +32,7 @@ import type { WhaleTrade } from '@/store/useWhaleStore';
  * keeps it clear of the iOS home indicator.
  *
  * The bar is out of flow, so the room it occupies has to be reserved by the
- * page shell — see the matching bottom padding in `src/app/[locale]/layout.tsx`.
+ * terminal shell — see the matching bottom padding in `TerminalShell.tsx`.
  */
 export function WhaleTicker() {
   const t = useTranslations('whales');
@@ -84,7 +84,7 @@ export function WhaleTicker() {
     <div
       ref={barRef}
       aria-label={t('aria')}
-      className="pointer-events-none fixed inset-x-0 z-40 pb-[env(safe-area-inset-bottom)]"
+      className="nc-whale-ticker pointer-events-none fixed inset-x-0 z-40 pb-[env(safe-area-inset-bottom)]"
       style={{ bottom: 'var(--nc-socialbar-h, 0px)' }}
     >
       <div className="pointer-events-auto border-t border-line/80 bg-bg/92 backdrop-blur-xl">

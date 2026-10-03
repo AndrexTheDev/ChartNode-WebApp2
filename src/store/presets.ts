@@ -46,7 +46,7 @@ export const CHART_LAYOUTS: Record<ChartLayoutId, LayoutPreset> = {
 export const LAYOUT_IDS = Object.keys(CHART_LAYOUTS) as ChartLayoutId[];
 
 export const THEMES: ThemeId[] = ['acid', 'violet', 'light'];
-/** Free skins + share-to-unlock skins (picker order). */
+/** Standard themes + share-composer-gated themes (picker order). */
 export const ALL_THEMES: ThemeId[] = ['acid', 'violet', 'light', 'matrix', 'miami'];
 
 /** Build (or rebuild) the pane array so it always matches the layout. */

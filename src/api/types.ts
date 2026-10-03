@@ -15,6 +15,9 @@ export interface DexPair {
   liquidityUsd: number | null;
   volume24h: number | null;
   change24h: number | null;
+  /** Optional DEX-aggregator market cap / fully diluted valuation metadata. */
+  marketCapUsd?: number | null;
+  fdvUsd?: number | null;
   url: string | null;
 }
 

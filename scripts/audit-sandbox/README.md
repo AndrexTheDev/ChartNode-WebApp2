@@ -13,13 +13,14 @@ wäre.
 | `fixtures.mjs` | Fängt die Kline-Requests aller 12 Venues im Browser ab und antwortet im **Original-Wire-Format** (inkl. CORS-Header). Der Chart läuft dadurch über den echten Adapter-/Parser-/Render-Pfad. |
 | `lib.mjs` | Browser-Start (headless Chromium aus `/tmp`), Instrumentierung (Konsole/Page-Errors/Netz), Menü-Helfer, Screenshots. |
 | `font-mock.cjs` | Offline-Font-Mock für `next build`: liefert für jede Google-Fonts-URL echtes CSS + echte Font-Dateien aus den `@fontsource`-Paketen (kein Dummy, damit das Layout realistisch bricht – oder eben nicht). |
-| `ad-fixtures.mjs` | **Ad-Fixtures (M6)**: fängt die Adsterra-Delivery-Skripte ab und ersetzt sie durch Stubs, die sich wie die echten verhalten (Native-Banner füllt sein Container-Div, Rail liefert 160×600-iframe, Social Bar verankert sich am Boden, Popunder armiert sich, Direct-Link antwortet). Modi `fill` / `nofill` / `blocked` / `flake`; dazu CLS-Messung mit Quell-Rechtecken. |
-| `run-m6-ads.mjs` | **M6-Suite**: S0 CLS-Grundrauschen · S1 QA-Guard · S2 Social Bar (Reservierung, Überdeckung, Dialog-Pause) · S4 Sidebar-Rail · S5 Header-Banner · S6 Terminal-Slots · S7 Ad-Block-Wall · S8 Spender-Grace · S9 Popunder-Cap · S10 Smartlinks · S11 Fehler-Sweep. |
+| `ad-fixtures.mjs` | **Ad-Fixtures (M6)**: fängt die Adsterra-Delivery-Skripte ab und ersetzt sie durch Stubs, die sich wie die echten verhalten (Native-Banner füllt sein Container-Div; Terminal 4:1, Header mobil 2:1/sonst 4:1 inkl. Resize; Rail liefert 160×600-iframe; Social Bar verankert sich am Boden, Popunder armiert sich, Direct-Link antwortet). Modi `fill` / `nofill` / `blocked` / `flake`; dazu CLS-Messung mit Quell-Rechtecken. |
+| `run-m6-ads.mjs` | **M6-Suite**: S0 CLS-Grundrauschen · S1 QA-Guard · S2 Social Bar (Reservierung, Überdeckung) · S3 Dialog-Pause · S4 Sidebar-Rail · S5 Header-Banner · S6 Terminal-Slots · S7 Ad-Block-Wall · S8 Spender-Grace · S9 Popunder-Cap · S10 Smartlinks · S11 Fehler-Sweep. |
 | `run-m7-perf.mjs` | **M7-Suite (Performance)**: S1 Ladeleistung (TTFB/FCP/LCP/CLS/TBT bei 4× CPU + Slow 4G), S2 Bundle (kritisch vs. nachgeladen je Seite), S3 Fonts je Sprache inkl. Cyrillic-Nachweis über `unicode-range`, S4 Interaktion (INP via Event-Timing, Menü→Dialog-Latenz), S5 Auslieferung (Cache/Kompression). Schalter: `--quick` (kurze Idle-Fenster), `--compare <report.json>` (zwei Läufe nebeneinander). |
 | `run-m7-smoke.mjs` | **M7-Smoke**: Funktionstest der Pfade, die der Lazy-Umbau berührt (Kopfzeilen-Suche inkl. Lazy-Engine, Teilen-Dialog, Support-Dialog). 6 Checks. |
 | `run-m8-robustness.mjs` | **M8-Suite (Robustheit)**: S1 Speicher (Quote voll, gesperrter Speicher, L2-Verdrängung) · S2 Rate-Limit (429-Overlay, Cooldown, Retry, kein Overlay bei 403) · S3 Netzabbruch (offline/online, Hänger mit Timeout, Abbruch beim Tippen, Dialog-Leichen) · S4 Sekundär-Quellen (Befund O3, hängende Quellen mit 12-s-Deckel) · S5 Payload-Härtung (4-MiB-Deckel, kaputtes JSON, leere/giftige Kerzen, Cache-Vergiftung). Fault-Injection über die `route`-Option der Fixtures. |
 | `run-with-fixtures.mjs` | **Fixture-Wrapper (M9)**: startet ein Projekt-Skript (z. B. `scripts/browser-check.mjs`) und patcht `puppeteer.launch`, sodass **jede** Seite – auch die aus `createBrowserContext()` – den Fixture-Feed erhält. Damit laufen die Canvas-Suiten ohne Börsen-Netz statt in den Timeout. |
-| `verify-offline.sh` | **Gate offline (M9)**: fährt dieselbe Kette wie `.github/workflows/deploy.yml` (`npm run verify:offline`): typecheck · lint · i18n · SEO · CWV · Fit · qa-features · browser-check mit Fixture-Feed. Live-Provider-Prüfungen melden `SKIP`. |
+| `ratings-empty-state.mjs` | Fault-Injection für das Ratings-Modal: Bybit + fehlende Gate-Kerzen prüft den echten Null-Daten-Zustand; danach lässt eine einzelne 1h-Antwort gezielt nur 1/6 Zeilen durch und prüft den Hinweis auf Teilabdeckung. |
+| `verify-offline.sh` | **Gate offline (M9)**: fährt die Projektprüfungen (`npm run verify:offline`): typecheck · lint · i18n · SEO · CWV · Fit · qa-features · Ratings-Empty/Partial-Fault-Injection · browser-check mit Fixture-Feed. Live-Provider-Prüfungen melden `SKIP`. |
 | `run-m5-a11y.mjs` | **M5-A11y-Suite**: S1 Fokus-Sichtbarkeit (dunkel + hell), S2 Tab-Ordnung/Fokus in 19 Overlays inkl. Fehlerachse, S2b Menü-Tastatur (4 ToolMenüs), S3 Light-Kontrast, S3b Token-Matrix über alle 5 Skins, S4 Icon-Namen (inkl. Lokalisierungs-Detektor), S5 Semantik. Schalter: `--locale de`, `--quick`. |
 
 ## Ablauf
@@ -39,16 +40,23 @@ LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts \
   node scripts/audit-sandbox/run-m5-a11y.mjs
 ```
 
-Gate ohne Netz (Durchgang M9): **867 PASS / 0 FAIL**, 19 Live-Prüfungen `SKIP`,
-Exitcode 0 – `npm run verify:offline` (Server auf :3000 vorausgesetzt).
+Letzter Offline-Gate-Lauf (2026-10-03): **950 PASS / 0 FAIL**, 18 Live-Prüfungen
+`SKIP`, Exitcode 0 – `npm run verify:offline` (Server auf :3000 vorausgesetzt).
+Enthält jetzt Fault-Injection für leere und teilweise verfügbare Ratings sowie den
+Mobile-Touch-Gate-Test, der prüft, dass der Whale-Ticker Aktionen nicht verdeckt.
 
 Aktueller Stand (Durchgang M5): **175 ok / 0 Befunde** in 262 s; Report als JSON
 unter `/tmp/nc-shots/m5-report.json`, Screenshots daneben.
 
-M6 (Werbung im Fill-Fall): **64 ok / 0 Befunde** in 158 s (Full-Fill-Build mit
-`NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE`/`_DESKTOP`); auf dem Auslieferungs-Build ohne
-diese Variablen **57 ok / 0** (die Slot-Stufen überspringen dann bewusst).
-Report `/tmp/nc-shots/m6-report.json`.
+M6 (Fill- und No-fill-Verhalten): **82 ok / 0 Befunde** im Fixture-Build mit
+`NEXT_PUBLIC_ADSTERRA_NATIVE_MOBILE`/`_DESKTOP`. Geprüft werden reservierte,
+zugänglich beschriftete No-fill-Flächen für Sidebar, Header und Terminal (Mobile
+und Desktop), responsive Header-Geometrie am 640/641-px-Rand, Same-Page-Resize
+sowie CLS ohne messbaren No-fill-Sprung. Auf dem Auslieferungs-Build ohne diese
+Variablen werden die Native-Slot-Stufen bewusst übersprungen. Der letzte
+Auslieferungs-Build-Lauf (`--quick`, 2026-10-03) ergab **69 ok / 0 Befunde**;
+die konfigurationsabhängigen Terminal-Slots wurden als übersprungen markiert.
+Report: `/tmp/nc-shots/m6-quick-final/m6-report.json`.
 
 M8 (Robustheit): **54 ok / 0 Befunde** in 167 s (Durchgang 6b). Geprüft werden
 volle Quote beim Speichern (vorher: unbehandeltes `QuotaExceededError` im

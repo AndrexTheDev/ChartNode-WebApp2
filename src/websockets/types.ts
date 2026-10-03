@@ -2,11 +2,11 @@
 import type { Timeframe } from '@/store/types';
 
 /**
- * Every exchange NodeChart can stream from – all public, all key-less, all free.
+ * Exchange identifiers used by configured market-data adapters. Public
+ * endpoint access, usage terms and coverage can change by venue and region.
  *
- * Verified live against production (see `npm run ws:smoke`): payloads, channel
- * names and endpoints in `src/websockets/adapters/` are captured from real
- * server responses, not from documentation alone.
+ * Adapter payloads and channel handling have smoke fixtures; live behavior
+ * still depends on current provider responses.
  */
 export type ExchangeId =
   | 'binance'

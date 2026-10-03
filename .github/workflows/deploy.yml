@@ -1,5 +1,6 @@
 # © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
-# Auto-Deploy: jeder Push auf main → Cloudflare Workers (Free Tier, $0).
+# Auto-Deploy: ein Push auf main startet nach erfolgreichem Gate einen Worker-Deploy.
+# Plattformpreise, Quoten und mögliche Verbrauchskosten hängen vom gewählten Plan ab.
 # Benötigte Repository-Secrets (siehe VEROEFFENTLICHEN.md §3b):
 #   CLOUDFLARE_API_TOKEN  (Template "Edit Cloudflare Workers")
 #   CLOUDFLARE_ACCOUNT_ID (Dashboard → rechts auf der Overview-Seite)
@@ -54,7 +55,7 @@ jobs:
 
       # Der Deploy ist erst fertig, wenn die Domain ihn auch ausliefert.
       # Prüft genau die §5-Checkliste aus VEROEFFENTLICHEN.md – als Befehl:
-      # Sitemap (30 URLs), hreflang, Canonicals, robots/googlebot, JSON-LD,
+      # Configured localized sitemap routes, hreflang, canonicals, robots, JSON-LD,
       # OG-Karte, 404-Verhalten, Header, alle fünf Sprachen und die
       # Domain-Regeln (Always HTTPS, www → apex).
       - name: Auf die Domain warten (Deploy-Propagation)

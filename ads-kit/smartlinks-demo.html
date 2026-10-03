@@ -35,7 +35,7 @@
 <body>
 <main>
   <h1>⬡ NodeChart – Smartlink-Kit Demo</h1>
-  <p class="hint">Öffne die DevTools-Konsole und setze <code>DEBUG = true</code> in den CONFIG-Blöcken für Logs.
+  <p class="hint">Demo-Inhalte und Sponsorziele sind Beispiele, keine Zusage zu Bonus, Rendite oder Teilnahmebedingungen. Gesponserte Links öffnen externe Websites; prüfe dort Inhalte und Bedingungen. Öffne die DevTools-Konsole und setze <code>DEBUG = true</code> in den CONFIG-Blöcken für Logs.
     Events: <code>sl:opened</code>, <code>sl:blocked</code>, <code>sl:capped</code>, <code>sl:toast</code>.</p>
 
   <!-- ======================= 1) LANDINGPAGE ======================= -->
@@ -43,10 +43,10 @@
     <h2>1 · Landing – Secondary CTAs (data-smartlink)</h2>
     <div class="row">
       <!-- Anker-Variante: native Navigation, blocker-resistent -->
-      <a class="nc-sl-cta" href="#" data-smartlink>🎁 Claim Bonus</a>
+      <a class="nc-sl-cta" href="#" data-smartlink>↗ Gesponserten Link öffnen</a>
       <!-- Button-Variante: window.open + Fallback-Modal -->
-      <button class="nc-sl-cta" type="button" data-smartlink>🏦 Partner Exchanges</button>
-      <button class="nc-sl-cta" type="button" data-smartlink>🖥 View Live Demo</button>
+      <button class="nc-sl-cta" type="button" data-smartlink>◇ Sponsor besuchen</button>
+      <button class="nc-sl-cta" type="button" data-smartlink>ℹ Externe Partnerseite</button>
     </div>
   </section>
 
@@ -54,8 +54,8 @@
     <h2>2 · Landing – Teaser-Cards (data-smartlink-card)</h2>
     <div class="cards">
       <div class="nc-sl-card" data-smartlink-card>
-        <p class="card-title">⚡ 100x Leverage Bonus</p>
-        <p class="card-text">Exklusives Partner-Angebot – neuer Tab, Landing bleibt offen.</p>
+        <p class="card-title">↗ Gesponserter Partner-Link</p>
+        <p class="card-text">Beispielziel eines Drittanbieters – neue Website öffnet in einem separaten Tab.</p>
       </div>
       <div class="nc-sl-card" data-smartlink-card="toast" data-href="#terminal-section">
         <p class="card-title">📚 Was ist On-Chain-Analyse?</p>
@@ -73,7 +73,7 @@
     <h2>3 · Terminal – Sponsored-Strip + Post-Action-Offers</h2>
     <div class="terminal">
       <div class="terminal-header">
-        <span class="terminal-title">SOL/USDT · 1m · Binance</span>
+        <span class="terminal-title">Demo-Mock · SOL/USDT · 1m · Beispielquelle</span>
         <!-- Mount-Point für app-smartlinks.js -->
         <div id="sponsor-strip"></div>
         <div class="row">
@@ -94,7 +94,7 @@
     console.info('[demo] Chart exportiert ✓ (Feature läuft ungestört)');
   });
   document.querySelector('.js-share-analysis').addEventListener('click', () => {
-    console.info('[demo] Analyse geteilt ✓ (Feature läuft ungestört)');
+    console.info('[demo] Share-Composer-Demo geöffnet; eine Veröffentlichung wird nicht bestätigt.');
   });
 </script>
 <script src="./landing-smartlinks.js" defer></script>

@@ -5,7 +5,7 @@
  * die Delivery-Skripte deshalb im Browser abgefangen und durch Stubs ersetzt,
  * die sich wie die echten verhalten:
  *
- *   · Native Banner  – füllt `#container-…` selbst (Widget-Layout 4:1)
+ *   · Native Banner  – füllt `#container-…` selbst (Terminal 4:1, Header mobil 2:1)
  *   · Sidebar-Rail   – hängt einen 160×600-iframe neben den Loader
  *   · Social Bar     – `position:fixed` am Viewport-Boden, hoher z-index
  *   · Popunder       – merkt sich den nächsten Klick (ohne echtes window.open)
@@ -21,7 +21,7 @@ export const NATIVE_KEY = '2cedab945cb896ea179b566a413d953b';
 
 const MARK = 'data-nc-adstub';
 
-/** Native Banner: platziert ein 4:1-Kreativ im Container-Div (echter Pfad). */
+/** Native Banner: 4:1-Streifen, Header-Fixture mobil 2:1 wie die CSS-Reserve. */
 export function nativeFillJs() {
   return `(function(){
   // Wie das echte invoke.js: Ziel-Container aus dem eigenen URL-Hash ableiten.
@@ -34,16 +34,23 @@ export function nativeFillJs() {
     var host = document.getElementById(id) || (me && me.closest('[data-native-banner]'));
     if (!host) return false;
     if (host.querySelector('iframe[${MARK}]')) return true;
-    var w = Math.max(240, Math.floor(host.clientWidth || 300));
-    var h = Math.round(w / 4);
+    var isHeader = id === ${JSON.stringify(NATIVE_CONTAINER_ID)};
     var f = document.createElement('iframe');
     f.setAttribute('${MARK}','native');
     f.setAttribute('title','Sponsored');
-    f.width = String(w); f.height = String(h);
-    f.style.cssText = 'display:block;border:0;width:100%;height:'+h+'px;background:#0d1520';
-    f.srcdoc = '<!doctype html><body style="margin:0;height:100%;display:flex;align-items:center;justify-content:center;font:12px monospace;color:#7fd4ff;background:#0d1520">NC-ADSTUB NATIVE 4:1</body>';
+    f.style.cssText = 'display:block;border:0;width:100%;background:#0d1520';
+    f.srcdoc = '<!doctype html><body style="margin:0;height:100%;display:flex;align-items:center;justify-content:center;font:12px monospace;color:#7fd4ff;background:#0d1520">NC-ADSTUB NATIVE RESPONSIVE</body>';
+    function resize(){
+      var w = Math.max(240, Math.floor(host.clientWidth || 300));
+      var ratio = isHeader && window.matchMedia('(max-width:640px)').matches ? 2 : 4;
+      var h = Math.round(w / ratio);
+      f.width = String(w); f.height = String(h); f.style.height = h + 'px';
+      window.__ncAdStubNative = h;
+    }
     host.appendChild(f);
-    window.__ncAdStubNative = h;
+    resize();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(host);
+    else window.addEventListener('resize', resize);
     return true;
   }
   if (!place()) window.__ncAdStubNativePending = (window.__ncAdStubNativePending||0)+1;

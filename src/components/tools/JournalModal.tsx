@@ -28,8 +28,9 @@ const input =
   'mt-1 w-full border border-line bg-surface/60 px-2 py-1.5 font-mono text-xs tabular-nums text-fg outline-none transition-[border-color,box-shadow] duration-200 focus:border-secondary/70 focus:shadow-neon-sm';
 
 /**
- * Trade journal with stats — TradingView has none at any price point.
- * Entries + stats live in localStorage; export reuses the CSV pipeline.
+ * Trade journal for user-entered entries and client-side summary calculations.
+ * Entries use editable local browser storage and are not account-synced;
+ * exports use the client-side CSV pipeline.
  */
 export function JournalModal({ symbol, open, onClose }: JournalModalProps) {
   const t = useTranslations('tools');

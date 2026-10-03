@@ -237,7 +237,9 @@ const LANG_FN = '(' +
     const ids = {};
     for (const el of document.querySelectorAll('[id]')) ids[el.id] = (ids[el.id] || 0) + 1;
     bad.dupIds = Object.keys(ids).filter((k) => ids[k] > 1);
-    for (const img of document.querySelectorAll('img')) if (!img.getAttribute('alt')) bad.noAlt.push(img.src.slice(-40));
+    // Empty alt is valid for decorative images (e.g. logo crops inside an
+    // already-labelled link); only a missing alt attribute is an error.
+    for (const img of document.querySelectorAll('img')) if (!img.hasAttribute('alt')) bad.noAlt.push(img.src.slice(-40));
     for (const a of document.querySelectorAll('a[href^="javascript:"]')) bad.javaScriptHref.push(a.textContent.trim().slice(0, 20));
     return { lang: document.documentElement.lang, bad, title: document.title };
   }.toString() +
@@ -413,7 +415,15 @@ async function s2Dialogs(browser, locale) {
       continue;
     }
     const dialogInfo = await page.evaluate(() => {
-      const d = document.querySelector('[role="dialog"], [role="menu"]');
+      // Prefer the currently rendered surface; a hidden menu/dialog may remain
+      // mounted during its exit animation while focus is already in the new one.
+      const visibleSurfaces = [...document.querySelectorAll('[role="dialog"], [role="menu"]')].filter((surface) => {
+        const style = getComputedStyle(surface);
+        const rect = surface.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
+          && rect.width > 0 && rect.height > 0;
+      });
+      const d = visibleSurfaces.find((surface) => surface.getAttribute('role') === 'dialog') ?? visibleSurfaces[0];
       if (!d) return null;
       const labelled = d.getAttribute('aria-label') || document.getElementById(d.getAttribute('aria-labelledby') || '')?.textContent || '';
       const rect = d.getBoundingClientRect();
@@ -423,7 +433,7 @@ async function s2Dialogs(browser, locale) {
         labelled: (labelled || '').trim().replace(/\s+/g, ' ').slice(0, 60),
         w: Math.round(rect.width),
         h: Math.round(rect.height),
-        focusInside: d.contains(document.activeElement) || d === document.activeElement,
+        focusInside: visibleSurfaces.some((surface) => surface.contains(document.activeElement) || surface === document.activeElement),
       };
     });
     if (!dialogInfo) {
@@ -832,7 +842,8 @@ async function s4IconNames(browser) {
     const mb = collect(b);
     const same = [];
     for (const [name, where] of ma) {
-      if (mb.has(name) && !SYMBOLIC.test(name) && !TICKER.test(name) && name.length > 2) same.push(`${where}:"${name}"`);
+      // Proper product names remain unchanged by design; they are not stale English copy.
+      if (mb.has(name) && name !== 'NodeChart' && !SYMBOLIC.test(name) && !TICKER.test(name) && name.length > 2) same.push(`${where}:"${name}"`);
     }
     report('S4', `Icon-Namen sind lokalisiert (nicht de=="${a}"==en)`, same.length === 0, [...new Set(same)].slice(0, 8).join(' · ') || 'clean');
 

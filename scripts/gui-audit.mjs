@@ -195,7 +195,7 @@ console.log('\n=== G2: Terminal Desktop (Layouts, Menüs, Features, Palette, The
       }, i);
       await wait(900);
       await shot(page, 'desktop', `t-theme-${i}-${slug(label)}`);
-      // evtl. Unlock-Dialog (Premium-Themes) → schließen + Picker neu öffnen
+      // evtl. Composer-Dialog (share-gated themes) → schließen + Picker neu öffnen
       const dlg = await page.evaluate(() => !!document.querySelector('[role="dialog"]'));
       if (dlg) { await page.keyboard.press('Escape'); await wait(300); await page.evaluate(() => document.querySelector('button[aria-label="Design"]')?.click()); await wait(400); }
       else { await page.evaluate(() => document.querySelector('button[aria-label="Design"]')?.click()); await wait(400); }

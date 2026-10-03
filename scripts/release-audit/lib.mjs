@@ -8,7 +8,7 @@ import puppeteer from 'puppeteer';
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 export const LOCALES = ['de', 'en', 'es', 'ru', 'zh'];
-export const ROUTES = ['/', '/help', '/terminal', '/legal/terms', '/legal/disclaimer', '/legal/privacy'];
+export const ROUTES = ['/', '/help', '/terminal', '/cluster', '/legal/terms', '/legal/disclaimer', '/legal/privacy'];
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

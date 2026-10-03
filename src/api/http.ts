@@ -59,8 +59,9 @@ function pruneMaps(now: number): void {
 export interface FetchJsonOptions {
   /** Logical upstream name shown in the rate-limit overlay. */
   source: string;
-  /** Retries after a 429 cooldown (0 = fail immediately). */
+  /** One retry for network errors, timeouts and 5xx; 429 retries after cooldown. */
   retries?: number;
+  /** Per-attempt timeout. Public API default: 3 s. */
   timeoutMs?: number;
   /** GET response cache TTL in ms. 0 disables. */
   cacheTtlMs?: number;
@@ -91,18 +92,19 @@ export interface FetchJsonOptions {
 }
 
 /**
- * The only fetch entry point in the app.
+ * Shared JSON fetch entry point for keyless public APIs; protocol-specific
+ * requests use their own equivalent timeout/retry controls.
  *
- * - enforces a timeout (hanging public APIs are the #1 UX killer)
- * - detects HTTP 429, triggers the global cooldown overlay and retries after it
+ * - enforces a 3 s per-attempt timeout for keyless public APIs
+ * - retries transient network/CORS failures and HTTP 5xx once; handles 429 via cooldown
  * - refuses to retry regional blocks (401/403/451)
  * - optional TTL cache + in-flight dedupe to stay under public rate limits
  */
 export async function fetchJson<T>(url: string, options: FetchJsonOptions): Promise<T> {
   const {
     source,
-    retries = 2,
-    timeoutMs = 12_000,
+    retries = 1,
+    timeoutMs = 3_000,
     cacheTtlMs = 0,
     dedupe = cacheTtlMs > 0,
     signal,
@@ -272,6 +274,19 @@ async function attempt<T>(
       if (error instanceof HttpError && error.status === 429) {
         lastError = error;
         continue; // loop retries after cooldown
+      }
+      if (opts.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      const timedOut = controller.signal.aborted;
+      const retryable = timedOut || error instanceof TypeError
+        || (error instanceof HttpError && error.status >= 500 && error.status <= 599);
+      if (retryable && tryIndex < opts.retries) {
+        lastError = error;
+        continue;
+      }
+      if (timedOut) {
+        throw new Error(`${opts.source}: request timed out after ${opts.timeoutMs}ms`);
       }
       throw error;
     } finally {

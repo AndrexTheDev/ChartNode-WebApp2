@@ -18,8 +18,11 @@ import {
   type AdVariant,
 } from '@/lib/ads/config';
 import { donationGraceActive, useViralStore, WALL_COOLDOWN_MS } from '@/store/useViralStore';
+import { ROUTES } from '@/lib/constants';
 import dynamic from 'next/dynamic';
 import { LazyGate } from '@/components/ui/LazyGate';
+import { AdUnavailable } from '@/components/ads/AdUnavailable';
+import { hasAdCreative } from '@/components/ads/hasAdCreative';
 
 /*
  * M7: Die beiden Dialoge der Monetarisierungsschicht (Spenden-Wall, Teilen)
@@ -29,6 +32,9 @@ import { LazyGate } from '@/components/ui/LazyGate';
  */
 const SupportModal = dynamic(() => import('./SupportModal').then((m) => m.SupportModal), { ssr: false });
 const ShareModal = dynamic(() => import('../share/ShareModal').then((m) => m.ShareModal), { ssr: false });
+
+/** Conservative first-paint reserve until Adsterra's fixed-bar height is measured. */
+const SOCIAL_BAR_RESERVE_PX = 72;
 
 /** Social Bar: max. Versuche (Initial + Netz-Retry + Retry nach Wall-Close). */
 const SOCIAL_MAX_TRIES = 3;
@@ -93,7 +99,8 @@ function measureSocialBar(): void {
         /* Messung ist Best-Effort */
       }
       if (h > 0) {
-        document.documentElement.style.setProperty('--nc-socialbar-h', `${Math.ceil(h)}px`);
+        const reservedHeight = Math.max(SOCIAL_BAR_RESERVE_PX, Math.ceil(h));
+        document.documentElement.style.setProperty('--nc-socialbar-h', `${reservedHeight}px`);
         // Marker für CSS-Regeln (z. B. Pause unter offenen Modals)
         if (el) el.dataset.ncSocialbar = '1';
         return;
@@ -107,8 +114,8 @@ function measureSocialBar(): void {
 /**
  * Global monetization layer – mounted once in the root layout.
  *
- *  · Social Bar (Adsterra, echtes Delivery-Skript aus config.ts) läuft NUR auf
- *    den App-Seiten (…/terminal) und verankert sich selbst am Viewport-Boden.
+ *  · Social Bar (Adsterra, echtes Delivery-Skript aus config.ts) läuft auf
+ *    /terminal und /cluster und verankert sich selbst am Viewport-Boden.
  *    Injection zur Laufzeit per `body.appendChild` = „right above the closing
  *    </body> tag", lazy (Timer) und mit `data-cfasync="false"` gegen Cloudflare
  *    Rocket Loader. Anti-Blocker-Strategie (transparent, keine Maskierung):
@@ -127,8 +134,8 @@ function measureSocialBar(): void {
 function AdManagerInner() {
   const [wallOpen, setWallOpen] = useState(false);
   const pathname = usePathname();
-  /** „APP page" im Monetization-Sinn: das Charting-Terminal. */
-  const isAppPage = pathname.includes('/terminal');
+  /** Monetized app surfaces with viewport-wide controls. */
+  const isAppPage = pathname.includes(ROUTES.terminal) || pathname === ROUTES.cluster;
 
   const socialSrcRef = useRef<string | null>(null);
   const socialTries = useRef(0);
@@ -177,6 +184,12 @@ function AdManagerInner() {
     if (navigator.webdriver) return; // QA/CI (Puppeteer) bleibt werbefrei
     const src = socialBarPlacement(isDesktopViewport() ? 'desktop' : 'mobile');
     if (!src) return;
+    // Reserve before the third-party script is requested so its fixed bar
+    // cannot flash over mobile navigation while its true height is measured.
+    const rootStyle = document.documentElement.style;
+    if (!rootStyle.getPropertyValue('--nc-socialbar-h')) {
+      rootStyle.setProperty('--nc-socialbar-h', `${SOCIAL_BAR_RESERVE_PX}px`);
+    }
     socialSrcRef.current = src;
     // Deferred: nie synchrone Arbeit/setState im Effect; die Bar darf nie mit
     // Chart-Seeding oder First Paint um die Main Thread kämpfen.
@@ -285,7 +298,7 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
   // Ein Placement darf pro Seite nur einmal gerendert werden (Adsterra-Limit);
   // zeigen beide Slots auf denselben Hash, bleibt der mobile aktiv.
   const active = src !== '' && containerId !== '' && !(variant === 'desktop' && NATIVE_SLOTS_SHARE_PLACEMENT);
-  const [collapsed, setCollapsed] = useState(false);
+  const [status, setStatus] = useState<'pending' | 'filled' | 'unavailable' | 'suppressed'>('pending');
 
   useEffect(() => {
     if (!active) return;
@@ -296,22 +309,29 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
     if (donationGraceActive() || navigator.webdriver) {
       // Deferred: nie synchrones setState im Effect (React-Regel) – und der
       // SSR-Zustand bleibt bis dahin unverändert (kein Hydration-Mismatch).
-      const timer = window.setTimeout(() => setCollapsed(true), 0);
+      const timer = window.setTimeout(() => setStatus('suppressed'), 0);
       return () => window.clearTimeout(timer);
     }
     const el = ref.current;
-    if (!el) return;
+    const host = document.getElementById(containerId);
+    if (!el || !host) return;
     const mq = window.matchMedia(AD_BREAKPOINT);
     let cancelled = false;
+    const observer = new MutationObserver(() => {
+      if (hasAdCreative(host)) setStatus('filled');
+    });
+    observer.observe(host, { childList: true, subtree: true });
 
-    /** Füllt der Loader den Container? (Nur dann bleibt der Slot reserviert.) */
+    /** Füllt der Loader den Container? Ein No-fill behält die Reserve mit Hinweis. */
     const pollFilled = (left: number) => {
       window.setTimeout(() => {
         if (cancelled) return;
-        const host = document.getElementById(containerId);
-        if (host && (host.querySelector('iframe, ins, img') || host.childElementCount > 1)) return;
+        if (hasAdCreative(host)) {
+          setStatus('filled');
+          return;
+        }
         if (left > 0) pollFilled(left - 1);
-        else setCollapsed(true); // kein Fill ⇒ kein toter Streifen (M6)
+        else setStatus('unavailable');
       }, 1_500);
     };
 
@@ -329,11 +349,12 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
     mq.addEventListener('change', apply);
     return () => {
       cancelled = true;
+      observer.disconnect();
       mq.removeEventListener('change', apply);
     };
   }, [active, containerId, variant]);
 
-  if (!active || collapsed) return null;
+  if (!active || status === 'suppressed') return null;
   const label = t('sponsored');
   // Reservierte Fläche = Widget-Layout des Loaders (4:1) ⇒ Kreativ füllt exakt
   // hinein: kein CLS beim Fill, kein Clipping (M6).
@@ -342,9 +363,11 @@ export function AdSlot({ variant }: { variant: AdVariant }) {
       id={containerId}
       data-native-banner=""
       className={variant === 'desktop'
-        ? 'w-full overflow-hidden [aspect-ratio:4/1] max-h-56'
-        : 'w-full overflow-hidden [aspect-ratio:4/1] max-h-36'}
-    />
+        ? 'relative w-full overflow-hidden [aspect-ratio:4/1] max-h-56'
+        : 'relative w-full overflow-hidden [aspect-ratio:4/1] max-h-36'}
+    >
+      {status === 'unavailable' && <AdUnavailable />}
+    </div>
   );
 
   if (variant === 'desktop') {

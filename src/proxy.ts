@@ -1,5 +1,5 @@
 // © 2026 AndrexTheDev – All Rights Reserved. See LICENSE.md.
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
 import { routing } from './i18n/routing';
 import { COUNTRY_COOKIE } from './lib/region';
@@ -22,6 +22,27 @@ const intlMiddleware = createMiddleware(routing);
  *   4. Runs on Cloudflare's edge, costs nothing and adds no cold start.
  */
 export default function proxy(request: NextRequest) {
+  // `next-intl` treats an unsupported two-letter prefix as a normal path and
+  // rewrites /xx/terminal to /en/xx/terminal. That falls outside this locale
+  // root layout (there intentionally is no app/layout.tsx) and can surface a
+  // 500. Redirect locale-shaped unknown prefixes to the equivalent default-
+  // locale route before routing; this also keeps invalid locales out of SSG.
+  const segments = request.nextUrl.pathname.split('/').filter(Boolean);
+  const prefix = segments[0] ?? '';
+  const normalizedPrefix = prefix.toLowerCase();
+  const localePrefix = routing.locales.includes(normalizedPrefix as (typeof routing.locales)[number]);
+  const localeShaped = /^[a-z]{2}$/i.test(prefix);
+
+  // Canonicalize case variants of supported locales (for example /DE → /de)
+  // before next-intl sees them; unsupported two-letter prefixes still fall back
+  // to the default-locale route (for example /xx/help → /en/help).
+  if (localeShaped && (localePrefix ? prefix !== normalizedPrefix : true)) {
+    const target = request.nextUrl.clone();
+    const destinationLocale = localePrefix ? normalizedPrefix : routing.defaultLocale;
+    target.pathname = `/${destinationLocale}${segments.length > 1 ? `/${segments.slice(1).join('/')}` : ''}`;
+    return NextResponse.redirect(target);
+  }
+
   const response = intlMiddleware(request);
 
   // Cloudflare sets cf-ipcountry on every request (two-letter ISO-3166 alpha-2).
