@@ -43,6 +43,9 @@ jobs:
 
       - name: OpenNext Cloudflare build
         run: npm run cf:build
+        env:
+          NEXT_FONT_GOOGLE_MOCKED_RESPONSES: ${{ github.workspace }}/scripts/audit-sandbox/font-mock.cjs
+          NEXT_TELEMETRY_DISABLED: "1"
 
       # Fehlt eines der Secrets, bricht der Job mit einer klaren Anleitung ab
       # (statt mit der kryptischen Wrangler-Meldung) – als Annotation am Check,

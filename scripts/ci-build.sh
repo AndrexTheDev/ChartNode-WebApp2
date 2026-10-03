@@ -15,6 +15,16 @@ LOG="${LOG:-build.log}"
 # Next baut mit vielen Worker-Prozessen; ein knapper Heap endet in
 # "JavaScript heap out of memory" ohne erkennbaren Bezug zum Code.
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=6144}"
+# next/font/google normally fetches a mutable Google Fonts response at build
+# time. Use the checked-in deterministic mock backed by the real @fontsource
+# font files so CI and Cloudflare builds do not depend on that network request.
+if [[ -z "${NEXT_FONT_GOOGLE_MOCKED_RESPONSES:-}" ]]; then
+  FONT_MOCK="${PWD}/scripts/audit-sandbox/font-mock.cjs"
+  if [[ -f "${FONT_MOCK}" ]]; then
+    export NEXT_FONT_GOOGLE_MOCKED_RESPONSES="${FONT_MOCK}"
+  fi
+fi
+export NEXT_TELEMETRY_DISABLED="${NEXT_TELEMETRY_DISABLED:-1}"
 
 set +e
 npm run build 2>&1 | tee "${LOG}"
