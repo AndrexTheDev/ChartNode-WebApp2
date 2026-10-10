@@ -758,6 +758,7 @@
       "clear": "Alle Zeichnungen löschen ({n})",
       "active": "Aktives Werkzeug: {tool}"
     },
+    "crosshairHandle": "Ziehen, um das Fadenkreuz zu verschieben (Zeichnungswerkzeug aktiv)",
     "sync": {
       "group": "Grid-Synchronisation",
       "timeframe": "Zeitrahmen über Panes synchronisieren",
@@ -960,6 +961,7 @@
         "hint": "Führt eine unterstützte Formel pro Kerze mit geladenen Daten im Browser aus."
       }
     },
+    "menuIndicators": "Indikatoren",
     "params": {
       "period": "Periode",
       "fast": "Schnelle Länge",

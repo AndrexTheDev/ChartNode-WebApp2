@@ -29,6 +29,8 @@ interface DropdownProps {
   widthClass?: string;
   className?: string;
   menuLabel?: string;
+  /** `h-7` trigger for dense toolbars (default is `h-9`). */
+  compact?: boolean;
 }
 
 /**
@@ -46,6 +48,7 @@ export function Dropdown({
   widthClass = 'w-60',
   className,
   menuLabel,
+  compact = false,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -148,7 +151,8 @@ export function Dropdown({
           }
         }}
         className={cn(
-          'nc-clip-sm inline-flex h-9 items-center gap-1.5 border border-line bg-surface/70 px-2.5',
+          'nc-clip-sm inline-flex items-center gap-1.5 border border-line bg-surface/70 px-2.5',
+          compact ? 'h-7' : 'h-9',
           'font-mono text-2xs uppercase tracking-cyber text-muted transition-colors duration-200',
           'hover:border-primary/60 hover:text-fg',
           open && 'border-primary/70 text-fg shadow-neon-sm',

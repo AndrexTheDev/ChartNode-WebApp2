@@ -91,9 +91,23 @@ export function ChartGrid() {
        nicht auf 0 quetschen – ein ausscherendes Kreativ tat genau das
        (gemessen: Wrapper 8 s lang 0 px hoch, Panes unsichtbar). */
     <div className="relative min-h-0 flex-1 lg:min-h-[20rem]">
+      {/*
+        Zero-overflow grid (360 px → 3840 px):
+        · `min-w-0 min-h-0` on the container AND on every pane (NeonPanel gets
+          it via its className below) – grid items are `min-width:auto` by
+          default, so a long token would otherwise blow the track wide;
+        · row tracks carry the per-pane minimums (presets.gridClass); on phones
+          the grid *scrolls* (overflow-y-auto) instead of clipping panes, on
+          desktop it fills the container exactly (overflow-hidden);
+        · the old inline `minHeight: rows × rowMinHeight` is gone – it forced
+          2×2 to 600 px even inside the fixed-height mobile terminal, which
+          pushed panes 3–4 out of reach behind `overflow-hidden`.
+      */}
       <div
-        className={cn('grid h-full gap-2 p-2', preset.gridClass)}
-        style={{ minHeight: preset.rows * preset.rowMinHeight }}
+        className={cn(
+          'grid h-full min-h-0 min-w-0 gap-2 overflow-y-auto p-2 md:overflow-hidden',
+          preset.gridClass,
+        )}
       >
         {visible.map((pane, index) => (
           <ChartPane key={pane.id} pane={pane} index={index} hydrated={hydrated} />
@@ -365,8 +379,11 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
             </PaneButton>
           </div>
         }
-        className="min-h-[240px] bg-bg/60"
-        bodyClassName="flex h-full flex-col"
+        /* min-h-0/min-w-0: as a grid item the pane must be allowed to shrink
+           below its content height – otherwise a 2×2 row shorter than 240 px
+           would let the pane break out of its track (overflow bug). */
+        className="min-h-0 min-w-0 bg-bg/60"
+        bodyClassName="flex h-full min-h-0 flex-col"
       >
         <div className="border-b border-line/60 px-2 py-1.5">
           <DrawingToolbar paneId={pane.id} drawingCount={drawings.length} onClearDrawings={() => clearDrawings(pane.id)} />
@@ -374,11 +391,14 @@ function ChartPane({ pane, index, hydrated }: { pane: Pane; index: number; hydra
 
         {/*
           Absolute inset instead of `h-full`: lightweight-charts measures its
-          container with a ResizeObserver, and a content-sized parent turns that
-          into a growth loop (the canvas pushed the pane to 4500 px in testing).
-          An absolutely positioned box has a definite size, so `autoSize` is stable.
+          container with a ResizeObserver (see PriceChart / lib/chart-resize),
+          and a content-sized parent turns that into a growth loop (the canvas
+          pushed the pane to 4500 px in testing). An absolutely positioned box
+          has a definite size, so the explicit sizing is stable. `min-h-0`:
+          the pane may be shorter than 260 px inside a 2×2 row on short
+          windows – clipping the chart is worse than a small one.
         */}
-        <div className="relative min-h-[260px] flex-1">
+        <div className="relative min-h-0 flex-1">
           {hasData ? (
             <div className="absolute inset-0">
             <PriceChart

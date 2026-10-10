@@ -46,11 +46,13 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-header w-full">
-      {/* hairline glow */}
-      <div aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
-
-      <div className="border-b border-line/70 bg-bg/80 backdrop-blur-xl supports-[backdrop-filter]:bg-bg/60">
-        <div className="container flex min-h-[var(--nc-header-h)] flex-wrap items-center gap-3 py-1.5">
+      {/*
+        Streamlined bar: single row, one hairline boundary, no decorative
+        glow. Every control sits in the same 44 px rhythm – logo, search,
+        nav, palette, theme, locale, terminal CTA.
+      */}
+      <div className="border-b border-line/70 bg-bg/85 backdrop-blur-xl">
+        <div className="container flex min-h-[var(--nc-header-h)] flex-wrap items-center gap-x-3 gap-y-1.5 py-1.5">
           <Link href={ROUTES.home} className="shrink-0 rounded-none transition-[filter,opacity] duration-200 hover:brightness-125 active:opacity-80" aria-label="NodeChart">
             <Logo decorative />
           </Link>

@@ -758,6 +758,7 @@
       "clear": "Borrar todos los dibujos ({n})",
       "active": "Herramienta activa: {tool}"
     },
+    "crosshairHandle": "Arrastra para mover la cruz de referencia (herramienta de dibujo activada)",
     "sync": {
       "group": "Sincronización de la cuadrícula",
       "timeframe": "Sincronizar marco temporal entre paneles",
@@ -960,6 +961,7 @@
         "hint": "Ejecuta en el navegador una fórmula admitida por vela con los datos cargados."
       }
     },
+    "menuIndicators": "Indicadores",
     "params": {
       "period": "Periodo",
       "fast": "Longitud rápida",

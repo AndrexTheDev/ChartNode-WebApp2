@@ -316,7 +316,9 @@ export function NodeClusterModal({ token, open, onClose, mode = 'modal', showAds
       className={cn(
         isInline
           ? 'relative z-0 flex min-h-0 w-full flex-1 items-stretch justify-center bg-slate-950'
-          : 'fixed inset-0 z-[100] flex items-stretch justify-center bg-black/75 p-0 backdrop-blur-xl transition-opacity duration-200 ease-out',
+          /* z-drawer (75): above modals, below portaled dropdowns (z-overlay)
+             so pickers opened inside the cluster view render correctly. */
+          : 'fixed inset-0 z-drawer flex items-stretch justify-center bg-black/75 p-0 backdrop-blur-xl transition-opacity duration-200 ease-out',
         !isInline && (open ? 'opacity-100' : 'pointer-events-none opacity-0'),
       )}
       aria-hidden={!open}
@@ -595,7 +597,7 @@ export function NodeClusterModal({ token, open, onClose, mode = 'modal', showAds
         </div>
 
         {exportOpen && (
-          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-md" data-testid="nodecluster-export-dialog">
+          <div className="absolute inset-0 z-overlay flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-md" data-testid="nodecluster-export-dialog">
             <button
               type="button"
               aria-label={t('export.cancel')}

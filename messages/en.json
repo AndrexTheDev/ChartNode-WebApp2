@@ -758,6 +758,7 @@
       "clear": "Delete all drawings ({n})",
       "active": "Active tool: {tool}"
     },
+    "crosshairHandle": "Drag to move the crosshair (drawing tool armed)",
     "sync": {
       "group": "Grid synchronisation",
       "timeframe": "Sync timeframe across panes",
@@ -960,6 +961,7 @@
         "hint": "Runs a supported per-candle formula on loaded data in your browser."
       }
     },
+    "menuIndicators": "Indicators",
     "params": {
       "period": "Period",
       "fast": "Fast length",

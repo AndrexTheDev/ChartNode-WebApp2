@@ -2,7 +2,8 @@
 import type { ThemeId } from '@/store/types';
 
 export const THEME_COLOR: Record<ThemeId, string> = {
-  acid: '#0a0a0a',
+  /* Cyberpunk Pro Dark base (hsl(220, 18%, 7%)) – keep in sync with --nc-bg. */
+  acid: '#0e1115',
   violet: '#0b0710',
   light: '#f5f7fb',
   matrix: '#020604',

@@ -15,6 +15,15 @@ export interface LayoutPreset {
 /**
  * Grid presets for the terminal. `gridClass` strings are written out in full
  * so Tailwind's content scanner keeps them in the production bundle.
+ *
+ * Zero-overflow contract:
+ *  · every track is `minmax(0, 1fr)` (auto-fit boundary at 0) so a long token
+ *    inside a pane can never blow the grid track wider/taller than its cell;
+ *  · below `md` the panes stack in *scrollable* rows with a per-pane minimum
+ *    (the grid container scrolls, see ChartGrid) – on a 360 px phone nothing
+ *    is clipped or unreachable;
+ *  · from `md` up the grid fills its container exactly (1×1 / 1×2 / 2×2),
+ *    and `2x2` flows to a 4-up strip on ultra-wide (≥1536 px) screens.
  */
 export const CHART_LAYOUTS: Record<ChartLayoutId, LayoutPreset> = {
   '1x1': {
@@ -22,7 +31,9 @@ export const CHART_LAYOUTS: Record<ChartLayoutId, LayoutPreset> = {
     cols: 1,
     rows: 1,
     panes: 1,
-    gridClass: 'grid-cols-1 grid-rows-1',
+    gridClass:
+      'grid-cols-[minmax(0,1fr)] grid-rows-[minmax(320px,1fr)] ' +
+      'md:grid-rows-[minmax(0,1fr)]',
     rowMinHeight: 420,
   },
   '2x1': {
@@ -30,7 +41,9 @@ export const CHART_LAYOUTS: Record<ChartLayoutId, LayoutPreset> = {
     cols: 2,
     rows: 1,
     panes: 2,
-    gridClass: 'grid-cols-1 grid-rows-1 md:grid-cols-2',
+    gridClass:
+      'grid-cols-[minmax(0,1fr)] grid-rows-[repeat(2,minmax(280px,1fr))] ' +
+      'md:grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] md:grid-rows-[minmax(0,1fr)]',
     rowMinHeight: 420,
   },
   '2x2': {
@@ -38,7 +51,10 @@ export const CHART_LAYOUTS: Record<ChartLayoutId, LayoutPreset> = {
     cols: 2,
     rows: 2,
     panes: 4,
-    gridClass: 'grid-cols-1 grid-rows-2 md:grid-cols-2',
+    gridClass:
+      'grid-cols-[minmax(0,1fr)] grid-rows-[repeat(4,minmax(240px,1fr))] ' +
+      'md:grid-cols-2 md:grid-rows-[repeat(2,minmax(0,1fr))] ' +
+      '2xl:grid-cols-[repeat(4,minmax(0,1fr))] 2xl:grid-rows-[minmax(0,1fr)]',
     rowMinHeight: 300,
   },
 };

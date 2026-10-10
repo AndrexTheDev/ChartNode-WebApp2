@@ -233,7 +233,9 @@ export function MarketSignalsModal({ token, open, onClose }: MarketSignalsModalP
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[95] flex justify-end bg-black/60 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    // z-drawer (75): same stacking contract as NodeCluster – portaled
+    // dropdowns (z-overlay) opened inside the drawer still sit above it.
+    <div className="fixed inset-0 z-drawer flex justify-end bg-black/60 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section
         ref={panelRef}
         role="dialog"
