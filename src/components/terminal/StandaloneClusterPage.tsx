@@ -207,7 +207,8 @@ export function StandaloneClusterPage() {
       className="flex h-[100dvh] min-h-[32rem] flex-col overflow-hidden bg-slate-950 pb-[max(var(--nc-socialbar-h,0px),env(safe-area-inset-bottom))] text-slate-100"
     >
       <h1 className="sr-only">{t('standalone.pageTitle')}</h1>
-      <header className="relative z-[110] flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-700/70 bg-slate-950/95 px-3 py-2 shadow-[0_8px_24px_-20px_rgba(34,211,238,0.65)] backdrop-blur-xl sm:gap-3 sm:px-5">
+      {/* z-40: page-local header, below modal/drawer/palette/toast layers. */}
+      <header className="relative z-40 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-700/70 bg-slate-950/95 px-3 py-2 shadow-[0_8px_24px_-20px_rgba(34,211,238,0.65)] backdrop-blur-xl sm:gap-3 sm:px-5">
         <Link href={ROUTES.home} aria-label="NodeChart" className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
           <Logo decorative className="[&_img:first-child]:size-7 [&_img:last-child]:w-28 sm:[&_img:first-child]:size-8 sm:[&_img:last-child]:w-32" />
         </Link>

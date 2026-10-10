@@ -69,11 +69,13 @@ import {
   selectAvwapArm,
   selectCompare,
   selectDivOn,
+  selectIndicators,
   selectLiqMagnetsOn,
   selectSrOn,
   selectVpOn,
   useChartStore,
 } from '@/store/useChartStore';
+import { INDICATOR_LIBRARY, type IndicatorKind } from '@/lib/indicators';
 import { ToastHost } from '@/components/ui/ToastHost';
 import { LazyGate, warmToolChunks } from '@/components/ui/LazyGate';
 import dynamic from 'next/dynamic';
@@ -143,6 +145,7 @@ export function TerminalShell() {
   const router = useRouter();
   const locale = useLocale();
   const tf = useTranslations('feed');
+  const tc = useTranslations('chart');
   const tn = useTranslations('nav');
   const tw = useTranslations('whales');
   const ts = useTranslations('share');
@@ -226,6 +229,11 @@ export function TerminalShell() {
   const toggleAxisLog = useChartStore((s) => s.toggleAxisLog);
   const axisPct = useChartStore((s) => s.axisPct);
   const toggleAxisPct = useChartStore((s) => s.toggleAxisPct);
+  // Toolbar indicator selector acts on the primary pane (pane-1); the per-pane
+  // IndicatorModal (params, stacking, color cycling) stays the advanced path.
+  const pane1Indicators = useChartStore(selectIndicators('pane-1'));
+  const addIndicator = useChartStore((s) => s.addIndicator);
+  const removeIndicator = useChartStore((s) => s.removeIndicator);
   const replayOn = useChartStore((s) => s.replayOn);
   const startReplay = useChartStore((s) => s.startReplay);
   const stopReplay = useChartStore((s) => s.stopReplay);
@@ -300,6 +308,29 @@ export function TerminalShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [compare, activeToken.id, setCompare],
   );
+
+  /** Compact indicator dropdown (primary pane): one entry per library kind. */
+  const indicatorItems = useMemo<DropdownItem[]>(
+    () =>
+      (Object.keys(INDICATOR_LIBRARY) as IndicatorKind[])
+        .filter((kind) => kind !== 'CUSTOM')
+        .map((kind) => {
+          const instance = pane1Indicators.find((entry) => entry.kind === kind);
+          return {
+            id: kind,
+            label: tc(`indicators.${kind}.name` as const),
+            hint: tc(`indicators.${kind}.short` as const),
+            selected: Boolean(instance),
+            onSelect: () => {
+              if (instance) removeIndicator('pane-1', instance.id);
+              else addIndicator('pane-1', kind);
+            },
+          };
+        }),
+    [pane1Indicators, tc, addIndicator, removeIndicator],
+  );
+  const pane1IndicatorCount = pane1Indicators.filter((entry) => entry.visible).length;
+
   const watchlist = useAppStore(selectWatchlist);
   const toggleWatchlist = useAppStore((s) => s.toggleWatchlist);
 
@@ -452,13 +483,20 @@ export function TerminalShell() {
 
           <div className="mx-1 hidden h-6 w-px bg-line sm:block" />
 
-          {/* timeframes */}
+          {/* timeframes – one compact dropdown instead of a 7-chip wall */}
           <div role="group" aria-label={t('timeframe')} className="flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1">
-            {TIMEFRAMES.map((value) => (
-              <Chip key={value} active={hydrated && value === timeframe} onClick={() => setTimeframe(value)}>
-                {value}
-              </Chip>
-            ))}
+            <Dropdown
+              compact
+              triggerLabel={t('timeframe')}
+              triggerText={<span className="font-mono text-2xs">{timeframe}</span>}
+              widthClass="w-36"
+              items={TIMEFRAMES.map((value) => ({
+                id: value,
+                label: value,
+                selected: hydrated && value === timeframe,
+                onSelect: () => setTimeframe(value),
+              }))}
+            />
             <span ref={customTriggerRef} className="relative shrink-0">
               <Chip active={hydrated && customAgg != null} onClick={() => setCustomOpen((value) => !value)}>
                 {customAgg != null ? `${customAgg}m` : t('custom.label')}
@@ -614,12 +652,14 @@ export function TerminalShell() {
           </div>
         </div>
 
-        {/* chart types */}
+        {/* chart types + indicators – two compact dropdowns with clear
+            boundaries instead of inline chip walls */}
         <div className="nc-toolbar-full flex max-lg:flex-wrap lg:flex-nowrap items-center gap-1 border-t border-line/60 px-3 py-2 lg:overflow-x-auto [&>*]:lg:shrink-0">
           <Terminal className="mr-1 size-3.5 text-primary" aria-hidden />
           <Dropdown
+            compact
             triggerLabel={t(`types.${chartType}`)}
-            triggerText={<span>{t(`types.${chartType}`)}</span>}
+            triggerText={<span className="max-w-28 truncate">{t(`types.${chartType}`)}</span>}
             menuLabel={t(`types.${chartType}`)}
             align="start"
             widthClass="w-48"
@@ -629,6 +669,15 @@ export function TerminalShell() {
               selected: hydrated && type === chartType,
               onSelect: () => setChartType(type as ChartType),
             }))}
+          />
+          <Dropdown
+            compact
+            triggerLabel={tc('toolbar.indicators', { n: pane1IndicatorCount })}
+            triggerText={<span className="font-mono text-2xs">{tc('menuIndicators')}</span>}
+            title={tc('menuIndicators')}
+            align="start"
+            widthClass="w-56"
+            items={indicatorItems}
           />
 
           <span className="mx-1 h-6 w-px bg-line" aria-hidden />

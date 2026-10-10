@@ -10,32 +10,49 @@
    ========================================================================== */
 
 @layer base {
+  /* -------------------------------------------------------------------------
+     Cyberpunk Pro Dark (default skin)
+
+     A streamlined, high-contrast blue-slate base. High-intensity neon
+     (Cyan #00f3ff, Magenta #ff0055) is reserved for *active states, trade
+     execution points and critical alerts* – everything else is desaturated
+     so financial data stays readable in long sessions.
+
+     Contrast (measured against --nc-bg / --nc-surface):
+       fg     17.6:1 / 16.1:1  → WCAG AAA (all financial text data)
+       muted   7.5:1 /  6.8:1  → AAA on bg, near-AAA on cards (labels/meta)
+       faint   5.4:1 /  4.9:1  → AA (decorative micro-copy only)
+       bull   11.2:1 /  9.7:1  → AAA · bear 7.0:1 / 6.3:1 → AAA on bg
+       danger (magenta, lightened for text) 7.9:1 → AAA as alert copy
+     ------------------------------------------------------------------------- */
   :root,
   [data-theme='acid'] {
     color-scheme: dark;
 
-    --nc-bg: 0 0% 4%; /* #0a0a0a */
-    --nc-surface: 240 6% 7%;
-    --nc-elevated: 240 6% 10%;
-    --nc-line: 110 22% 24%;
-    --nc-fg: 110 25% 93%;
-    --nc-muted: 110 9% 63%;
-    --nc-faint: 110 7% 50%; /* M5-Fix: 3.5:1 → 4.75:1 auf elevated (WCAG AA) */
+    --nc-bg: 220 18% 7%; /* #0e1115 – high-contrast dark */
+    --nc-surface: 220 15% 11%; /* card / panel backgrounds */
+    --nc-elevated: 220 14% 14%;
+    --nc-line: 218 14% 22%;
+    --nc-fg: 215 30% 97%;
+    --nc-muted: 215 15% 65%;
+    --nc-faint: 215 12% 55%;
 
-    --nc-primary: 110 100% 54%; /* #39ff14 acid green */
-    --nc-primary-fg: 110 60% 5%;
-    --nc-primary-dim: 110 100% 32%;
-    --nc-secondary: 278 100% 65%; /* electric purple – M5-Fix: L57→65 ⇒ 4.78:1 als Text */
-    --nc-secondary-fg: 278 60% 6%; /* M5-Fix: dunkle Ink statt Weiß (Weiß/64% = 3.8:1) */
-    --nc-accent: 186 100% 50%; /* #00f0ff */
-    --nc-danger: 344 100% 59%; /* #ff2e63 */
-    --nc-warning: 43 100% 50%; /* #ffb800 */
-    --nc-bull: 157 100% 50%; /* #00ff9d */
-    --nc-bear: 344 100% 59%; /* #ff2e63 */
+    --nc-primary: 183 100% 50%; /* #00f3ff cyan – active states + crosshair */
+    --nc-primary-fg: 220 65% 7%;
+    --nc-primary-dim: 183 100% 38%;
+    --nc-secondary: 215 70% 78%; /* steel blue – non-critical accents (10.2:1) */
+    --nc-secondary-fg: 220 65% 7%;
+    --nc-accent: 183 100% 50%;
+    --nc-danger: 330 100% 74%; /* magenta, text-safe – critical alerts */
+    --nc-warning: 41 100% 60%; /* #ffc128 – 11.4:1 as text */
+    --nc-bull: 158 55% 62%; /* 11.2:1 – up candles / buy execution */
+    --nc-bear: 348 70% 70%; /* 7.0:1 on bg – down candles / sell execution */
 
-    --nc-glow: 0.85;
-    --nc-grid-opacity: 0.5;
-    --nc-scan-opacity: 0.035;
+    /* Neon stays quiet: glow, grid and scanline intensities are kept low so
+       the high-intensity colours only "speak" where they are allowed to. */
+    --nc-glow: 0.5;
+    --nc-grid-opacity: 0.45;
+    --nc-scan-opacity: 0.025;
 
     --nc-gutter: 1.25rem;
     --nc-header-h: 3.75rem;

@@ -14,10 +14,16 @@
  */
 module.exports = {
   darkMode: ['class', '[data-theme="acid"]'],
+  /*
+   * `src/store` is scanned on purpose: CHART_LAYOUTS.gridClass (presets.ts)
+   * is the ONLY place the arbitrary grid-template classes are written, and
+   * Tailwind only generates classes it finds in these globs.
+   */
   content: [
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/lib/**/*.{js,ts,jsx,tsx}',
+    './src/store/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     container: {
@@ -58,21 +64,24 @@ module.exports = {
         bull: 'hsl(var(--nc-bull) / <alpha-value>)',
         bear: 'hsl(var(--nc-bear) / <alpha-value>)',
 
-        /* ---- fixed neon brand scale (theme independent) ---- */
+        /* ---- fixed neon brand scale (theme independent) ----
+           `cyan` / `magenta` are the ONLY high-intensity neons of the design
+           system and are restricted to active states, trade execution points
+           and critical alerts (see the token block in globals.css). */
         neon: {
           acid: '#39ff14',
           acidDeep: '#16c400',
           volt: '#b026ff',
           voltDeep: '#7a00cc',
-          cyan: '#00f0ff',
-          magenta: '#ff2bd6',
+          cyan: '#00f3ff',
+          magenta: '#ff0055',
           amber: '#ffb800',
           bull: '#00ff9d',
           bear: '#ff2e63',
           ink: '#050505',
-          carbon: '#0a0a0a',
-          steel: '#121216',
-          graphite: '#1a1a21',
+          carbon: '#0e1115',
+          steel: '#12151c',
+          graphite: '#1a1e26',
         },
       },
 
@@ -266,10 +275,19 @@ module.exports = {
         cyber: 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
 
+      /*
+       * Stacking contract (low → high). `drawer` sits between `modal` and
+       * `overlay`: full-screen/edge drawers (NodeCluster, Market Signals)
+       * cover modals' siblings, but dropdowns/portals (`overlay`) opened from
+       * *inside* a drawer still render above it. No component may use a
+       * raw z-[…] outside this scale.
+       */
       zIndex: {
         backdrop: '-1',
+        toolbar: '40',
         header: '50',
         modal: '70',
+        drawer: '75',
         overlay: '90',
         palette: '100',
         toast: '110',

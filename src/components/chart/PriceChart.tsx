@@ -32,7 +32,6 @@ import {
   createChart,
   createSeriesMarkers,
   type IChartApi,
-  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type SeriesMarker,
@@ -43,10 +42,14 @@ import {
   type SeriesType,
   type Time,
   type UTCTimestamp,
+  type WhitespaceData,
 } from 'lightweight-charts';
-import { useLocale } from 'next-intl';
+import { Crosshair as CrosshairIcon } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
 import { RSI as RsiCalc } from 'technicalindicators';
 import { readChartTheme, withAlpha, type ChartTheme } from '@/lib/chart-theme';
+import { measureChartSize, observeChartSize } from '@/lib/chart-resize';
+import { useIsTouchHost } from '@/lib/device';
 import { crosshairBus, rangeBus, rangesEqual } from '@/lib/chart-sync';
 import { hitTestDrawings, type XY } from '@/lib/drawings';
 import { cn } from '@/lib/cn';
@@ -102,6 +105,7 @@ import type { Candle } from '@/websockets/types';
 import {
   CrosshairPrimitive,
   DrawingPrimitive,
+  SrLevelPrimitive,
   VolumeProfilePrimitive,
   LiqMagnetPrimitive,
   WatermarkPrimitive,
@@ -110,11 +114,14 @@ import {
   type DraftShape,
   type WhaleBubbleTrade,
 } from './primitives';
+import { ValueLineSeriesView, type ValueLineOptions, type ValuePoint } from './line-series-view';
 import type { ProtocolTvl } from '@/api/market-signals';
 import { anchoredVwap, divergences, supportResistance, volumeProfile } from '@/lib/premium';
 import { buildLiqMap } from '@/lib/liqradar';
 
 type AnySeries = ISeriesApi<SeriesType, Time>;
+/** v5 Custom Series (addCustomSeries) carrying `{ time, value }` points. */
+type CustomLineSeries = ISeriesApi<'Custom', Time, ValuePoint | WhitespaceData<Time>, ValueLineOptions>;
 
 export interface PriceChartHandle {
   /** PNG data URL of the canvas – watermark, drawings and crosshair included. */
@@ -230,6 +237,39 @@ function applyBars(
   return next;
 }
 
+/**
+ * Same O(1) tail-apply strategy as `applyBars`, for v5 Custom Series
+ * (`addCustomSeries`) that carry `{ time, value }` points (aVWAP, compare).
+ */
+function applyValuePoints(
+  series: CustomLineSeries,
+  points: ValuePoint[],
+  applied: AppliedBars | null,
+  scope: string,
+): AppliedBars | null {
+  const last = points[points.length - 1];
+  const lastT = last ? Number(last.time) : 0;
+  const next: AppliedBars | null = points.length > 0 ? { scope, len: points.length, lastT } : null;
+
+  const tailUsable =
+    applied !== null &&
+    applied.scope === scope &&
+    points.length >= applied.len &&
+    (applied.len === 0 || Number(points[applied.len - 1]?.time) === applied.lastT);
+
+  if (tailUsable && applied) {
+    const start = points.length === applied.len && lastT === applied.lastT ? applied.len - 1 : applied.len;
+    for (let i = Math.max(0, start); i < points.length; i += 1) {
+      const point = points[i];
+      if (point) series.update(point);
+    }
+    return next;
+  }
+
+  series.setData(points);
+  return next;
+}
+
 /** Timeframe → milliseconds, for the bar-close countdown. */
 const TF_MS: Record<string, number> = {
   '1m': 60_000,
@@ -281,11 +321,10 @@ export function PriceChart({
   const liqPrimRef = useRef<LiqMagnetPrimitive | null>(null);
   const whaleBubblePrimRef = useRef<WhaleBubblePrimitive | null>(null);
   const tvlCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const avwapRef = useRef<AnySeries | null>(null);
-  const compareRef = useRef<AnySeries | null>(null);
+  const avwapRef = useRef<CustomLineSeries | null>(null);
+  const compareRef = useRef<CustomLineSeries | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const srLinesRef = useRef<IPriceLine[]>([]);
-  const alertLinesRef = useRef<IPriceLine[]>([]);
+  const srPrimRef = useRef<SrLevelPrimitive | null>(null);
   const applyingRemoteRange = useRef(false);
   const rangedFor = useRef<string | null>(null);
   // Tail-apply bookkeeping (see `applyBars`): what each series currently paints.
@@ -359,6 +398,9 @@ export function PriceChart({
 
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
+  // Bumps on every chart rebuild – re-runs effects that must re-apply state
+  // to the fresh instance (pan lock, …).
+  const [chartEpoch, setChartEpoch] = useState(0);
   const [remote, setRemote] = useState<{ time: number | null; price: number | null; symbol: string }>({
     time: null,
     price: null,
@@ -450,8 +492,14 @@ export function PriceChart({
     rangedFor.current = null;
 
     const appliedMap = indicatorAppliedRef.current;
+    // Explicit sizing (autoSize: false): our ResizeObserver wrapper
+    // (lib/chart-resize) is the single source of truth for the canvas
+    // geometry – one coalesced applyOptions per 16 ms frame boundary.
+    const initial = measureChartSize(el);
     const chart = createChart(el, {
-      autoSize: true,
+      autoSize: false,
+      width: initial.width,
+      height: initial.height,
       layout: {
         background: { type: ColorType.Solid, color: chartTheme.bg },
         textColor: chartTheme.muted,
@@ -513,6 +561,22 @@ export function PriceChart({
     const whaleBubbles = new WhaleBubblePrimitive();
     main.attachPrimitive(whaleBubbles);
     whaleBubblePrimRef.current = whaleBubbles;
+
+    // Auto S/R levels + armed price alerts – one primitive instead of N price
+    // lines (each of which invalidated the chart on create/remove).
+    const srPrim = new SrLevelPrimitive();
+    main.attachPrimitive(srPrim);
+    srPrimRef.current = srPrim;
+
+    // Frame-coalesced pane sizing (ResizeObserver → one applyOptions/frame).
+    const stopResize = observeChartSize(chart, el);
+
+    // A fresh chart starts unlocked – re-apply the drawing-tool lock state
+    // synchronously (the epoch bump below re-runs the live effect as well).
+    if (useChartStore.getState().tool !== 'none') {
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+    }
+    setChartEpoch((epoch) => epoch + 1);
 
     /* --------------------------------- syncing ------------------------------- */
     const timeScale = chart.timeScale();
@@ -576,6 +640,7 @@ export function PriceChart({
     return () => {
       offRange();
       offCrosshair();
+      stopResize();
       chart.remove();
       chartRef.current = null;
       mainRef.current = null;
@@ -587,12 +652,11 @@ export function PriceChart({
       vpPrimRef.current = null;
       liqPrimRef.current = null;
       whaleBubblePrimRef.current = null;
+      srPrimRef.current = null;
       tvlCanvasRef.current = null;
       avwapRef.current = null;
       compareRef.current = null;
       markersRef.current = null;
-      srLinesRef.current = [];
-      alertLinesRef.current = [];
       // Fresh series ⇒ forget what was painted, so the next effect re-seeds
       // with a full setData instead of tail-updating a dead series.
       mainAppliedRef.current = null;
@@ -608,6 +672,25 @@ export function PriceChart({
     // incrementally below, so candle ticks never recreate the chart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType, chartId]);
+
+  const drawingActive = tool !== 'none';
+
+  /*
+   * Touch/pointer pan lock while a drawing tool is selected.
+   *
+   * On a touch device the finger is the pen: with a tool armed, the chart must
+   * NOT pan/zoom under the gesture (the browser-level guard is `touch-action:
+   * none` on the pane, the library-level guard is handleScroll/handleScale).
+   * Previously the lock only existed *during* an active drag, so the first
+   * finger movement panned the chart instead of starting the drawing.
+   * `chartEpoch` bumps on every chart rebuild (type/symbol switch), so a
+   * fresh instance re-applies the lock instead of starting unlocked.
+   */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({ handleScroll: !drawingActive, handleScale: !drawingActive });
+  }, [drawingActive, chartEpoch]);
 
   /* ---------------------- Achsen-Locale im Theme-Update -------------------- */
 
@@ -866,22 +949,30 @@ export function PriceChart({
       return;
     }
     if (!avwapRef.current) {
-      avwapRef.current = chart.addSeries(LineSeries, {
-        color: '#ffb020',
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        title: 'aVWAP',
-      }) as AnySeries;
+      // v5 Custom Series: the aVWAP polyline lives inside the canvas
+      // (screenshot-safe, panes/zooms with the data).
+      avwapRef.current = chart.addCustomSeries(
+        new ValueLineSeriesView(),
+        {
+          color: chartTheme.warning,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: 'aVWAP',
+        },
+      );
     }
-    const points = anchoredVwap(analysisCandles, avwapAnchor);
-    avwapAppliedRef.current = applyBars(
+    const points = anchoredVwap(analysisCandles, avwapAnchor).map((point) => ({
+      time: (point.time / 1000) as UTCTimestamp,
+      value: point.value,
+    }));
+    avwapAppliedRef.current = applyValuePoints(
       avwapRef.current,
-      points.map((point) => ({ time: (point.time / 1000) as UTCTimestamp, value: point.value })),
+      points,
       avwapAppliedRef.current,
       `${chartId}|${feedKey}|avwap:${avwapAnchor}`,
     );
-  }, [avwapAnchor, analysisCandles, chartId, feedKey]);
+  }, [avwapAnchor, analysisCandles, chartId, feedKey, chartTheme]);
 
   /* ------------------------- axis modes + bar countdown ---------------------- */
 
@@ -909,34 +1000,42 @@ export function PriceChart({
     }
   }, [chartType, analysisCandles]);
 
-  /* -------------- auto support/resistance · divergences · alerts -------------- */
+  /* -------------- auto support/resistance · price alerts (canvas) --------------
+     One SrLevelPrimitive draws both: N × createPriceLine() was replaced by a
+     single attached primitive – createPriceLine/removePriceLine each
+     invalidated the whole chart, while the primitive fires one requestUpdate()
+     per changed batch and survives takeScreenshot(). */
+
+  const myAlerts = useMemo(() => alerts.filter((alert) => alert.symbol === symbol), [alerts, symbol]);
 
   useEffect(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    const levels = srOn ? supportResistance(analysisCandles) : [];
-    // createPriceLine/removePriceLine invalidieren den Chart – bei jedem Tick
-    // den ganzen Satz neu zu bauen kostet Frames, obwohl sich S/R-Level nur
-    // alle paar Kerzen ändern. Signatur-Vergleich first, API call second.
-    const signature = levels.map((l) => `${l.kind}:${l.price.toFixed(6)}:${l.touches}`).join('|');
+    const prim = srPrimRef.current;
+    if (!prim) return;
+    const levels = srOn
+      ? supportResistance(analysisCandles).map((level) => ({
+          price: level.price,
+          kind: level.kind,
+          touches: level.touches,
+          color: level.kind === 'support' ? chartTheme.bull : chartTheme.bear,
+          title: `${level.kind === 'support' ? 'S' : 'R'}×${level.touches}`,
+        }))
+      : [];
+    // Critical alerts stay magenta (design contract: neon = active states,
+    // trade execution points, critical alerts only).
+    const alerts = myAlerts
+      .filter((alert) => !alert.fired)
+      .map((alert) => ({ price: alert.price, title: 'ALERT' }));
+    // Identical content must not invalidate the canvas – signature first,
+    // requestUpdate second (same guard as the old price-line batch).
+    const signature =
+      `${srOn}|` +
+      levels.map((l) => `${l.kind}:${l.price.toFixed(6)}:${l.touches}`).join('|') +
+      `|` +
+      alerts.map((a) => a.price.toFixed(6)).join('|');
     if (signature === srSigRef.current) return;
     srSigRef.current = signature;
-
-    for (const line of srLinesRef.current) main.removePriceLine(line);
-    srLinesRef.current = [];
-    for (const level of levels) {
-      srLinesRef.current.push(
-        main.createPriceLine({
-          price: level.price,
-          color: level.kind === 'support' ? chartTheme.bull : chartTheme.bear,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `${level.kind === 'support' ? 'S' : 'R'}×${level.touches}`,
-        }),
-      );
-    }
-  }, [srOn, analysisCandles, chartTheme]);
+    prim.setSource({ levels, alerts, alertColor: chartTheme.danger, digits, theme: chartTheme });
+  }, [srOn, myAlerts, analysisCandles, chartTheme, digits]);
 
   useEffect(() => {
     const main = mainRef.current;
@@ -1001,28 +1100,6 @@ export function PriceChart({
     markersRef.current.setMarkers(usable);
   }, [divOn, btMarkers, patterns, analysisCandles, chartTheme, chartType]);
 
-  const myAlerts = useMemo(() => alerts.filter((alert) => alert.symbol === symbol), [alerts, symbol]);
-
-  useEffect(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    for (const line of alertLinesRef.current) main.removePriceLine(line);
-    alertLinesRef.current = [];
-    for (const alert of myAlerts) {
-      if (alert.fired) continue;
-      alertLinesRef.current.push(
-        main.createPriceLine({
-          price: alert.price,
-          color: '#ffb020',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: 'ALERT',
-        }),
-      );
-    }
-  }, [myAlerts]);
-
   useEffect(() => {
     const last = candles[candles.length - 1]?.c;
     if (last == null) return;
@@ -1060,17 +1137,21 @@ export function PriceChart({
       return;
     }
     if (!compareRef.current) {
-      compareRef.current = chart.addSeries(LineSeries, {
-        color: '#7c5cff', // SERIES_COLORS violet – palette consistency
-        lineWidth: 2,
-        priceScaleId: 'compare',
-        priceLineVisible: false,
-        lastValueVisible: false,
-        title: `${compareTicker} %`,
-      }) as AnySeries;
+      // v5 Custom Series – same canvas-native treatment as aVWAP.
+      compareRef.current = chart.addCustomSeries(
+        new ValueLineSeriesView(),
+        {
+          color: chartTheme.secondary,
+          lineWidth: 2,
+          priceScaleId: 'compare',
+          priceLineVisible: false,
+          lastValueVisible: false,
+          title: `${compareTicker} %`,
+        },
+      );
     }
     const base = compareCandles[0]!.c;
-    compareAppliedRef.current = applyBars(
+    compareAppliedRef.current = applyValuePoints(
       compareRef.current,
       compareCandles.map((candle) => ({
         time: (candle.t / 1000) as UTCTimestamp,
@@ -1079,7 +1160,7 @@ export function PriceChart({
       compareAppliedRef.current,
       `${chartId}|cmp:${compareTicker}|${compareCandles[0]?.t ?? 0}`,
     );
-  }, [compareTicker, compareCandles, chartId]);
+  }, [compareTicker, compareCandles, chartId, chartTheme]);
 
   /* -------------------------- >$500k whale bubbles -------------------------- */
 
@@ -1125,6 +1206,15 @@ export function PriceChart({
       },
     });
     applySeriesColors(main, chartType, chartTheme);
+    // Custom Series (aVWAP / compare) follow the theme as well.
+    avwapRef.current?.applyOptions({ color: chartTheme.warning });
+    compareRef.current?.applyOptions({ color: chartTheme.secondary });
+    // Whale bubbles: buy/sell prints are the trade execution points.
+    whaleBubblePrimRef.current?.setColors({
+      buy: chartTheme.bull,
+      sell: chartTheme.bear,
+      label: chartTheme.text,
+    });
   }, [chartTheme, chartType]);
 
   /* ---------------------------- remote crosshair ---------------------------- */
@@ -1280,6 +1370,60 @@ export function PriceChart({
     return () => window.removeEventListener('keydown', onKey);
   }, [lockChart, setTool]);
 
+  /* ------------------------- touch: crosshair handle ------------------------
+     With a drawing tool armed on a touch device, the finger draws – the
+     library's own crosshair gesture is unavailable (panning is locked by
+     design). This dedicated handle is the escape hatch: drag it to move the
+     crosshair (mirrored into the other grid panes via the crosshair bus and
+     read into the OHLC legend) without touching a drawing. */
+
+  const isTouch = useIsTouchHost();
+
+  const onCrosshairTouch = useCallback(
+    (event: { clientX: number; clientY: number }) => {
+      const prim = drawingPrimRef.current;
+      const chart = chartRef.current;
+      if (!prim || !chart) return;
+      const at = panePoint(event);
+      if (!at) return;
+      const point = prim.fromXY(at.x, at.y);
+      if (!point) return;
+
+      // Legend OHLC: nearest bar to the handle's time.
+      const list = candlesRef.current;
+      let lo = 0;
+      let hi = list.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        const t = list[mid]?.t ?? 0;
+        if (t / 1000 < point.time) lo = mid + 1;
+        else hi = mid;
+      }
+      const candidates = [list[lo - 1], list[lo]].filter(
+        (candle): candle is Candle => candle != null && Number.isFinite(candle.t),
+      );
+      const nearest =
+        candidates.length === 0
+          ? null
+          : candidates.reduce((best, candle) =>
+              Math.abs(candle.t / 1000 - point.time) < Math.abs(best.t / 1000 - point.time) ? candle : best,
+            );
+      setHover(nearest);
+
+      const price = mainRef.current ? Number(mainRef.current.coordinateToPrice(at.y)) : Number.NaN;
+      const logical = chart.timeScale().coordinateToLogical(at.x);
+      crosshairBus.publish({
+        source: chartId,
+        time: point.time,
+        logical: logical == null ? null : Number(logical),
+        price: Number.isFinite(price) ? price : null,
+        paneIndex: 0,
+        symbol: symbolRef.current,
+      });
+    },
+    [chartId, panePoint],
+  );
+
   /* ----------------------- protocol TVL mini-chart ------------------------- */
 
   useEffect(() => {
@@ -1389,8 +1533,6 @@ export function PriceChart({
 
   /* --------------------------------- render -------------------------------- */
 
-  const drawingActive = tool !== 'none';
-
   return (
     <div
       className="relative h-full w-full"
@@ -1406,6 +1548,15 @@ export function PriceChart({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
+      {/* Dedicated touch handle: moves the crosshair while a drawing tool is
+          armed (the finger itself is reserved for drawing). Sits above the
+          TVL strip when that strip is present. */}
+      {isTouch && drawingActive && (
+        <CrosshairTouchHandle
+          className={cn('absolute right-16 z-20', tvl?.status === 'ok' ? 'bottom-12' : 'bottom-3')}
+          onMove={onCrosshairTouch}
+        />
+      )}
       {tvl?.status === 'ok' && (
         <div className="absolute inset-x-0 bottom-0 h-10 border-t border-line/60 bg-bg/90" data-tvl-strip="">
           <canvas
@@ -1547,6 +1698,57 @@ function applySeriesColors(main: AnySeries, chartType: ChartType, theme: ChartTh
     borderUpColor: theme.bull,
     borderDownColor: theme.bear,
   } as never);
+}
+
+/**
+ * Drag handle for the crosshair on touch devices (see `onCrosshairTouch`).
+ * 44 px hit target (WCAG 2.5.8), pointer-captured so the drag keeps working
+ * even when the finger leaves the button, and visually "engaged" while held.
+ */
+function CrosshairTouchHandle({
+  className,
+  onMove,
+}: {
+  className?: string;
+  onMove: (event: { clientX: number; clientY: number }) => void;
+}) {
+  const t = useTranslations('chart');
+  const [dragging, setDragging] = useState(false);
+
+  return (
+    <button
+      type="button"
+      aria-label={t('crosshairHandle')}
+      title={t('crosshairHandle')}
+      data-nc-crosshair-handle=""
+      className={cn(
+        'flex size-11 items-center justify-center rounded-full border backdrop-blur-sm',
+        className,
+        dragging
+          ? 'border-primary/80 bg-primary/14 text-primary shadow-neon-sm'
+          : 'border-line bg-bg/90 text-muted',
+      )}
+      onPointerDown={(event) => {
+        // Never let the container's drawing handlers see this gesture.
+        event.stopPropagation();
+        setDragging(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onMove(event);
+      }}
+      onPointerMove={(event) => {
+        if (dragging) onMove(event);
+      }}
+      onPointerUp={(event) => {
+        setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }}
+      onPointerCancel={() => setDragging(false)}
+    >
+      <CrosshairIcon className="size-4" aria-hidden />
+    </button>
+  );
 }
 
 /** Candles + computed values → lightweight-charts series data (gaps skipped). */

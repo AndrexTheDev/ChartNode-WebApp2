@@ -82,9 +82,17 @@ export class DrawingPrimitive implements ISeriesPrimitive<Time> {
     this.notify = param.requestUpdate;
   }
 
+  /**
+   * Full canvas-state teardown: drop the chart/series references AND reset
+   * the source + update hook so a detached primitive can never paint stale
+   * geometry, fire a stale `requestUpdate`, or leak state between chart
+   * lifetimes (e.g. pane removed, layout switch, HMR).
+   */
   detached(): void {
     this.chart = null;
     this.series = null;
+    this.source = EMPTY_SOURCE;
+    this.notify = () => {};
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
@@ -305,6 +313,8 @@ export class CrosshairPrimitive implements ISeriesPrimitive<Time> {
   detached(): void {
     this.chart = null;
     this.series = null;
+    this.source = NO_CROSSHAIR;
+    this.notify = () => {};
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
@@ -411,12 +421,22 @@ export interface WhaleBubbleTrade {
 }
 
 /** Animated, screenshot-safe bubbles for strict >$500k prints on the active pair. */
+export interface WhaleBubbleColors {
+  /** Trade execution points – buy prints (theme bull). */
+  buy: string;
+  /** Trade execution points – sell prints (theme bear). */
+  sell: string;
+  /** Ring + label ink (theme text). */
+  label: string;
+}
+
 export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private notify: () => void = () => {};
   private rafId: number | null = null;
   private trades: WhaleBubbleTrade[] = [];
+  private colors: WhaleBubbleColors = { buy: CHART_THEME_FALLBACK.bull, sell: CHART_THEME_FALLBACK.bear, label: CHART_THEME_FALLBACK.text };
   private readonly lifetimeMs = 8_000;
   private view: IPrimitivePaneView = {
     zOrder: () => 'top' as PrimitivePaneViewZOrder,
@@ -433,6 +453,7 @@ export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
   detached(): void {
     this.chart = null;
     this.series = null;
+    this.trades = [];
     this.notify = () => {};
     if (this.rafId !== null) window.cancelAnimationFrame(this.rafId);
     this.rafId = null;
@@ -440,6 +461,12 @@ export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
 
   paneViews(): readonly IPrimitivePaneView[] {
     return this.views;
+  }
+
+  /** Theme refresh – bull/bear are the trade execution points. */
+  setColors(colors: WhaleBubbleColors): void {
+    this.colors = colors;
+    this.notify();
   }
 
   setTrades(trades: WhaleBubbleTrade[]): void {
@@ -480,7 +507,8 @@ export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
         const fade = Math.max(0, 1 - age / this.lifetimeMs);
         const pulse = 0.82 + (Math.sin(now * 0.006 + trade.ts) + 1) * 0.09;
         const radius = Math.max(7, Math.min(18, 8 + Math.log10(trade.notional / 500_000) * 4));
-        const color = trade.side === 'buy' ? '#39FF14' : '#FF4D78';
+        // Trade execution points: buy = bull, sell = bear (theme tokens).
+        const color = trade.side === 'buy' ? this.colors.buy : this.colors.sell;
         ctx.globalAlpha = fade * pulse;
         ctx.shadowColor = color;
         ctx.shadowBlur = 12 + radius * 0.6;
@@ -490,7 +518,7 @@ export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.globalAlpha = fade * 0.92;
-        ctx.strokeStyle = '#f8fafc';
+        ctx.strokeStyle = this.colors.label;
         ctx.lineWidth = 1.25;
         ctx.beginPath();
         ctx.arc(x, y, radius + 3 + (1 - fade) * 5, 0, Math.PI * 2);
@@ -500,7 +528,7 @@ export class WhaleBubblePrimitive implements ISeriesPrimitive<Time> {
             ? `$${(trade.notional / 1_000_000).toFixed(1)}M`
             : `$${Math.round(trade.notional / 1_000)}K`;
           ctx.globalAlpha = fade;
-          ctx.fillStyle = '#f8fafc';
+          ctx.fillStyle = this.colors.label;
           ctx.fillText(label, x, y - radius - 12);
         }
       }
@@ -543,6 +571,7 @@ export class WatermarkPrimitive implements ISeriesPrimitive<Time> {
   }
 
   detached(): void {
+    this.source = WATERMARK_DEFAULTS;
     this.notify = () => {};
   }
 
@@ -631,6 +660,7 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
 
   detached(): void {
     this.series = null;
+    this.source = null;
     this.notify = () => {};
   }
 
@@ -693,6 +723,134 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
   }
 }
 
+/* ------------------------- auto S/R + price alerts ------------------------- */
+
+export interface SrLevelEntry {
+  price: number;
+  kind: 'support' | 'resistance';
+  touches: number;
+  color: string;
+  title: string;
+}
+
+export interface SrAlertEntry {
+  price: number;
+  title: string;
+}
+
+export interface SrLevelSource {
+  levels: SrLevelEntry[];
+  alerts: SrAlertEntry[];
+  /** Magenta family – critical alerts. */
+  alertColor: string;
+  digits: number;
+  theme: ChartTheme;
+}
+
+const NO_SR_LEVELS: SrLevelSource = {
+  levels: [],
+  alerts: [],
+  alertColor: CHART_THEME_FALLBACK.danger,
+  digits: 2,
+  theme: CHART_THEME_FALLBACK,
+};
+
+/**
+ * Auto support/resistance levels + armed price alerts, painted in-canvas as a
+ * single Series Primitive (`attachPrimitive`).
+ *
+ * Replaces N × `createPriceLine()` calls: every price line was its own
+ * canvas object that invalidated the whole chart on create/remove, even
+ * though S/R levels only change every few candles. One primitive with one
+ * `requestUpdate()` per change batch is cheaper, and – like all primitives –
+ * survives `takeScreenshot()`, so exports keep the levels.
+ */
+export class SrLevelPrimitive implements ISeriesPrimitive<Time> {
+  private source: SrLevelSource = NO_SR_LEVELS;
+  private series: ISeriesApi<SeriesType> | null = null;
+  private notify: () => void = () => {};
+  private views: readonly IPrimitivePaneView[] = [
+    {
+      zOrder: () => 'normal' as PrimitivePaneViewZOrder,
+      renderer: () => ({
+        draw: (target: CanvasRenderingTarget2D) => this.paint(target),
+      }),
+    },
+  ];
+
+  attached(param: SeriesAttachedParameter<Time, SeriesType>): void {
+    this.series = param.series;
+    this.notify = param.requestUpdate;
+  }
+
+  detached(): void {
+    this.series = null;
+    this.source = NO_SR_LEVELS;
+    this.notify = () => {};
+  }
+
+  paneViews(): readonly IPrimitivePaneView[] {
+    return this.views;
+  }
+
+  setSource(source: SrLevelSource): void {
+    this.source = source;
+    this.notify();
+  }
+
+  private y(price: number): number | null {
+    const coordinate = this.series?.priceToCoordinate(price);
+    return coordinate == null ? null : Number(coordinate);
+  }
+
+  paint(target: CanvasRenderingTarget2D): void {
+    const { levels, alerts, alertColor, digits, theme } = this.source;
+    if (levels.length === 0 && alerts.length === 0) return;
+
+    target.useMediaCoordinateSpace((scope) => {
+      const ctx = scope.context;
+      const { width, height } = scope.mediaSize;
+      ctx.save();
+
+      for (const level of levels) {
+        const yLevel = this.y(level.price);
+        if (yLevel == null || yLevel < 0 || yLevel > height) continue;
+        ctx.save();
+        ctx.strokeStyle = level.color;
+        ctx.lineWidth = 1;
+        // Support = solid (price holding), resistance = dashed (price rejected).
+        ctx.setLineDash(level.kind === 'resistance' ? [6, 4] : []);
+        ctx.globalAlpha = 0.9;
+        line(ctx, 0, yLevel, width, yLevel);
+        ctx.restore();
+        tag(
+          ctx,
+          `${level.title} ${level.price.toFixed(digits)}`,
+          width - 4,
+          yLevel,
+          level.color,
+          theme,
+          'right',
+        );
+      }
+
+      for (const alert of alerts) {
+        const yLevel = this.y(alert.price);
+        if (yLevel == null || yLevel < 0 || yLevel > height) continue;
+        ctx.save();
+        ctx.strokeStyle = alertColor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        line(ctx, 0, yLevel, width, yLevel);
+        ctx.restore();
+        tag(ctx, alert.title, width - 4, yLevel, alertColor, theme, 'right');
+      }
+
+      ctx.restore();
+    });
+  }
+}
+
 /* ------------------------- wave-7: liquidation magnets --------------------- */
 
 export interface LiqMagnetSource {
@@ -731,6 +889,7 @@ export class LiqMagnetPrimitive implements ISeriesPrimitive<Time> {
 
   detached(): void {
     this.series = null;
+    this.source = null;
     this.notify = () => {};
   }
 

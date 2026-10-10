@@ -758,6 +758,7 @@
       "clear": "删除全部绘图（{n}）",
       "active": "当前工具：{tool}"
     },
+    "crosshairHandle": "拖动以移动十字线（已启用绘图工具）",
     "sync": {
       "group": "网格同步",
       "timeframe": "跨窗格同步时间周期",
@@ -960,6 +961,7 @@
         "hint": "在浏览器中使用已加载数据运行受支持的逐K线公式。"
       }
     },
+    "menuIndicators": "指标",
     "params": {
       "period": "周期",
       "fast": "快线长度",
