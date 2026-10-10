@@ -9,10 +9,12 @@
  * while the terminal was open.
  *
  * Canvas needs concrete color strings, so triplets are rebuilt as
- * `hsl(h, s%, l%)` (comma syntax: universally supported by canvas parsers).
- * lightweight-charts v5 resolves every colour through the canvas 2D context's
- * *native* color parser (sRGB, up-converted to Display P3 on capable panels)
- * — so we always pass sRGB strings and never do manual channel math ourselves.
+ * `hsl(h, s%, l%)` (comma syntax). lightweight-charts v5 resolves every
+ * colour string through the browser's native CSS color parser (a computed-
+ * style probe, sRGB) and renders them into a canvas context that we create
+ * with `colorSpace: 'display-p3'` — sRGB source colors, Display-P3 up-
+ * conversion on capable panels, srgb fallback elsewhere. We therefore always
+ * pass sRGB strings and never do manual channel math ourselves.
  */
 
 export interface ChartTheme {

@@ -22,14 +22,14 @@
        fg     17.6:1 / 16.1:1  → WCAG AAA (all financial text data)
        muted   7.5:1 /  6.8:1  → AAA on bg, near-AAA on cards (labels/meta)
        faint   5.4:1 /  4.9:1  → AA (decorative micro-copy only)
-       bull   11.2:1 /  9.7:1  → AAA · bear 7.0:1 / 6.3:1 → AAA on bg
+       bull   10.4:1 /  9.5:1  → AAA · bear 7.0:1 / 6.4:1 → AAA on bg
        danger (magenta, lightened for text) 7.9:1 → AAA as alert copy
      ------------------------------------------------------------------------- */
   :root,
   [data-theme='acid'] {
     color-scheme: dark;
 
-    --nc-bg: 220 18% 7%; /* #0e1115 – high-contrast dark */
+    --nc-bg: 220 18% 7%; /* #0f1115 – high-contrast dark */
     --nc-surface: 220 15% 11%; /* card / panel backgrounds */
     --nc-elevated: 220 14% 14%;
     --nc-line: 218 14% 22%;
@@ -45,7 +45,7 @@
     --nc-accent: 183 100% 50%;
     --nc-danger: 330 100% 74%; /* magenta, text-safe – critical alerts */
     --nc-warning: 41 100% 60%; /* #ffc128 – 11.4:1 as text */
-    --nc-bull: 158 55% 62%; /* 11.2:1 – up candles / buy execution */
+    --nc-bull: 158 55% 62%; /* 10.4:1 – up candles / buy execution */
     --nc-bear: 348 70% 70%; /* 7.0:1 on bg – down candles / sell execution */
 
     /* Neon stays quiet: glow, grid and scanline intensities are kept low so
