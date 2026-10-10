@@ -501,6 +501,10 @@ export function PriceChart({
       width: initial.width,
       height: initial.height,
       layout: {
+        // Native color pipeline: sRGB source colors, Display-P3 canvas context
+        // on capable panels (browser falls back to srgb otherwise).
+        // Creation-time option – must not be changed via applyOptions.
+        colorSpace: 'display-p3',
         background: { type: ColorType.Solid, color: chartTheme.bg },
         textColor: chartTheme.muted,
         fontSize: 11,
@@ -697,7 +701,7 @@ export function PriceChart({
   useEffect(() => {
     localeRef.current = locale;
     chartRef.current?.applyOptions({ localization: { locale } });
-  }, [locale]);
+  }, [locale, chartEpoch]);
 
   /* --------------------------------- data ---------------------------------- */
 
@@ -878,7 +882,7 @@ export function PriceChart({
         );
       });
     }
-  }, [computed, analysisCandles, chartId, feedKey]);
+  }, [computed, analysisCandles, chartId, feedKey, chartEpoch]);
 
   /* ------------------------------ drawing source ---------------------------- */
 
@@ -890,7 +894,7 @@ export function PriceChart({
       theme: chartTheme,
       digits,
     });
-  }, [drawings, draft, selectedId, tool, chartTheme, digits]);
+  }, [drawings, draft, selectedId, tool, chartTheme, digits, chartEpoch]);
 
   /* --------------------- volume profile + anchored VWAP --------------------- */
 
@@ -912,7 +916,7 @@ export function PriceChart({
       outside: withAlpha(chartTheme.secondary, 0.16),
       level: withAlpha(chartTheme.accent, 0.85),
     });
-  }, [vpOn, analysisCandles, chartTheme]);
+  }, [vpOn, analysisCandles, chartTheme, chartEpoch]);
 
   /* ------------------------- wave-7: liquidation magnets ------------------- */
 
@@ -935,7 +939,7 @@ export function PriceChart({
       shortBase: chartTheme.bear,
       label: withAlpha(chartTheme.text, 0.72),
     });
-  }, [liqOn, analysisCandles, chartTheme]);
+  }, [liqOn, analysisCandles, chartTheme, chartEpoch]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -972,7 +976,7 @@ export function PriceChart({
       avwapAppliedRef.current,
       `${chartId}|${feedKey}|avwap:${avwapAnchor}`,
     );
-  }, [avwapAnchor, analysisCandles, chartId, feedKey, chartTheme]);
+  }, [avwapAnchor, analysisCandles, chartId, feedKey, chartTheme, chartEpoch]);
 
   /* ------------------------- axis modes + bar countdown ---------------------- */
 
@@ -983,7 +987,7 @@ export function PriceChart({
       // v5: percent axis is a scale MODE, not a flag – pct wins over log.
       mode: axisPct ? PriceScaleMode.Percentage : axisLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
     });
-  }, [axisLog, axisPct]);
+  }, [axisLog, axisPct, chartEpoch]);
 
   useEffect(() => {
     const main = mainRef.current;
@@ -1035,7 +1039,7 @@ export function PriceChart({
     if (signature === srSigRef.current) return;
     srSigRef.current = signature;
     prim.setSource({ levels, alerts, alertColor: chartTheme.danger, digits, theme: chartTheme });
-  }, [srOn, myAlerts, analysisCandles, chartTheme, digits]);
+  }, [srOn, myAlerts, analysisCandles, chartTheme, digits, chartEpoch]);
 
   useEffect(() => {
     const main = mainRef.current;
@@ -1160,13 +1164,13 @@ export function PriceChart({
       compareAppliedRef.current,
       `${chartId}|cmp:${compareTicker}|${compareCandles[0]?.t ?? 0}`,
     );
-  }, [compareTicker, compareCandles, chartId, chartTheme]);
+  }, [compareTicker, compareCandles, chartId, chartTheme, chartEpoch]);
 
   /* -------------------------- >$500k whale bubbles -------------------------- */
 
   useEffect(() => {
     whaleBubblePrimRef.current?.setTrades(whaleTrades ?? []);
-  }, [whaleTrades, chartId]);
+  }, [whaleTrades, chartId, chartEpoch]);
 
   /* -------------------------------- watermark ------------------------------- */
 
@@ -1180,7 +1184,7 @@ export function PriceChart({
       accent: chartTheme.accent,
       alpha: 0.12,
     });
-  }, [chartTheme]);
+  }, [chartTheme, chartEpoch]);
 
   /* ------------------------------ theme updates ----------------------------- */
 
@@ -1232,7 +1236,7 @@ export function PriceChart({
             label: remote.symbol === symbol ? null : remote.symbol,
           };
     crosshairPrimRef.current?.setSource(source);
-  }, [remote, syncCrosshair, chartTheme, digits, symbol]);
+  }, [remote, syncCrosshair, chartTheme, digits, symbol, chartEpoch]);
 
   /* --------------------------- drawing interaction -------------------------- */
 
@@ -1350,7 +1354,11 @@ export function PriceChart({
 
       setDraft(null);
       dragRef.current = { mode: null, start: null, drawingId: null, origin: null };
-      lockChart(false);
+      // Unlock only for the "move an existing drawing" case (tool = none).
+      // While a drawing tool is still armed the persistent lock
+      // (drawingActive effect) must stay – releasing it here would let the
+      // next finger movement pan the chart mid-session.
+      if (useChartStore.getState().tool === 'none') lockChart(false);
       if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }

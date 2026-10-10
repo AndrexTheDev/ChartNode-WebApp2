@@ -73,7 +73,8 @@ export class ValueLineSeriesView implements ICustomSeriesPaneView<Time, ValuePoi
   }
 
   isWhitespace(data: ValuePoint | CustomSeriesWhitespaceData<Time>): data is CustomSeriesWhitespaceData<Time> {
-    return (data as { time?: unknown }).time === undefined;
+    // Whitespace bars carry only `{ time }` – the data field is absent.
+    return (data as ValuePoint).value === undefined;
   }
 
   defaultOptions(): ValueLineOptions {

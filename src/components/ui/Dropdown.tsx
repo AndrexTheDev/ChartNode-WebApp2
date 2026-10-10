@@ -195,7 +195,9 @@ export function Dropdown({
                 }}
                 onClick={() => selectItem(index)}
                 onMouseEnter={() => setActiveIndex(index)}
-                onKeyDown={onListKeyDown}
+                /* Keyboard handling lives on the <ul> only – the button's events
+                   bubble there. A second handler here would fire twice per key
+                   (bubbling) and advance the active index by two. */
                 className={cn(
                   'flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors duration-150',
                   'nc-clip-sm',
